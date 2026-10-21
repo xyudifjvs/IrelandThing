@@ -10,3 +10,7 @@ coverage/
 playwright-report/
 test-results/
 *.log
+
+.local/
+*.tsbuildinfo
+apps/web/next-env.d.ts

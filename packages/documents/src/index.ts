@@ -79,11 +79,26 @@ export function createObjectStore(): ObjectStore {
   };
 }
 const visibility = z.enum(["coordinator", "agent", "client"]);
-export async function listDocuments(actor: Principal, matterId?: string) {
+export async function listDocuments(
+  actor: Principal,
+  matterId?: string,
+  options: { cursor?: string; limit?: number; q?: string } = {},
+) {
+  const limit = z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .default(200)
+    .parse(options.limit);
+  if (options.cursor) await authorizedDocument(actor, options.cursor);
   if (matterId) await requireMatter(actor, matterId);
   return prisma.document.findMany({
     where: {
       ...(matterId ? { matterId } : {}),
+      ...(options.q
+        ? { name: { contains: options.q, mode: "insensitive" } }
+        : {}),
       ...(actor.role === "coordinator"
         ? {}
         : {
@@ -113,8 +128,9 @@ export async function listDocuments(actor: Principal, matterId?: string) {
         orderBy: { version: "desc" },
       },
     },
-    orderBy: { createdAt: "desc" },
-    take: 200,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    take: limit,
   });
 }
 async function authorizedDocument(actor: Principal, id: string, write = false) {
@@ -439,6 +455,17 @@ export function createDocumentsRouter(store = createObjectStore()) {
           typeof req.query.matterId === "string"
             ? req.query.matterId
             : undefined,
+          {
+            cursor:
+              typeof req.query.cursor === "string"
+                ? req.query.cursor
+                : undefined,
+            limit:
+              req.query.limit === undefined
+                ? undefined
+                : Number(req.query.limit),
+            q: typeof req.query.q === "string" ? req.query.q : undefined,
+          },
         ),
       ),
     ),

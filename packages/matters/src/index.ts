@@ -1,3 +1,5 @@
+import { applyInitialWorkflow, recalculateWorkflow } from "./rules";
+export * from "./rules";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
@@ -91,8 +93,16 @@ export async function audit(
 }
 export async function listMatters(
   actor: Principal,
-  query: { q?: string; stage?: string } = {},
+  query: { q?: string; stage?: string; cursor?: string; limit?: number } = {},
 ) {
+  const limit = z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .default(200)
+    .parse(query.limit);
+  if (query.cursor) await requireMatter(actor, query.cursor);
   const rows = await prisma.matter.findMany({
     where: {
       AND: [
@@ -108,8 +118,9 @@ export async function listMatters(
         query.stage ? { stage: query.stage } : {},
       ],
     },
-    orderBy: { updatedAt: "desc" },
-    take: 200,
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    take: limit,
     include: {
       tasks: {
         where:
@@ -215,8 +226,9 @@ export async function createMatter(actor: Principal, input: unknown) {
         details: data.details as Prisma.InputJsonValue,
       },
     });
+    await applyInitialWorkflow(tx, actor, matter.id);
     await audit(tx, actor, "matter.created", "Matter", matter.id, matter.id);
-    return matter;
+    return tx.matter.findUniqueOrThrow({ where: { id: matter.id } });
   });
 }
 export async function updateMatter(
@@ -369,6 +381,7 @@ export async function addDeadline(
     await audit(tx, actor, "deadline.created", "Deadline", row.id, matterId, {
       value: data as Prisma.InputJsonValue,
     });
+    await recalculateWorkflow(tx, actor, matterId);
     return row;
   });
 }
@@ -470,6 +483,7 @@ async function updateChild(
       await audit(tx, actor, `${kind}.deleted`, kind, id, matterId, {
         before: JSON.parse(JSON.stringify(old)),
       });
+      if (kind === "deadline") await recalculateWorkflow(tx, actor, matterId);
       return { deleted: true };
     }
     const patch: Record<string, unknown> = { ...data };
@@ -497,6 +511,7 @@ async function updateChild(
       before: JSON.parse(JSON.stringify(old)),
       changes: data as Prisma.InputJsonValue,
     });
+    if (kind === "deadline") await recalculateWorkflow(tx, actor, matterId);
     return delegate.findUniqueOrThrow({ where: { id } });
   });
 }
@@ -508,6 +523,10 @@ export function createMattersRouter() {
       res.json(
         await listMatters(principal(req), {
           q: typeof req.query.q === "string" ? req.query.q : undefined,
+          cursor:
+            typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+          limit:
+            req.query.limit === undefined ? undefined : Number(req.query.limit),
           stage:
             typeof req.query.stage === "string" ? req.query.stage : undefined,
         }),
@@ -812,6 +831,7 @@ export async function applyReviewedFacts(
         },
       );
     }
+    await recalculateWorkflow(tx, actor, matterId);
     if (data.facts) {
       const previous =
         matter.details &&

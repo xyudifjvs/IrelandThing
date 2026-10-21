@@ -5,18 +5,34 @@ import { z } from "zod";
 import { prisma } from "./index";
 import { approvedCatalog } from "../../billing/src/contracts";
 
-// One-time operator command. No demo identities, defaults or outbound messages.
-const email = z.email().parse(process.env.BOOTSTRAP_OWNER_EMAIL).toLowerCase();
+// One-time operator command. No demo identities, fallback credentials or outbound messages.
+const email = z
+  .string()
+  .trim()
+  .pipe(z.email())
+  .parse(process.env.BOOTSTRAP_OWNER_EMAIL)
+  .toLowerCase();
+const name = z
+  .string()
+  .trim()
+  .min(1)
+  .max(150)
+  .default("Ireland")
+  .parse(process.env.BOOTSTRAP_OWNER_NAME);
 const password = z
   .string()
   .min(16)
   .max(128)
   .parse(process.env.BOOTSTRAP_OWNER_PASSWORD);
 if (email === "ireland@ireland.com" || /@example\.(test|com|org)$/.test(email))
-  throw new Error("Use Ireland’s actual approved email address.");
-if (process.env.BOOTSTRAP_OWNER_CONFIRMED !== "ireland")
+  throw new Error("Use the initial owner’s actual approved email address.");
+const confirmation =
+  process.env.BOOTSTRAP_OWNER_CONFIRMED?.trim().toLowerCase();
+const legacyIrelandDefault =
+  process.env.BOOTSTRAP_OWNER_NAME === undefined && confirmation === "ireland";
+if (confirmation !== email && !legacyIrelandDefault)
   throw new Error(
-    "Confirm that the owner account belongs to Ireland before bootstrapping.",
+    "Confirm the initial owner by setting BOOTSTRAP_OWNER_CONFIRMED to the exact approved owner email address.",
   );
 const hashed = await hashPassword(password);
 await prisma.$transaction(async (tx) => {
@@ -29,7 +45,7 @@ await prisma.$transaction(async (tx) => {
   await tx.user.create({
     data: {
       id,
-      name: "Ireland",
+      name,
       email,
       role: "coordinator",
       emailVerified: true,
@@ -57,6 +73,6 @@ await prisma.$transaction(async (tx) => {
   });
 });
 console.log(
-  "Ireland’s owner account and approved service catalog were created. Enroll MFA at first sign-in. Remove the bootstrap password from the environment now.",
+  "The initial owner account and approved service catalog were created. Enroll MFA at first sign-in. Remove the bootstrap password from the environment now.",
 );
 await prisma.$disconnect();

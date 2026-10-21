@@ -211,37 +211,11 @@ export default function Detail({
                 Service fee timing is confirmed with Ireland. Stripe must be
                 configured before checkout is available.
               </p>
-              <button
-                className={s.secondary}
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setError("");
-                  try {
-                    const result = await mutate<{
-                      url?: string;
-                      checkoutUrl?: string;
-                    }>("/api/v1/billing/checkout", {
-                      matterId: id,
-                      kind: "service",
-                      idempotencyKey: `service-checkout-${id}`,
-                    });
-                    const url = result.url || result.checkoutUrl;
-                    if (!url)
-                      throw new Error(
-                        "No checkout link was returned. Contact Ireland to confirm payment setup.",
-                      );
-                    window.location.href = url;
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                <CreditCard size={12} />
-                Open secure checkout
-              </button>
+              <p className={s.hint}>
+                Ireland will prepare a secure payment link once your fee timing
+                is confirmed. Check shared payment communications or contact
+                Ireland.
+              </p>
             </section>
           )}
           <section className={s.card} style={{ marginTop: 23 }}>

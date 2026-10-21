@@ -49,6 +49,7 @@ type Payload = {
     email: string;
     pre1978: boolean;
     ownChecklist: boolean;
+    checklistDocumentId?: string;
   };
   notes: string;
   gift: {
@@ -87,6 +88,7 @@ export default function Intake() {
   const [saved, setSaved] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploaded, setUploaded] = useState("");
+  const [checklistFile, setChecklistFile] = useState<File | null>(null);
   const [submission, setSubmission] = useState<Matter | null>(null);
   const [resume, setResume] = useState<Draft[]>([]);
   const [ready, setReady] = useState(false);
@@ -211,6 +213,27 @@ export default function Intake() {
       update({ documentIds: [...d.documentIds, doc.id] });
       setUploaded(doc.name || file.name);
       setFile(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function uploadChecklist() {
+    if (!checklistFile) return;
+    setBusy(true);
+    setError("");
+    try {
+      const f = new FormData();
+      f.set("file", checklistFile);
+      f.set("visibility", "agent");
+      f.set("category", "brokerage_checklist");
+      const doc = await api<{ id: string }>("/api/v1/documents", {
+        method: "POST",
+        body: f,
+      });
+      update({ broker: { ...d.broker, checklistDocumentId: doc.id } });
+      setChecklistFile(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -637,6 +660,26 @@ export default function Intake() {
                     }
                   />
                 </label>
+                <label className={s.field}>
+                  Relationship / additional context (optional)
+                  <input
+                    className={s.input}
+                    value={c.relationship || ""}
+                    placeholder="e.g. spouses, co-buyers"
+                    onChange={(e) =>
+                      update({
+                        clients: d.clients.map((x, j) =>
+                          j === i
+                            ? {
+                                ...x,
+                                relationship: e.target.value || undefined,
+                              }
+                            : x,
+                        ),
+                      })
+                    }
+                  />
+                </label>
                 <div className={s.grid}>
                   <label className={s.field}>
                     Email
@@ -850,6 +893,35 @@ export default function Intake() {
               />
               My brokerage has its own checklist
             </label>
+            {d.broker.ownChecklist && (
+              <div style={{ marginTop: 18 }}>
+                <label className={s.field}>
+                  Brokerage checklist (PDF or DOCX)
+                  <input
+                    className={s.input}
+                    type="file"
+                    accept=".pdf,.docx"
+                    onChange={(e) =>
+                      setChecklistFile(e.target.files?.[0] || null)
+                    }
+                  />
+                </label>
+                {checklistFile && (
+                  <button
+                    className={s.secondary}
+                    disabled={busy}
+                    onClick={() => void uploadChecklist()}
+                  >
+                    {busy ? "Uploading…" : "Upload brokerage checklist"}
+                  </button>
+                )}
+                {d.broker.checklistDocumentId && (
+                  <p className={s.hint}>
+                    Brokerage checklist uploaded securely.
+                  </p>
+                )}
+              </div>
+            )}
             <h3>Anything else we should know?</h3>
             <label className={s.field}>
               Additional information
@@ -979,7 +1051,7 @@ export default function Intake() {
                   d.clients
                     .map(
                       (c) =>
-                        `${c.name}${c.email ? " · " + c.email : ""}${c.phone ? " · " + c.phone : ""}`,
+                        `${c.name}${c.relationship ? " (" + c.relationship + ")" : ""}${c.email ? " · " + c.email : ""}${c.phone ? " · " + c.phone : ""}`,
                     )
                     .join("\n"),
                 ],
@@ -989,12 +1061,29 @@ export default function Intake() {
                     ? "Direct contact permitted; copy agent"
                     : "Contact only through agent",
                 ],
-                ["Title", d.title.name || d.title.choice],
+                [
+                  "Title",
+                  [
+                    d.title.choice.replaceAll("_", " "),
+                    d.title.name,
+                    d.title.email,
+                    d.title.phone,
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+                ],
                 [
                   "Lender",
                   d.purchaseType === "cash"
                     ? "Not applicable · cash purchase"
-                    : d.lender?.name || d.lender?.choice || "",
+                    : [
+                        d.lender?.choice?.replaceAll("_", " "),
+                        d.lender?.name,
+                        d.lender?.email,
+                        d.lender?.phone,
+                      ]
+                        .filter(Boolean)
+                        .join(" · "),
                 ],
                 ["HOA", d.hoa.replaceAll("_", " ")],
                 [
@@ -1004,13 +1093,21 @@ export default function Intake() {
                 ["Broker", `${d.broker.name} · ${d.broker.email}`],
                 [
                   "Compliance",
-                  `${d.broker.pre1978 ? "Built before 1978" : "Built in/after 1978"} · ${d.broker.ownChecklist ? "Brokerage checklist requested" : "Standard checklist"}`,
+                  `${d.broker.pre1978 ? "Built before 1978" : "Built in/after 1978"} · ${d.broker.ownChecklist ? `Brokerage checklist requested${d.broker.checklistDocumentId ? " · file uploaded" : " · file to follow"}` : "Standard checklist"}`,
                 ],
                 [
                   "Gift",
                   d.gift.requested
                     ? `${d.gift.tier} · ${d.gift.choice} · price and payment to be confirmed`
                     : "No closing gift",
+                ],
+                [
+                  "Gift personalization",
+                  d.gift.personalization || "Not requested",
+                ],
+                [
+                  "Gift delivery",
+                  d.gift.deliveryAddress || "To be confirmed if needed",
                 ],
                 ["Notes", d.notes || "No additional notes"],
               ].map(([k, v]) => (
@@ -1125,11 +1222,11 @@ function HandlingForm({
     );
   else {
     if (compliance) options.push(["dotloop", "See pre-approval in Dotloop"]);
-    options.push(
-      side === "seller"
-        ? ["buyers_agent", "Not sure — please reach out to the buyer’s agent"]
-        : ["listing_agent", "Not sure — please reach out to the listing agent"],
-    );
+    if (side === "seller")
+      options.push([
+        "buyers_agent",
+        "Not sure — please reach out to the buyer’s agent",
+      ]);
   }
   return (
     <>

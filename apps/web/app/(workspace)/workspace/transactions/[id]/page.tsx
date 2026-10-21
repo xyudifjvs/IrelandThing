@@ -22,6 +22,7 @@ import {
   type Matter,
 } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
+import Contacts from "../../_components/Contacts";
 export default function Detail({
   params,
 }: {
@@ -593,11 +594,12 @@ export default function Detail({
           )}
         </div>
         <aside>
+          <Contacts matter={m} refresh={q.refresh} />
           <section className={s.section}>
             <div className={s.sectionHead}>
               <div>
-                <h2>People on this deal</h2>
-                <p>One file. Everyone in the loop.</p>
+                <h2>Portal access</h2>
+                <p>Access for existing agent and client accounts.</p>
               </div>
               <Users size={17} strokeWidth={1.3} />
             </div>
@@ -629,7 +631,7 @@ export default function Detail({
                 <summary
                   style={{ cursor: "pointer", fontSize: 11, color: "#8b7151" }}
                 >
-                  Add a person
+                  Grant portal access
                 </summary>
                 <form
                   onSubmit={(e) => {

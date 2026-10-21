@@ -2,7 +2,7 @@
 FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl tini && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY package.json package-lock.json tsconfig.json prisma.config.ts ./
+COPY package.json package-lock.json .npmrc tsconfig.json prisma.config.ts ./
 COPY apps ./apps
 COPY packages ./packages
 COPY infra ./infra

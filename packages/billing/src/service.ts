@@ -98,6 +98,12 @@ export async function createCheckout(
       });
       if (!gift || gift.matterId !== matter.id)
         throw new HttpError(404, "NOT_FOUND", "Gift request not found.");
+      if (gift.status === "cancelled")
+        throw new HttpError(
+          409,
+          "GIFT_CLOSED",
+          "This gift was cancelled and cannot be paid.",
+        );
       if (gift.paymentOrderId)
         return tx.paymentOrder.findUniqueOrThrow({
           where: { id: gift.paymentOrderId },

@@ -58,6 +58,8 @@ export function createAssistantRouter() {
       res.json(
         await searchEvidence(principal(req), {
           query: String(req.query.q || ""),
+          cursor:
+            typeof req.query.cursor === "string" ? req.query.cursor : undefined,
           matterId:
             typeof req.query.matterId === "string"
               ? req.query.matterId

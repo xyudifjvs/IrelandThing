@@ -30,7 +30,7 @@ Source inspection covered all eight embedded website pages. The platform and int
 
 | Decision | Evidence in mockups | Required resolution |
 | --- | --- | --- |
-| Service prices | Website: Essentials $400, Complete $495, Full Listing $550. Platform: $375, $475, $625 | Ireland approves one catalog, currency, eligibility, and effective date |
+| Service prices | Website and workspace originally disagreed | Approved by the user: Essentials $375, Complete $475, Full Listing $625 USD; Full Listing is seller-only |
 | Gift catalog | Website: $65 add-on and three choices. Intake: Classic, Signature, Luxury with blank prices and generic choices | Define actual gifts, prices, personalization, ordering responsibility, delivery, and refund policy |
 | Package coverage | Intake offers two packages; platform and website offer three | Add Full Listing intake before an executed contract exists |
 | Billing timing | Gift requires prepayment; service fee timing is not settled | Decide when service fees are due and what happens on cancellation, termination, upgrades, and refunds |
@@ -38,7 +38,7 @@ Source inspection covered all eight embedded website pages. The platform and int
 | Brokerage rules | Platform contains Home Team Ohio and person/vendor-specific instructions | Convert these into configurable, versioned brokerage templates approved by Ireland |
 | Business identity and copy | Contact contains ireland@weatherytc.com; other forms have placeholder addresses. FAQ/testimonials remain placeholders | Confirm exact domain/mailbox, service area, biography claims, real testimonials, and final copy |
 
-No conflicting price is selected as the production price in this plan.
+The workspace service prices are the approved initial catalog. Gift pricing and automatic service-fee timing remain unresolved: the implemented workflow uses explicit coordinator payment requests and individually approved gift quotes. Ireland must use her own Stripe account. The unknown Gmail mailbox remains a blocked placeholder, and production PostgreSQL belongs on Railway.
 
 ## Product scope
 

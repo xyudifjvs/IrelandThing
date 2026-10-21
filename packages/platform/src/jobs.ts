@@ -19,6 +19,16 @@ export async function executeJob(
   job: NonNullable<Awaited<ReturnType<typeof claimJob>>>,
   handlers: JobRegistry,
 ) {
+  const active = await prisma.outboxJob.findFirst({
+    where: {
+      id: job.id,
+      state: "running",
+      lockedBy: workerId,
+      leaseUntil: { gt: new Date() },
+    },
+    select: { id: true },
+  });
+  if (!active) return; // A recovered lease cannot be executed by the abandoned worker.
   const heartbeat = setInterval(() => {
     void prisma.outboxJob
       .updateMany({

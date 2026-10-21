@@ -10,6 +10,8 @@ The build team implements fourteen exclusive work packages, **B00–B13**. The i
 
 Builders own implementation and repair. Checkers own independent verification and defect reports. Checkers cannot modify builder-owned production code, tests, migrations, infrastructure, or configuration. Each Rxx writes only `docs/reviews/Rxx/**`; it may perform isolated scratch/worktree validation without committing production changes. Report a defect to its builder, wait for a fix, then review the revised **exact commit**. An older approval does not cover later edits.
 
+Implementation assignment record: the `build_services` agent owns B01–B04 and B10 domain services plus the later B07 email/worker hardening transfer; `build_team_plan` owns B01/B09/B10 account/public/portal UI, B11 workspace UI, and B12–B13 operations/acceptance. The parent integrates shared files and owns B05–B08 services and B02 `rules.ts` until an explicit transfer. The independent `check_team_review` agent writes reports/probes under the approved common review boundary `docs/reviews/implementation/**`. These transfers preserve one writer per file; they replace the original per-Rxx report-directory convention for this implementation run. All three agents use GPT-6.1 sol. Current evidence and external launch gates are linked from `README.md`.
+
 The coordinator settles interface conflicts, sequences shared changes, records owner decisions, and accepts the final evidence. Review approval is technical evidence, not authority to deploy, purchase services, send real messages, or accept business terms. Implementation completion and deployment approval are separate gates.
 
 ## 2. Exclusive ownership and contracts

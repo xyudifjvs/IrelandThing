@@ -225,8 +225,166 @@ it("enforces refund authorization/amount and idempotency without inventing settl
     provider,
   );
   expect(refunds).toHaveBeenCalledTimes(1);
+  await expect(
+    refundPayment(
+      actor,
+      orderId,
+      {
+        amountCents: 200,
+        reason: "Test",
+        idempotencyKey: "refund-test",
+        confirmed: true,
+      },
+      provider,
+    ),
+  ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
   expect(
     (await prisma.paymentOrder.findUniqueOrThrow({ where: { id: orderId } }))
       .status,
   ).toBe("paid");
+});
+it("reserves before dispatch and keeps ambiguous refunds from fulfillment or over-refunding", async () => {
+  const payment = await prisma.paymentOrder.create({
+    data: {
+      matterId: id,
+      createdById: id,
+      idempotencyKey: `reserve-${id}`,
+      amountCents: 6500,
+      currency: "USD",
+      status: "paid",
+      stripePaymentIntentId: `pi_reserve_${id}`,
+      snapshot: {},
+    },
+  });
+  const gift = await prisma.giftOrder.create({
+    data: {
+      matterId: id,
+      paymentOrderId: payment.id,
+      selection: {},
+      status: "paid",
+    },
+  });
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>((r) => (entered = r)),
+    gate = new Promise<void>((r) => (release = r));
+  const uncertain = vi.fn(async () => {
+    entered();
+    await gate;
+    throw new Error("Response lost after acceptance");
+  });
+  const fake = async () =>
+    ({ refunds: { create: uncertain } }) as unknown as Stripe;
+  const pending = refundPayment(
+    actor,
+    payment.id,
+    {
+      amountCents: 4000,
+      reason: "Synthetic",
+      idempotencyKey: "uncertain-refund",
+      confirmed: true,
+    },
+    fake,
+  ).catch((e) => e);
+  await started;
+  await expect(
+    fulfillGift(actor, gift.id, {
+      revision: 1,
+      status: "ordered",
+      note: "Attempt during refund",
+    }),
+  ).rejects.toMatchObject({ code: "REFUND_HOLD" });
+  await expect(
+    refundPayment(
+      actor,
+      payment.id,
+      {
+        amountCents: 4000,
+        reason: "Synthetic",
+        idempotencyKey: "second-refund",
+        confirmed: true,
+      },
+      fake,
+    ),
+  ).rejects.toMatchObject({ code: "REFUND_UNAVAILABLE" });
+  release();
+  expect(await pending).toMatchObject({ code: "REFUND_UNCERTAIN" });
+  const repeat = await refundPayment(
+    actor,
+    payment.id,
+    {
+      amountCents: 4000,
+      reason: "Synthetic",
+      idempotencyKey: "uncertain-refund",
+      confirmed: true,
+    },
+    fake,
+  );
+  expect(repeat.status).toBe("reserved");
+  expect(uncertain).toHaveBeenCalledTimes(1);
+  await expect(
+    fulfillGift(actor, gift.id, {
+      revision: 1,
+      status: "ordered",
+      note: "Attempt after uncertain refund",
+    }),
+  ).rejects.toMatchObject({ code: "REFUND_HOLD" });
+});
+it("expires unpaid gift checkout before cancelling and refuses later URL reuse", async () => {
+  const gift = await prisma.giftOrder.create({
+    data: { matterId: id, selection: {}, status: "awaiting_catalog" },
+  });
+  await quoteGift(actor, gift.id, {
+    revision: 1,
+    description: "Synthetic cancellation",
+    amountCents: 6500,
+    currency: "USD",
+    policy: "Synthetic cancellation policy",
+    approved: true,
+  });
+  const session = {
+    id: `cs_cancel_${id}`,
+    url: "https://checkout.stripe.com/synthetic",
+    status: "open",
+  };
+  const expire = vi.fn(async () => ({ ...session, status: "expired" }));
+  const fake = async () =>
+    ({
+      checkout: {
+        sessions: {
+          create: async () => session,
+          retrieve: async () => session,
+          expire,
+        },
+      },
+    }) as unknown as Stripe;
+  await createCheckout(
+    actor,
+    {
+      matterId: id,
+      kind: "gift",
+      giftOrderId: gift.id,
+      idempotencyKey: "cancel-gift",
+    },
+    fake,
+  );
+  const result = await fulfillGift(
+    actor,
+    gift.id,
+    { revision: 3, status: "cancelled", note: "Cancellation before payment" },
+    fake,
+  );
+  expect(result.status).toBe("cancelled");
+  expect(expire).toHaveBeenCalledTimes(1);
+  await expect(
+    createCheckout(
+      actor,
+      {
+        matterId: id,
+        kind: "gift",
+        giftOrderId: gift.id,
+        idempotencyKey: "cancelled-retry",
+      },
+      fake,
+    ),
+  ).rejects.toMatchObject({ code: "GIFT_CLOSED" });
 });

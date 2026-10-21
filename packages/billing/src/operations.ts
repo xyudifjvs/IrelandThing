@@ -66,7 +66,12 @@ export async function quoteGift(actor: Principal, id: string, raw: unknown) {
     return result;
   });
 }
-export async function fulfillGift(actor: Principal, id: string, raw: unknown) {
+export async function fulfillGift(
+  actor: Principal,
+  id: string,
+  raw: unknown,
+  provider = verifiedStripe,
+) {
   assertCoordinator(actor);
   const input = z
     .object({
@@ -76,70 +81,151 @@ export async function fulfillGift(actor: Principal, id: string, raw: unknown) {
     })
     .strict()
     .parse(raw);
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "GiftOrder" WHERE id=${id} FOR UPDATE`;
-    const gift = await tx.giftOrder.findUnique({ where: { id } });
-    if (!gift) throw new HttpError(404, "NOT_FOUND", "Gift request not found.");
-    await requireMatter(actor, gift.matterId, false, tx);
-    if (gift.revision !== input.revision)
-      throw new HttpError(
-        409,
-        "REVISION_CONFLICT",
-        "This gift changed. Reload it.",
-      );
-    const payment = gift.paymentOrderId
-      ? await tx.paymentOrder.findUnique({ where: { id: gift.paymentOrderId } })
-      : null;
-    if (input.status !== "cancelled" && payment?.status !== "paid")
-      throw new HttpError(
-        409,
-        "GIFT_PAYMENT_REQUIRED",
-        "A verified full payment is required before ordering or delivery.",
-      );
-    if (
-      input.status === "ordered" &&
-      !["awaiting_payment", "paid"].includes(gift.status)
-    )
-      throw new HttpError(
-        409,
-        "GIFT_TRANSITION",
-        "This gift cannot be ordered from its current state.",
-      );
-    if (input.status === "delivered" && gift.status !== "ordered")
-      throw new HttpError(
-        409,
-        "GIFT_TRANSITION",
-        "Mark the gift ordered before delivery.",
-      );
-    if (["delivered", "cancelled"].includes(gift.status))
-      throw new HttpError(409, "GIFT_CLOSED", "This gift has already closed.");
-    const result = await tx.giftOrder.update({
-      where: { id },
-      data: {
-        status: input.status,
-        revision: { increment: 1 },
-        selection: {
-          ...(gift.selection as Record<string, Prisma.InputJsonValue>),
-          fulfillment: {
-            status: input.status,
-            note: input.note,
-            updatedAt: new Date().toISOString(),
+  const snapshot = await prisma.giftOrder.findUnique({ where: { id } });
+  return prisma.$transaction(
+    async (tx) => {
+      if (snapshot?.paymentOrderId)
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${snapshot.paymentOrderId}`}))`;
+      await tx.$queryRaw`SELECT id FROM "GiftOrder" WHERE id=${id} FOR UPDATE`;
+      const gift = await tx.giftOrder.findUnique({ where: { id } });
+      if (!gift)
+        throw new HttpError(404, "NOT_FOUND", "Gift request not found.");
+      await requireMatter(actor, gift.matterId, false, tx);
+      if (gift.paymentOrderId !== snapshot?.paymentOrderId)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "The payment association changed. Reload this gift.",
+        );
+      if (gift.revision !== input.revision)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "This gift changed. Reload it.",
+        );
+      const payment = gift.paymentOrderId
+        ? await tx.paymentOrder.findUnique({
+            where: { id: gift.paymentOrderId },
+          })
+        : null;
+      if (input.status !== "cancelled" && payment?.status !== "paid")
+        throw new HttpError(
+          409,
+          "GIFT_PAYMENT_REQUIRED",
+          "A verified full payment is required before ordering or delivery.",
+        );
+      if (
+        input.status !== "cancelled" &&
+        payment &&
+        refundIntents(payment.details).some(reservesFunds)
+      )
+        throw new HttpError(
+          409,
+          "REFUND_HOLD",
+          "A refund is reserved or unresolved. This gift cannot be fulfilled.",
+        );
+      if (
+        input.status === "cancelled" &&
+        payment &&
+        ["creating", "pending"].includes(payment.status)
+      ) {
+        if (!payment.stripeSessionId)
+          throw new HttpError(
+            409,
+            "PAYMENT_CREATING",
+            "The checkout is still being created. Refresh before cancelling.",
+          );
+        const stripe = await provider();
+        const current = await stripe.checkout.sessions.retrieve(
+          payment.stripeSessionId,
+        );
+        if (current.status === "complete")
+          throw new HttpError(
+            409,
+            "PAYMENT_CHANGED",
+            "Payment completed. Reconcile it before cancelling this gift.",
+          );
+        const expired =
+          current.status === "open"
+            ? await stripe.checkout.sessions.expire(payment.stripeSessionId)
+            : current;
+        if (expired.status !== "expired")
+          throw new HttpError(
+            409,
+            "PAYMENT_NOT_CANCELLED",
+            "Checkout expiry is not confirmed; the gift remains active.",
+          );
+        await tx.paymentOrder.update({
+          where: { id: payment.id },
+          data: { status: "expired" },
+        });
+      }
+      if (
+        input.status === "ordered" &&
+        !["awaiting_payment", "paid"].includes(gift.status)
+      )
+        throw new HttpError(
+          409,
+          "GIFT_TRANSITION",
+          "This gift cannot be ordered from its current state.",
+        );
+      if (input.status === "delivered" && gift.status !== "ordered")
+        throw new HttpError(
+          409,
+          "GIFT_TRANSITION",
+          "Mark the gift ordered before delivery.",
+        );
+      if (["delivered", "cancelled"].includes(gift.status))
+        throw new HttpError(
+          409,
+          "GIFT_CLOSED",
+          "This gift has already closed.",
+        );
+      const result = await tx.giftOrder.update({
+        where: { id },
+        data: {
+          status: input.status,
+          revision: { increment: 1 },
+          selection: {
+            ...(gift.selection as Record<string, Prisma.InputJsonValue>),
+            fulfillment: {
+              status: input.status,
+              note: input.note,
+              updatedAt: new Date().toISOString(),
+            },
           },
         },
-      },
-    });
-    await audit(
-      tx,
-      actor,
-      `gift.${input.status}`,
-      "GiftOrder",
-      id,
-      gift.matterId,
-      { note: input.note },
-    );
-    return result;
-  });
+      });
+      await audit(
+        tx,
+        actor,
+        `gift.${input.status}`,
+        "GiftOrder",
+        id,
+        gift.matterId,
+        { note: input.note },
+      );
+      return result;
+    },
+    { timeout: 75000 },
+  );
 }
+type RefundIntent = {
+  key: string;
+  amountCents: number;
+  reason: string;
+  status: string;
+  createdAt: string;
+  refundId?: string;
+};
+function refundIntents(details: Prisma.JsonValue): RefundIntent[] {
+  const value = details as { refundRequests?: unknown };
+  return Array.isArray(value.refundRequests)
+    ? (value.refundRequests as RefundIntent[])
+    : [];
+}
+const reservesFunds = (r: RefundIntent) =>
+  !["failed", "canceled"].includes(r.status);
 export async function refundPayment(
   actor: Principal,
   id: string,
@@ -157,66 +243,147 @@ export async function refundPayment(
     .strict()
     .parse(raw);
   const stripe = await provider();
-  // Keep a database lock during the bounded provider call: two partial refunds
-  // cannot both pass the same remaining-balance check. Stripe also validates it.
-  return prisma.$transaction(
-    async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`;
-      const order = await tx.paymentOrder.findUnique({ where: { id } });
-      if (!order) throw new HttpError(404, "NOT_FOUND", "Payment not found.");
-      await requireMatter(actor, order.matterId, false, tx);
-      const details = order.details as Record<string, Prisma.InputJsonValue>;
-      const prior = await tx.auditEvent.findFirst({
-        where: {
-          entityId: id,
-          action: "payment.refund_requested",
-          details: { path: ["idempotencyKey"], equals: input.idempotencyKey },
-        },
-      });
-      if (prior) return { requested: true, receipt: prior.id };
+  // Reserve durably before crossing the network boundary. A crash or uncertain
+  // response must not make the paid balance available for ordering/refunding again.
+  const reserved = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`;
+    const order = await tx.paymentOrder.findUnique({ where: { id } });
+    if (!order) throw new HttpError(404, "NOT_FOUND", "Payment not found.");
+    await requireMatter(actor, order.matterId, false, tx);
+    const intents = refundIntents(order.details),
+      prior = intents.find((r) => r.key === input.idempotencyKey);
+    if (prior) {
       if (
-        !order.stripePaymentIntentId ||
-        !["paid", "partially_refunded"].includes(order.status) ||
-        input.amountCents >
-          order.amountCents - Number(details.refundedCents || 0)
+        prior.amountCents !== input.amountCents ||
+        prior.reason !== input.reason
       )
         throw new HttpError(
           409,
-          "REFUND_UNAVAILABLE",
-          "Review the paid balance before requesting this refund.",
+          "IDEMPOTENCY_CONFLICT",
+          "This refund key belongs to different request details.",
         );
-      const refund = await stripe.refunds.create(
-        {
-          payment_intent: order.stripePaymentIntentId,
-          amount: input.amountCents,
-          metadata: { paymentOrderId: id },
-        },
-        { idempotencyKey: `refund:${id}:${input.idempotencyKey}` },
+      return { order, intent: prior, dispatch: false };
+    }
+    const details = order.details as Record<string, Prisma.InputJsonValue>;
+    // Provider-confirmed refunds may include Dashboard requests absent locally.
+    // Local succeeded refunds can overlap that total; pending reservations cannot.
+    const settled = Number(details.refundedCents || 0);
+    const succeeded = intents
+      .filter((r) => r.status === "succeeded")
+      .reduce((n, r) => n + r.amountCents, 0);
+    const pending = intents
+      .filter((r) => reservesFunds(r) && r.status !== "succeeded")
+      .reduce((n, r) => n + r.amountCents, 0);
+    const unavailable = Math.max(settled, succeeded) + pending;
+    if (
+      !order.stripePaymentIntentId ||
+      !["paid", "partially_refunded"].includes(order.status) ||
+      input.amountCents > order.amountCents - unavailable
+    )
+      throw new HttpError(
+        409,
+        "REFUND_UNAVAILABLE",
+        "The paid balance is already refunded or reserved. Reconcile unresolved refunds first.",
       );
-      await audit(
-        tx,
-        actor,
-        "payment.refund_requested",
-        "PaymentOrder",
-        id,
-        order.matterId,
-        {
-          idempotencyKey: input.idempotencyKey,
-          refundId: refund.id,
-          amountCents: input.amountCents,
-          reason: input.reason,
-          providerStatus: refund.status || "unknown",
-        },
+    if (intents.length >= 100)
+      throw new HttpError(
+        409,
+        "REFUND_LIMIT",
+        "Review this payment in Ireland’s Stripe account.",
       );
-      return {
-        requested: true,
+    const intent: RefundIntent = {
+      key: input.idempotencyKey,
+      amountCents: input.amountCents,
+      reason: input.reason,
+      status: "reserved",
+      createdAt: new Date().toISOString(),
+    };
+    await tx.paymentOrder.update({
+      where: { id },
+      data: { details: { ...details, refundRequests: [...intents, intent] } },
+    });
+    await audit(
+      tx,
+      actor,
+      "payment.refund_reserved",
+      "PaymentOrder",
+      id,
+      order.matterId,
+      {
+        idempotencyKey: input.idempotencyKey,
+        amountCents: input.amountCents,
+        reason: input.reason,
+      },
+    );
+    return { order, intent, dispatch: true };
+  });
+  if (!reserved.dispatch)
+    return {
+      requested: true,
+      refundId: reserved.intent.refundId || null,
+      status: reserved.intent.status,
+      awaitingVerifiedState: true,
+    };
+  let refund: Stripe.Refund;
+  try {
+    refund = await stripe.refunds.create(
+      {
+        payment_intent: reserved.order.stripePaymentIntentId!,
+        amount: input.amountCents,
+        metadata: {
+          paymentOrderId: id,
+          weatherlyRefundKey: input.idempotencyKey,
+        },
+      },
+      { idempotencyKey: `refund:${id}:${input.idempotencyKey}` },
+    );
+  } catch {
+    // Keep the committed reservation. Only verified provider evidence may release it.
+    throw new HttpError(
+      502,
+      "REFUND_UNCERTAIN",
+      "The refund result is uncertain. Funds remain reserved; reconcile before any new request or fulfillment.",
+    );
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`;
+    const current = await tx.paymentOrder.findUniqueOrThrow({ where: { id } });
+    const intents = refundIntents(current.details).map((r) =>
+      r.key === input.idempotencyKey
+        ? { ...r, refundId: refund.id, status: refund.status || "pending" }
+        : r,
+    );
+    await tx.paymentOrder.update({
+      where: { id },
+      data: {
+        details: {
+          ...(current.details as Record<string, Prisma.InputJsonValue>),
+          refundRequests: intents,
+        },
+      },
+    });
+    await audit(
+      tx,
+      actor,
+      "payment.refund_requested",
+      "PaymentOrder",
+      id,
+      current.matterId,
+      {
+        idempotencyKey: input.idempotencyKey,
         refundId: refund.id,
-        status: refund.status,
-        awaitingVerifiedState: true,
-      };
-    },
-    { timeout: 75000 },
-  );
+        amountCents: input.amountCents,
+        reason: input.reason,
+        providerStatus: refund.status || "pending",
+      },
+    );
+  });
+  return {
+    requested: true,
+    refundId: refund.id,
+    status: refund.status,
+    awaitingVerifiedState: true,
+  };
 }
 export async function reconcilePayment(
   actor: Principal,
@@ -280,6 +447,53 @@ export async function reconcilePayment(
         livemode: charge.livemode,
         data: { object: charge },
       } as Stripe.Event);
+    if (refundIntents(order.details).length) {
+      // Match only provider evidence bearing this exact local request key. A
+      // missing result remains reserved: absence is not proof of failure.
+      const verified: Stripe.Refund[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 20; page++) {
+        const result = await stripe.refunds.list({
+          payment_intent: intentId,
+          limit: 100,
+          ...(cursor ? { starting_after: cursor } : {}),
+        });
+        verified.push(...result.data);
+        if (!result.has_more) break;
+        cursor = result.data.at(-1)?.id;
+        if (!cursor) break;
+      }
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`;
+        const current = await tx.paymentOrder.findUniqueOrThrow({
+          where: { id },
+        });
+        const intents = refundIntents(current.details).map((request) => {
+          const evidence = verified.find(
+            (r) =>
+              r.metadata?.paymentOrderId === id &&
+              r.metadata?.weatherlyRefundKey === request.key &&
+              r.amount === request.amountCents,
+          );
+          return evidence
+            ? {
+                ...request,
+                refundId: evidence.id,
+                status: evidence.status || "pending",
+              }
+            : request;
+        });
+        await tx.paymentOrder.update({
+          where: { id },
+          data: {
+            details: {
+              ...(current.details as Record<string, Prisma.InputJsonValue>),
+              refundRequests: intents,
+            },
+          },
+        });
+      });
+    }
   }
   await audit(
     prisma,

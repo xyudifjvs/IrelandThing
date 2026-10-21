@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, ArrowLeft, LockKeyhole } from "lucide-react";
 import { api } from "@weatherly/ui";
 import s from "./login.module.css";
+import { safeAuthorizationReturn } from "../_components/navigation";
 export default function Login() {
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -16,12 +17,15 @@ export default function Login() {
     const session = await api<{ user: { role: string }; mfaRequired: boolean }>(
       "/api/v1/session",
     );
+    const next = safeAuthorizationReturn(
+      new URLSearchParams(window.location.search).get("next"),
+      window.location.origin,
+    );
     window.location.href =
       session.mfaRequired && process.env.NEXT_PUBLIC_APP_ENV !== "local"
-        ? "/security"
-        : session.user.role === "coordinator"
-          ? "/workspace"
-          : "/portal";
+        ? `/security${next ? "?next=" + encodeURIComponent(next) : ""}`
+        : next ||
+          (session.user.role === "coordinator" ? "/workspace" : "/portal");
   }
   async function signIn(mail = email, secret = password) {
     setBusy(true);

@@ -10,6 +10,10 @@ RUN npm ci --include=dev && npm run db:generate
 # Rewrites and NEXT_PUBLIC values are compiled. Set these to the target environment at build time.
 ARG API_INTERNAL_URL
 ARG NEXT_PUBLIC_APP_ENV=production
+ARG DEPLOYMENT_ENV=staging
+ARG PUBLIC_SITE_URL
+ARG SITE_INDEXING_ENABLED=false
+ENV DEPLOYMENT_ENV=$DEPLOYMENT_ENV PUBLIC_SITE_URL=$PUBLIC_SITE_URL SITE_INDEXING_ENABLED=$SITE_INDEXING_ENABLED
 ENV API_INTERNAL_URL=$API_INTERNAL_URL NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV NEXT_TELEMETRY_DISABLED=1
 RUN test -n "$API_INTERNAL_URL" && npm run build --workspace @weatherly/web
 RUN chown -R node:node /app

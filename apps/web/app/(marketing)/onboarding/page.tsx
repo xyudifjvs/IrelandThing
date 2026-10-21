@@ -1,3 +1,5 @@
+import { publicMetadata } from "../../_lib/seo";
+export const metadata = publicMetadata("/onboarding");
 import { PageHead } from "../_components/Marketing";
 import InquiryForm from "../_components/InquiryForm";
 import s from "../_components/marketing.module.css";

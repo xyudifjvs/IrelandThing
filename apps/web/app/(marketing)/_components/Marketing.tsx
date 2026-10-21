@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
@@ -14,7 +15,6 @@ export const pages = [
   ["/services", "Services"],
   ["/process", "Process"],
   ["/onboarding", "New Agent Onboarding"],
-  ["/testimonials", "Testimonials"],
   ["/faq", "FAQ"],
   ["/agent-portal", "Agent Portal"],
   ["/contact", "Contact"],
@@ -39,7 +39,9 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
       </header>
-      <main className={s.main}>{children}</main>
+      <main id="main-content" tabIndex={-1} className={s.main}>
+        {children}
+      </main>
       <footer className={s.footer}>
         <div className={s.footerTop}>
           <div>
@@ -123,9 +125,13 @@ export function About() {
           </div>
         </div>
         <div className={s.portrait}>
-          <img
+          <Image
             src="/brand/portrait.jpeg"
             alt="Ireland, founder of Weatherly Transaction Co."
+            width={1023}
+            height={1537}
+            sizes="(max-width: 700px) 90vw, 410px"
+            preload
           />
           <div className={s.portraitCaption}>
             Ireland<small>Your transaction coordinator</small>

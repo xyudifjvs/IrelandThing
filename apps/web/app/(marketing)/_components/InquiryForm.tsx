@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { api } from "@weatherly/ui";
 import s from "./marketing.module.css";
@@ -11,8 +11,10 @@ export default function InquiryForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const lastRequest = useRef<{ content: string; id: string } | null>(null);
+  const receipt = useRef<HTMLDivElement>(null);
   return saved ? (
-    <div className={s.notice} role="status">
+    <div className={s.notice} role="status" tabIndex={-1} ref={receipt}>
       <CheckCircle2 size={22} strokeWidth={1} />
       <h3 style={{ fontFamily: "Georgia", fontSize: 23, fontWeight: 400 }}>
         Your request has been saved.
@@ -33,29 +35,38 @@ export default function InquiryForm({
         setError("");
         const f = new FormData(e.currentTarget);
         try {
+          const data = {
+            website: String(f.get("website") || ""),
+            name: String(f.get("name") || ""),
+            email: String(f.get("email") || ""),
+            kind,
+            payload: {
+              phone: String(f.get("phone") || ""),
+              brokerage: String(f.get("brokerage") || ""),
+              message: String(f.get("message") || ""),
+              ...(f.get("meetingTime")
+                ? {
+                    meetingTime: new Date(
+                      String(f.get("meetingTime")),
+                    ).toISOString(),
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  }
+                : {}),
+            },
+          };
+          const content = JSON.stringify(data);
+          if (lastRequest.current?.content !== content)
+            lastRequest.current = { content, id: crypto.randomUUID() };
           await api("/api/v1/onboarding/inquiries", {
             method: "POST",
             body: JSON.stringify({
-              name: String(f.get("name") || ""),
-              email: String(f.get("email") || ""),
-              kind,
-              payload: {
-                phone: String(f.get("phone") || ""),
-                brokerage: String(f.get("brokerage") || ""),
-                message: String(f.get("message") || ""),
-                ...(f.get("meetingTime")
-                  ? {
-                      meetingTime: new Date(
-                        String(f.get("meetingTime")),
-                      ).toISOString(),
-                      timezone:
-                        Intl.DateTimeFormat().resolvedOptions().timeZone,
-                    }
-                  : {}),
-              },
+              ...data,
+              requestId: lastRequest.current.id,
             }),
           });
           setSaved(true);
+          lastRequest.current = null;
+          requestAnimationFrame(() => receipt.current?.focus());
         } catch (e) {
           setError((e as Error).message);
         } finally {
@@ -63,6 +74,12 @@ export default function InquiryForm({
         }
       }}
     >
+      <div hidden aria-hidden="true">
+        <label>
+          Website
+          <input name="website" autoComplete="off" tabIndex={-1} />
+        </label>
+      </div>
       <label className={s.field}>
         Your name
         <input
@@ -70,7 +87,7 @@ export default function InquiryForm({
           autoComplete="name"
           className={s.input}
           required
-          maxLength={200}
+          maxLength={150}
         />
       </label>
       <label className={s.field}>

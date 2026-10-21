@@ -2,7 +2,11 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import { rateLimit } from "express-rate-limit";
+import {
+  configureNetworkBoundary,
+  requestLimiter,
+} from "../../../packages/platform/src/request-limits";
+import { createOperationsRouter } from "../../../packages/platform/src/operations";
 import { ZodError } from "zod";
 import { prisma } from "@weatherly/db";
 import {
@@ -49,20 +53,13 @@ import { createDocumentsRouter } from "@weatherly/documents";
 import { createIntakeRouter } from "@weatherly/intake";
 import { createOnboardingRouter } from "@weatherly/onboarding";
 const app = express();
+configureNetworkBoundary(app);
 app.disable("x-powered-by");
 app.use(helmet());
 app.use(
   cors({
     origin: process.env.WEB_ORIGIN || "http://127.0.0.1:3000",
     credentials: true,
-  }),
-);
-app.use(
-  rateLimit({
-    windowMs: 60000,
-    limit: 240,
-    standardHeaders: true,
-    legacyHeaders: false,
   }),
 );
 app.get("/health", async (_req, res) => {
@@ -76,7 +73,12 @@ app.get("/health", async (_req, res) => {
 const auth = createAuth({ sendSystemEmail });
 registerAssistantMessages(listMessages);
 registerMatterChangeHook(refreshTemplateDrafts);
-app.all("/api/auth/*splat", authHandler(auth));
+app.post("/api/auth/sign-in/email", requestLimiter("sign-in", 5));
+app.post(
+  "/api/auth/request-password-reset",
+  requestLimiter("password-reset", 3),
+);
+app.all("/api/auth/*splat", requestLimiter("auth", 60), authHandler(auth));
 app.post(
   "/api/webhooks/stripe",
   express.raw({ type: "application/json", limit: "1mb" }),
@@ -101,7 +103,7 @@ app.use(
     resourceName: "Weatherly transaction records",
   }),
 );
-app.use("/api/mcp", createMcpRouter());
+app.use("/api/mcp", requestLimiter("mcp", 240), createMcpRouter());
 app.use("/api/v1", (req, res, next) => {
   if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     const origin = req.get("origin");
@@ -121,6 +123,13 @@ app.use("/api/v1", (req, res, next) => {
   next();
 });
 app.use("/api/v1", sessionMiddleware(auth));
+app.use("/api/v1", requestLimiter("api", 240));
+app.use("/api/v1/ai", requestLimiter("ai", 10, { authenticatedOnly: true }));
+app.use(
+  "/api/v1/assistant",
+  requestLimiter("assistant", 10, { authenticatedOnly: true }),
+);
+app.use("/api/v1/operations", createOperationsRouter());
 app.use("/api/v1", createIdentityRouter(auth));
 app.use("/api/v1/matters", createMattersRouter());
 app.use("/api/v1/documents", createDocumentsRouter());

@@ -1,3 +1,5 @@
+import { publicMetadata } from "../../_lib/seo";
+export const metadata = publicMetadata("/agent-portal");
 import Link from "next/link";
 import { PageHead } from "../_components/Marketing";
 import InquiryForm from "../_components/InquiryForm";

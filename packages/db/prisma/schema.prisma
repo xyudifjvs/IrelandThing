@@ -236,6 +236,8 @@ model Inquiry {
   payload   Json     @default("{}")
   status    String   @default("new")
   revision  Int      @default(1)
+  requestId String?  @unique
+  submissionHash String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -518,4 +520,18 @@ model OutboxJob {
   updatedAt      DateTime  @updatedAt
 
   @@index([state, availableAt])
+}
+
+// Shared across API replicas. Keys are scoped hashes, never raw email/IP values.
+model RequestLimit {
+  key     String   @id
+  hits    Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}
+
+model WorkerHeartbeat {
+  id         String   @id
+  lastSeenAt DateTime
 }

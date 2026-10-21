@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
 import {
@@ -7,10 +8,14 @@ import {
   principal,
   assertCoordinator,
   type Principal,
+  hashToken,
 } from "@weatherly/platform";
+import { requestLimiter } from "../../platform/src/request-limits";
 import { audit, revision } from "@weatherly/matters";
 const inquiryInput = z
   .object({
+    requestId: z.uuid().optional(),
+    website: z.string().max(0, "Leave this field empty").optional(),
     name: z.string().trim().min(1).max(150),
     email: z.email().toLowerCase(),
     kind: z.enum(["contact", "meeting", "information"]),
@@ -45,19 +50,40 @@ const inquiryInput = z
     }
   });
 export async function createInquiry(input: unknown) {
-  const data = inquiryInput.parse(input);
-  return prisma.inquiry.create({
-    data: {
-      ...data,
-      payload: data.payload as Prisma.InputJsonValue,
-      status: "new",
-    },
+  const {
+    requestId = randomUUID(),
+    website: _trap,
+    ...data
+  } = inquiryInput.parse(input);
+  const submissionHash = hashToken(JSON.stringify(data));
+  await prisma.inquiry.createMany({
+    data: [
+      {
+        ...data,
+        requestId,
+        submissionHash,
+        payload: data.payload as Prisma.InputJsonValue,
+        status: "new",
+      },
+    ],
+    skipDuplicates: true,
   });
+  const inquiry = await prisma.inquiry.findUniqueOrThrow({
+    where: { requestId },
+  });
+  if (inquiry.submissionHash !== submissionHash)
+    throw new HttpError(
+      409,
+      "INQUIRY_CONFLICT",
+      "This request was already submitted with different details. Start a new request.",
+    );
+  return { id: inquiry.id, status: "received" };
 }
 export function createOnboardingRouter() {
   const r = Router();
   r.post(
     "/inquiries",
+    requestLimiter("inquiry", 5, { windowMs: 10 * 60000 }),
     asyncHandler(async (req, res) =>
       res.status(201).json(await createInquiry(req.body)),
     ),

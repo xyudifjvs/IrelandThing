@@ -1,3 +1,5 @@
+import { publicMetadata } from "../../_lib/seo";
+export const metadata = publicMetadata("/faq");
 import { PageHead } from "../_components/Marketing";
 import s from "../_components/marketing.module.css";
 export default function Page() {

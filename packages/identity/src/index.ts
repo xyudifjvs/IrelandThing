@@ -79,7 +79,10 @@ export function createAuth(options: IdentityOptions = {}) {
         "/request-password-reset": { window: 60, max: 3 },
       },
     },
-    advanced: { useSecureCookies: process.env.NODE_ENV === "production" },
+    advanced: {
+      useSecureCookies: process.env.NODE_ENV === "production",
+      ipAddress: { ipAddressHeaders: ["x-weatherly-client-ip"] },
+    },
   });
 }
 export type WeatherlyAuth = ReturnType<typeof createAuth>;
@@ -241,8 +244,24 @@ export function createIdentityRouter(auth: WeatherlyAuth) {
     "/users",
     asyncHandler(async (req, res) => {
       assertCoordinator(principal(req));
+      const query = z
+        .object({
+          q: z.string().trim().max(200).optional(),
+          cursor: z.string().min(1).max(200).optional(),
+          limit: z.coerce.number().int().min(1).max(200).default(200),
+        })
+        .parse(req.query);
       res.json(
         await prisma.user.findMany({
+          where: query.q
+            ? {
+                OR: [
+                  { name: { contains: query.q, mode: "insensitive" } },
+                  { email: { contains: query.q, mode: "insensitive" } },
+                ],
+              }
+            : undefined,
+          ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
           select: {
             id: true,
             name: true,
@@ -250,8 +269,8 @@ export function createIdentityRouter(auth: WeatherlyAuth) {
             role: true,
             brokerage: true,
           },
-          orderBy: { name: "asc" },
-          take: 200,
+          orderBy: { id: "asc" },
+          take: query.limit,
         }),
       );
     }),

@@ -1,5 +1,9 @@
 import { PageHead, CTA } from "../_components/Marketing";
 import s from "../_components/marketing.module.css";
+export const metadata = {
+  title: "Testimonials",
+  robots: { index: false, follow: false },
+};
 export default function Page() {
   return (
     <>

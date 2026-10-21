@@ -1,5 +1,45 @@
 import type { NextConfig } from "next";
+import { sitePolicy } from "./app/_lib/seo";
 const config: NextConfig = {
+  poweredByHeader: false,
+  async headers() {
+    const paths = sitePolicy().indexable
+      ? [
+          "/workspace/:path*",
+          "/portal/:path*",
+          "/api/:path*",
+          "/login",
+          "/account",
+          "/security",
+          "/invite",
+          "/forgot-password",
+          "/reset-password",
+          "/authorize-assistant",
+          "/authorize",
+          "/token",
+          "/revoke",
+          "/testimonials",
+        ]
+      : ["/:path*"];
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+          { key: "X-Frame-Options", value: "DENY" },
+        ],
+      },
+      ...paths.map((source) => ({
+        source,
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      })),
+    ];
+  },
   transpilePackages: ["@weatherly/ui", "@weatherly/assistant-ui"],
   async rewrites() {
     const origin = process.env.API_INTERNAL_URL || "http://127.0.0.1:4000";

@@ -22,6 +22,8 @@ const id = workerIdentity();
 registerMatterChangeHook(refreshTemplateDrafts);
 let stopping = false;
 let lastPoll = Date.now();
+let lastHeartbeat = 0;
+let lastCleanup = 0;
 const handlers: JobRegistry = {
   "dotloop.sync": async (payload) => {
     const { linkId } = z.object({ linkId: z.string() }).parse(payload);
@@ -69,6 +71,22 @@ while (!stopping) {
   try {
     const job = await claimJob(id);
     lastPoll = Date.now();
+    if (lastPoll - lastHeartbeat > 30000) {
+      await prisma.workerHeartbeat.upsert({
+        where: { id },
+        create: { id, lastSeenAt: new Date() },
+        update: { lastSeenAt: new Date() },
+      });
+      lastHeartbeat = lastPoll;
+    }
+    if (lastPoll - lastCleanup > 3600000) {
+      const old = new Date(lastPoll - 86400000);
+      await prisma.requestLimit.deleteMany({ where: { resetAt: { lt: old } } });
+      await prisma.workerHeartbeat.deleteMany({
+        where: { lastSeenAt: { lt: old } },
+      });
+      lastCleanup = lastPoll;
+    }
     if (job) await executeJob(id, job, handlers);
     else await delay(1000);
   } catch {

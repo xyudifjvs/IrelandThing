@@ -1,3 +1,4 @@
+import { mergeFields } from "./merge-fields";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
@@ -546,6 +547,12 @@ export class CommunicationsService {
           "Render the current template before saving",
         );
     }
+    const rendered = data.templateId
+      ? await this.renderInDb(actor, data.templateId, {
+          matterId: data.matterId,
+          values: data.templateValues || {},
+        })
+      : null;
     return prisma.$transaction(async (tx) => {
       const draft = await tx.emailDraft.create({
         data: {
@@ -560,6 +567,14 @@ export class CommunicationsService {
           details: {
             templateId: data.templateId || null,
             templateRevision: data.templateRevision || null,
+            templateValues: data.templateValues || {},
+            templateSnapshot: rendered
+              ? { subject: rendered.subject, body: rendered.body }
+              : null,
+            subjectOverride: rendered
+              ? rendered.subject !== data.subject
+              : false,
+            bodyOverride: rendered ? rendered.body !== data.body : false,
             replyToMessageId: data.replyToMessageId || null,
           },
         },
@@ -733,6 +748,18 @@ export class CommunicationsService {
       approvedById: actor.id,
       approvedAt: new Date().toISOString(),
       approvedRevision: expectedRevision,
+      sourceTasks: asRecord(old.details).templateId
+        ? await prisma.task.findMany({
+            where: { matterId: old.matterId, dueDate: { not: null } },
+            select: { id: true, revision: true },
+          })
+        : [],
+      sourceDeadlines: asRecord(old.details).templateId
+        ? await prisma.deadline.findMany({
+            where: { matterId: old.matterId },
+            select: { id: true, revision: true },
+          })
+        : [],
     };
     return prisma.$transaction(async (tx) => {
       const changed = await tx.emailDraft.updateMany({
@@ -933,7 +960,17 @@ export class CommunicationsService {
       return row;
     });
   }
-  async renderTemplate(actor: Principal, id: string, input: unknown) {
+  async availableMergeFields(actor: Principal, matterId: string) {
+    assertCoordinator(actor);
+    return mergeFields(actor, matterId);
+  }
+  async renderInDb(
+    actor: Principal,
+    id: string,
+    input: unknown,
+    db: Prisma.TransactionClient | typeof prisma = prisma,
+    allowUnresolved = false,
+  ) {
     assertCoordinator(actor);
     const { matterId, values = {} } = z
       .object({
@@ -942,8 +979,8 @@ export class CommunicationsService {
       })
       .strict()
       .parse(input);
-    const matter = await requireMatter(actor, matterId);
-    const template = await prisma.communicationTemplate.findUnique({
+    const matter = await requireMatter(actor, matterId, false, db);
+    const template = await db.communicationTemplate.findUnique({
       where: { id },
     });
     if (!template)
@@ -954,38 +991,170 @@ export class CommunicationsService {
         "TEMPLATE_SIDE_MISMATCH",
         "Template does not match the represented side",
       );
-    const agent = matter.agentId
-      ? await prisma.user.findUnique({ where: { id: matter.agentId } })
-      : null;
-    const closing = await prisma.deadline.findFirst({
-      where: {
-        matterId,
-        label: { equals: "Closing", mode: "insensitive" },
-        status: "confirmed",
-      },
-    });
-    const clients = asRecord(matter.details).clients;
-    const merged = {
-      ...values,
-      propertyAddress: matter.propertyAddress,
-      agentName: agent?.name || "",
-      agentEmail: agent?.email || "",
-      clientNames: Array.isArray(clients)
-        ? clients
-            .map((c) => asRecord(c).name)
-            .filter((v) => typeof v === "string")
-            .join(", ")
-        : "",
-      closingDate: closing?.date || "",
-      packageName: matter.packageCode,
-      coordinatorName: actor.name,
+    const fields = await mergeFields(actor, matterId, db);
+    const computed: Record<string, string> = {};
+    for (const f of fields) if (f.value !== null) computed[f.key] = f.value;
+    for (const [key, value] of Object.entries(values)) {
+      if (key !== "recipientName" && key !== "coordinatorName") continue;
+      computed[key] = value;
+    }
+    const missing = new Set<string>();
+    const render = (source: string) => {
+      validateMerge(source);
+      return source.replace(
+        /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
+        (_all, key: string) => {
+          if (!computed[key]?.trim()) {
+            missing.add(key);
+            return `{{${key}}}`;
+          }
+          return computed[key];
+        },
+      );
     };
+    const subject = render(template.subject),
+      body = render(template.body);
+    if (missing.size && !allowUnresolved)
+      throw new HttpError(
+        422,
+        "MISSING_MERGE_FIELD",
+        `Resolve confirmed values for: ${[...missing].join(", ")}`,
+      );
     return {
-      subject: mergeText(template.subject, merged),
-      body: mergeText(template.body, merged),
+      subject,
+      body,
       templateId: template.id,
       templateRevision: template.revision,
+      missingFields: [...missing],
     };
+  }
+  async renderTemplate(actor: Principal, id: string, input: unknown) {
+    return this.renderInDb(actor, id, input);
+  }
+  async refreshTemplateDrafts(
+    actor: Principal,
+    matterId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const drafts = await tx.emailDraft.findMany({
+      where: { matterId, status: "draft" },
+    });
+    for (const draft of drafts) {
+      const details = asRecord(draft.details);
+      if (typeof details.templateId !== "string") continue;
+      const prior = asRecord(details.templateSnapshot);
+      const values = asRecord(details.templateValues);
+      const generated = await this.renderInDb(
+        actor,
+        details.templateId,
+        { matterId, values },
+        tx,
+        true,
+      );
+      const subjectOverride = prior.subject !== draft.subject;
+      const bodyOverride = prior.body !== draft.body;
+      const changed = await tx.emailDraft.updateMany({
+        where: { id: draft.id, revision: draft.revision, status: "draft" },
+        data: {
+          subject: subjectOverride ? draft.subject : generated.subject,
+          body: bodyOverride ? draft.body : generated.body,
+          revision: { increment: 1 },
+          details: {
+            ...details,
+            templateSnapshot: {
+              subject: generated.subject,
+              body: generated.body,
+            },
+            subjectOverride,
+            bodyOverride,
+            reviewNeeded:
+              subjectOverride ||
+              bodyOverride ||
+              !!generated.missingFields.length,
+            mergeError: generated.missingFields.length
+              ? `Missing confirmed values: ${generated.missingFields.join(", ")}`
+              : null,
+            refreshedAt: new Date().toISOString(),
+          },
+        },
+      });
+      if (!changed.count)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "Draft changed during deadline refresh",
+        );
+      await audit(
+        tx,
+        actor,
+        "email.template_draft_refreshed",
+        "EmailDraft",
+        draft.id,
+        matterId,
+        {
+          subjectOverride,
+          bodyOverride,
+          missingFields: generated.missingFields,
+        },
+      );
+    }
+  }
+  async resetTemplate(actor: Principal, id: string, input: unknown) {
+    assertCoordinator(actor);
+    const { expectedRevision, values = {} } = z
+      .object({
+        expectedRevision: revision,
+        values: z.record(z.string(), z.string().max(2000)).optional(),
+      })
+      .strict()
+      .parse(input);
+    const draft = await prisma.emailDraft.findUnique({ where: { id } });
+    if (!draft) throw new HttpError(404, "DRAFT_NOT_FOUND", "Draft not found");
+    const details = asRecord(draft.details);
+    if (typeof details.templateId !== "string")
+      throw new HttpError(
+        422,
+        "NO_TEMPLATE",
+        "This draft has no saved template",
+      );
+    return prisma.$transaction(async (tx) => {
+      const generated = await this.renderInDb(
+        actor,
+        String(details.templateId),
+        { matterId: draft.matterId, values },
+        tx,
+        true,
+      );
+      const changed = await tx.emailDraft.updateMany({
+        where: { id, revision: expectedRevision, status: "draft" },
+        data: {
+          subject: generated.subject,
+          body: generated.body,
+          revision: { increment: 1 },
+          details: {
+            ...details,
+            templateValues: values,
+            templateSnapshot: {
+              subject: generated.subject,
+              body: generated.body,
+            },
+            subjectOverride: false,
+            bodyOverride: false,
+            reviewNeeded: !!generated.missingFields.length,
+            mergeError: generated.missingFields.length
+              ? `Missing confirmed values: ${generated.missingFields.join(", ")}`
+              : null,
+          },
+        },
+      });
+      if (!changed.count)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "Draft changed or is already queued/sent",
+        );
+      return tx.emailDraft.findUniqueOrThrow({ where: { id } });
+    });
   }
   async sendSystemEmail(input: {
     to: string;

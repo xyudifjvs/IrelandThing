@@ -11,6 +11,22 @@ import {
   type Principal,
 } from "@weatherly/platform";
 
+export type MatterChangeHook = (
+  tx: Prisma.TransactionClient,
+  actor: Principal,
+  matterId: string,
+) => Promise<void>;
+let matterChangeHook: MatterChangeHook | undefined;
+export function registerMatterChangeHook(hook?: MatterChangeHook) {
+  matterChangeHook = hook;
+}
+async function matterChanged(
+  tx: Prisma.TransactionClient,
+  actor: Principal,
+  matterId: string,
+) {
+  if (matterChangeHook) await matterChangeHook(tx, actor, matterId);
+}
 export const dateOnly = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -68,7 +84,11 @@ export async function requireMatter(
     where: { id, ...matterScope(actor) },
   });
   if (!matter) throw new HttpError(404, "MATTER_NOT_FOUND", "Matter not found");
-  if (write) assertCoordinator(actor);
+  if (write) {
+    assertCoordinator(actor);
+    if (db !== prisma)
+      await db.$queryRaw`SELECT "id" FROM "Matter" WHERE "id" = ${id} FOR UPDATE`;
+  }
   return matter;
 }
 export async function audit(
@@ -292,6 +312,7 @@ export async function updateMatter(
       beforeRevision: old.revision,
       changes: patch as Prisma.InputJsonValue,
     });
+    await matterChanged(tx, actor, id);
     return tx.matter.findUniqueOrThrow({ where: { id } });
   });
 }
@@ -381,7 +402,12 @@ export async function addDeadline(
     await audit(tx, actor, "deadline.created", "Deadline", row.id, matterId, {
       value: data as Prisma.InputJsonValue,
     });
+    await tx.matter.update({
+      where: { id: matterId },
+      data: { revision: { increment: 1 } },
+    });
     await recalculateWorkflow(tx, actor, matterId);
+    await matterChanged(tx, actor, matterId);
     return row;
   });
 }
@@ -483,7 +509,14 @@ async function updateChild(
       await audit(tx, actor, `${kind}.deleted`, kind, id, matterId, {
         before: JSON.parse(JSON.stringify(old)),
       });
-      if (kind === "deadline") await recalculateWorkflow(tx, actor, matterId);
+      if (kind === "deadline") {
+        await tx.matter.update({
+          where: { id: matterId },
+          data: { revision: { increment: 1 } },
+        });
+        await recalculateWorkflow(tx, actor, matterId);
+        await matterChanged(tx, actor, matterId);
+      }
       return { deleted: true };
     }
     const patch: Record<string, unknown> = { ...data };
@@ -511,7 +544,15 @@ async function updateChild(
       before: JSON.parse(JSON.stringify(old)),
       changes: data as Prisma.InputJsonValue,
     });
-    if (kind === "deadline") await recalculateWorkflow(tx, actor, matterId);
+    if (kind === "deadline") {
+      await tx.matter.update({
+        where: { id: matterId },
+        data: { revision: { increment: 1 } },
+      });
+      await recalculateWorkflow(tx, actor, matterId);
+      await matterChanged(tx, actor, matterId);
+    } else if (kind === "task" && "dueDate" in data)
+      await matterChanged(tx, actor, matterId);
     return delegate.findUniqueOrThrow({ where: { id } });
   });
 }
@@ -832,6 +873,7 @@ export async function applyReviewedFacts(
       );
     }
     await recalculateWorkflow(tx, actor, matterId);
+    await matterChanged(tx, actor, matterId);
     if (data.facts) {
       const previous =
         matter.details &&

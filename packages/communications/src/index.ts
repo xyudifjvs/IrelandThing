@@ -14,6 +14,7 @@ export * from "./service";
 export * from "./gateway";
 export * from "./jobs";
 export * from "./policy";
+export * from "./merge-fields";
 let shared: CommunicationsService | undefined;
 const current = () => shared || (shared = createCommunicationsService());
 export const listMessages = (actor: Principal, matterId?: string) =>
@@ -22,6 +23,11 @@ export const listThreads = (actor: Principal, matterId?: string) =>
   current().listThreads(actor, matterId);
 export const connectionStatus = (actor: Principal) =>
   current().connectionStatus(actor);
+export const refreshTemplateDrafts = (
+  tx: Prisma.TransactionClient,
+  actor: Principal,
+  matterId: string,
+) => current().refreshTemplateDrafts(actor, matterId, tx);
 export const sendSystemEmail = (
   input: Parameters<CommunicationsService["sendSystemEmail"]>[0],
 ) => current().sendSystemEmail(input);
@@ -173,6 +179,27 @@ export function createCommunicationsRouter(service = current()) {
     asyncHandler(async (req, res) =>
       res.json(
         await service.reconcileSend(
+          principal(req),
+          String(req.params.id),
+          req.body,
+        ),
+      ),
+    ),
+  );
+  r.get(
+    "/merge-fields",
+    asyncHandler(async (req, res) => {
+      const { matterId } = z
+        .object({ matterId: z.string().min(1) })
+        .parse(req.query);
+      res.json(await service.availableMergeFields(principal(req), matterId));
+    }),
+  );
+  r.post(
+    "/drafts/:id/reset-template",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await service.resetTemplate(
           principal(req),
           String(req.params.id),
           req.body,

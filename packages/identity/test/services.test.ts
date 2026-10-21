@@ -422,7 +422,7 @@ describe("real PostgreSQL services and Better Auth", () => {
     expect(manual.body.details.manualOverride).toBe(true);
     await expect(
       applyReviewedFacts(owner, m.id, {
-        expectedRevision: 2,
+        expectedRevision: 3,
         deadlines: [
           {
             label: "Closing",
@@ -435,7 +435,7 @@ describe("real PostgreSQL services and Better Auth", () => {
     ).rejects.toMatchObject({ code: "MANUAL_OVERRIDE" });
     expect(
       (await prisma.matter.findUniqueOrThrow({ where: { id: m.id } })).revision,
-    ).toBe(2);
+    ).toBe(3);
   });
   it("requires signed agreement evidence or audited coordinator exception and consumes invitations once", async () => {
     const app = express();

@@ -329,6 +329,114 @@ it("reserves before dispatch and keeps ambiguous refunds from fulfillment or ove
     }),
   ).rejects.toMatchObject({ code: "REFUND_HOLD" });
 });
+it("separately reserves Dashboard and local refunds until provider evidence proves overlap", async () => {
+  const payment = await prisma.paymentOrder.create({
+    data: {
+      matterId: id,
+      createdById: id,
+      idempotencyKey: `mixed-${id}`,
+      amountCents: 6500,
+      currency: "USD",
+      status: "partially_refunded",
+      stripeSessionId: `cs_mixed_${id}`,
+      stripePaymentIntentId: `pi_mixed_${id}`,
+      snapshot: {},
+      details: { refundedCents: 1000 },
+    },
+  });
+  const session = {
+    id: payment.stripeSessionId,
+    status: "complete",
+    payment_status: "paid",
+    amount_total: 6500,
+    currency: "usd",
+    livemode: false,
+    metadata: { paymentOrderId: payment.id },
+    payment_intent: payment.stripePaymentIntentId,
+  };
+  const charge = {
+    id: `ch_mixed_${id}`,
+    payment_intent: payment.stripePaymentIntentId,
+    amount_refunded: 2000,
+    refunded: false,
+    livemode: false,
+  };
+  const accepted: unknown[] = [];
+  const createRefund = vi.fn(
+    async (input: { amount: number; metadata: object }) => {
+      const result = {
+        id: `re_mixed_${accepted.length}_${id}`,
+        amount: input.amount,
+        metadata: input.metadata,
+        status: "succeeded",
+      };
+      accepted.push(result);
+      return result;
+    },
+  );
+  const fake = async () =>
+    ({
+      checkout: { sessions: { retrieve: async () => session } },
+      paymentIntents: { retrieve: async () => ({ latest_charge: charge }) },
+      refunds: {
+        create: createRefund,
+        list: async () => ({
+          has_more: false,
+          data: [
+            {
+              id: `re_dashboard_${id}`,
+              amount: 1000,
+              status: "succeeded",
+              metadata: {},
+            },
+            ...accepted,
+          ],
+        }),
+      },
+    }) as unknown as Stripe;
+  await refundPayment(
+    actor,
+    payment.id,
+    {
+      amountCents: 1000,
+      reason: "Distinct local refund",
+      idempotencyKey: "mixed-local-refund",
+      confirmed: true,
+    },
+    fake,
+  );
+  await expect(
+    refundPayment(
+      actor,
+      payment.id,
+      {
+        amountCents: 5000,
+        reason: "Would exceed combined refunds",
+        idempotencyKey: "mixed-over-refund",
+        confirmed: true,
+      },
+      fake,
+    ),
+  ).rejects.toMatchObject({ code: "REFUND_UNAVAILABLE" });
+  expect(createRefund).toHaveBeenCalledTimes(1);
+  const reconciled = await reconcilePayment(actor, payment.id, fake);
+  expect(reconciled.details).toMatchObject({
+    refundedCents: 2000,
+    refundRequests: [{ amountCents: 1000, accounted: true }],
+  });
+  await refundPayment(
+    actor,
+    payment.id,
+    {
+      amountCents: 4500,
+      reason: "Exact remaining balance",
+      idempotencyKey: "mixed-remaining-refund",
+      confirmed: true,
+    },
+    fake,
+  );
+  expect(createRefund).toHaveBeenCalledTimes(2);
+});
 it("expires unpaid gift checkout before cancelling and refuses later URL reuse", async () => {
   const gift = await prisma.giftOrder.create({
     data: { matterId: id, selection: {}, status: "awaiting_catalog" },

@@ -217,6 +217,7 @@ type RefundIntent = {
   status: string;
   createdAt: string;
   refundId?: string;
+  accounted?: boolean;
 };
 function refundIntents(details: Prisma.JsonValue): RefundIntent[] {
   const value = details as { refundRequests?: unknown };
@@ -266,15 +267,13 @@ export async function refundPayment(
     }
     const details = order.details as Record<string, Prisma.InputJsonValue>;
     // Provider-confirmed refunds may include Dashboard requests absent locally.
-    // Local succeeded refunds can overlap that total; pending reservations cannot.
+    // A succeeded local request overlaps that total only after explicit provider
+    // reconciliation. Otherwise Dashboard refunds could hide a distinct request.
     const settled = Number(details.refundedCents || 0);
-    const succeeded = intents
-      .filter((r) => r.status === "succeeded")
+    const unaccounted = intents
+      .filter((r) => reservesFunds(r) && !r.accounted)
       .reduce((n, r) => n + r.amountCents, 0);
-    const pending = intents
-      .filter((r) => reservesFunds(r) && r.status !== "succeeded")
-      .reduce((n, r) => n + r.amountCents, 0);
-    const unavailable = Math.max(settled, succeeded) + pending;
+    const unavailable = settled + unaccounted;
     if (
       !order.stripePaymentIntentId ||
       !["paid", "partially_refunded"].includes(order.status) ||
@@ -452,6 +451,7 @@ export async function reconcilePayment(
       // missing result remains reserved: absence is not proof of failure.
       const verified: Stripe.Refund[] = [];
       let cursor: string | undefined;
+      let complete = false;
       for (let page = 0; page < 20; page++) {
         const result = await stripe.refunds.list({
           payment_intent: intentId,
@@ -459,7 +459,10 @@ export async function reconcilePayment(
           ...(cursor ? { starting_after: cursor } : {}),
         });
         verified.push(...result.data);
-        if (!result.has_more) break;
+        if (!result.has_more) {
+          complete = true;
+          break;
+        }
         cursor = result.data.at(-1)?.id;
         if (!cursor) break;
       }
@@ -468,6 +471,20 @@ export async function reconcilePayment(
         const current = await tx.paymentOrder.findUniqueOrThrow({
           where: { id },
         });
+        const settled = Number(
+          (current.details as Record<string, Prisma.JsonValue>).refundedCents ||
+            0,
+        );
+        // Only a complete, consistent provider snapshot proves that a matched
+        // succeeded request is included in the already-deducted charge total.
+        const correlated = Boolean(
+          complete &&
+          charge &&
+          settled >= charge.amount_refunded &&
+          verified
+            .filter((r) => r.status === "succeeded")
+            .reduce((sum, r) => sum + r.amount, 0) === charge.amount_refunded,
+        );
         const intents = refundIntents(current.details).map((request) => {
           const evidence = verified.find(
             (r) =>
@@ -480,6 +497,9 @@ export async function reconcilePayment(
                 ...request,
                 refundId: evidence.id,
                 status: evidence.status || "pending",
+                accounted:
+                  request.accounted ||
+                  (correlated && evidence.status === "succeeded"),
               }
             : request;
         });

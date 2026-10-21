@@ -663,6 +663,99 @@ try {
       ),
     "REFUND_UNAVAILABLE",
   );
+  const mixedStored = await prisma.paymentOrder.findUniqueOrThrow({
+    where: { id: mixedOrder.id },
+  });
+  const localEvidence = refundCache.get(
+    "refund:" + mixedOrder.id + ":mixed-local-" + suffix,
+  );
+  refundCache.set("dashboard:" + suffix, {
+    id: "re_dashboard_" + suffix,
+    status: "succeeded",
+    amount: 1000,
+    payment_intent: mixedStored.stripePaymentIntentId,
+    metadata: {},
+  });
+  retrievedSession = undefined;
+  retrievedCharge = {
+    id: "ch_mixed_" + suffix,
+    payment_intent: mixedStored.stripePaymentIntentId,
+    metadata: { paymentOrderId: mixedOrder.id },
+    amount: 6500,
+    amount_refunded: 1000,
+    refunded: false,
+    livemode: false,
+  };
+  const inconsistent = await reconcilePayment(actor, mixedOrder.id, provider);
+  check(
+    "Inconsistent charge/list snapshots cannot mark local refund accounted",
+    !inconsistent.details.refundRequests.find(
+      (r) => r.key === "mixed-local-" + suffix,
+    ).accounted,
+  );
+  retrievedCharge = { ...retrievedCharge, amount_refunded: 2000 };
+  const realList = stripe.refunds.list;
+  stripe.refunds.list = async () => ({ data: [localEvidence], has_more: true });
+  const incomplete = await reconcilePayment(actor, mixedOrder.id, provider);
+  check(
+    "Incomplete refund pagination preserves unaccounted reservation",
+    !incomplete.details.refundRequests.find(
+      (r) => r.key === "mixed-local-" + suffix,
+    ).accounted,
+  );
+  stripe.refunds.list = realList;
+  const correlated = await reconcilePayment(actor, mixedOrder.id, provider);
+  check(
+    "Complete matching refund list proves local refund is already in aggregate",
+    correlated.details.refundedCents === 2000 &&
+      correlated.details.refundRequests.find(
+        (r) => r.key === "mixed-local-" + suffix,
+      ).accounted === true,
+  );
+  await denied(
+    "Reconciled mixed refunds reject one cent above remaining balance",
+    () =>
+      refundPayment(
+        actor,
+        mixedOrder.id,
+        {
+          ...refundInput,
+          amountCents: 4501,
+          idempotencyKey: "post-correlation-over-" + suffix,
+        },
+        provider,
+      ),
+    "REFUND_UNAVAILABLE",
+  );
+  const exactRemaining = await refundPayment(
+    actor,
+    mixedOrder.id,
+    {
+      ...refundInput,
+      amountCents: 4500,
+      idempotencyKey: "post-correlation-exact-" + suffix,
+    },
+    provider,
+  );
+  check(
+    "Reconciliation permits exact4500-cent remaining balance without double count",
+    exactRemaining.requested === true,
+  );
+  await denied(
+    "New reservation exhausts remaining balance exactly",
+    () =>
+      refundPayment(
+        actor,
+        mixedOrder.id,
+        {
+          ...refundInput,
+          amountCents: 1,
+          idempotencyKey: "post-correlation-empty-" + suffix,
+        },
+        provider,
+      ),
+    "REFUND_UNAVAILABLE",
+  );
   const filtered = await queryStoredRecords(actor, {
     kind: "matters",
     matterId: mid,
@@ -675,7 +768,7 @@ try {
   console.log(
     JSON.stringify(
       {
-        candidate: "f014c1a",
+        candidate: "f3b1338",
         checks: checks.length,
         failed: checks.filter((x) => !x.pass).length,
         externalCalls: "none; injected fake provider only",

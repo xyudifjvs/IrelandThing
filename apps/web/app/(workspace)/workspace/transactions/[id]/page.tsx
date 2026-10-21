@@ -1,17 +1,614 @@
-'use client';
-import { use, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Plus, FileText, Download, LockKeyhole, Upload, Users, CalendarDays } from 'lucide-react';
-import { useData, api, mutate, address, date, label, progress, type Matter } from '../../_components/data';
-import s from '../../_components/workspace.module.css';
-export default function Detail({params}:{params:Promise<{id:string}>}) { const{id}=use(params);const q=useData<Matter>(`/api/v1/matters/${id}`);const[tab,setTab]=useState('Checklist');const[error,setError]=useState('');const[busy,setBusy]=useState('');const[note,setNote]=useState('');const[task,setTask]=useState('');const[person,setPerson]=useState({userId:'',role:'client'});const[notice,setNotice]=useState('');
- async function act(key:string,fn:()=>Promise<unknown>){setBusy(key);setError('');setNotice('');try{await fn();await q.refresh();}catch(e){setError((e as Error).message);}finally{setBusy('');}}
- if(q.loading)return <div className={s.loading}>Opening your transaction…</div>; if(!q.data)return <div className={s.error}>{q.error||'Transaction not found.'}<p><Link href="/workspace">Return to workspace</Link></p></div>;const m=q.data;const tasks=m.tasks||[];
- return <><Link className={s.backLink} href="/workspace/transactions"><ArrowLeft/>All transactions</Link><div className={s.detailHeader}><div className={s.split}><div><p className={s.eyebrow}>Your transaction file</p><h1>{m.title||address(m)}</h1><p>{address(m)}</p></div><span className={`${s.pill} ${m.stage==='closed'?s.pillGreen:''}`}>{label(m.stage)}</span></div><div className={s.chips}><label className={s.fieldHint}>Stage <select className={s.select} value={m.stage} disabled={!!busy} onChange={e=>void act('stage',()=>mutate(`/api/v1/matters/${id}`,{expectedRevision:m.revision,stage:e.target.value},'PATCH'))}>{['listing','under_contract','closing','closed','terminated','archived'].map(v=><option value={v} key={v}>{label(v)}</option>)}</select></label><span className={s.pill}>{label(m.side)} side</span><span className={s.pill}>{label(m.packageCode)}</span>{m.details?.cash===true&&<span className={s.pill}>Cash purchase</span>}<span className={s.pill}>{progress(m)}% of checklist complete</span></div><div className={s.progress} style={{marginTop:23}}><span style={{width:`${progress(m)}%`}}/></div></div>{error&&<div className={s.error} role="alert">{error}</div>}{notice&&<div className={s.notice}>{notice}</div>}<div className={s.tabs}>{['Checklist','Documents','Emails','Broker file','My notes & to-do'].map(t=><button key={t} onClick={()=>setTab(t)} className={tab===t?s.tabActive:''}>{t}</button>)}</div><div className={s.twoCol}><div>
- {tab==='Checklist'&&<><section className={s.section}><div className={s.sectionHead}><div><h2>A clear path to closing</h2><p>Keep every milestone moving. Updates are shared according to visibility.</p></div></div><div className={s.sectionBody}>{tasks.filter(t=>t.visibility!=='coordinator').length?tasks.filter(t=>t.visibility!=='coordinator').map(t=><div className={s.taskLine} key={t.id}><input aria-label={`Mark ${t.title} complete`} type="checkbox" checked={t.status==='complete'} disabled={!!busy} onChange={e=>void act(t.id,()=>mutate(`/api/v1/matters/${id}/tasks/${t.id}`,{expectedRevision:t.revision,status:e.target.checked?'complete':'needed'},'PATCH'))}/><label>{t.title}<small>{label(t.visibility)} · {date(t.dueDate)}</small></label><span className={s.pill}>{label(t.status)}</span></div>):<div className={s.empty}>No checklist steps yet. Add the first step below.</div>}<form className={s.formRow} onSubmit={e=>{e.preventDefault();void act('task',async()=>{await mutate(`/api/v1/matters/${id}/tasks`,{title:task,visibility:'agent',kind:'custom'});setTask('');});}}><input className={s.input} aria-label="New checklist step" placeholder="Add a checklist step…" value={task} onChange={e=>setTask(e.target.value)} required/><button className={s.buttonSmall} disabled={!!busy||!task.trim()}><Plus size={13}/>Add</button></form></div></section><section className={s.section}><div className={s.sectionHead}><div><h2>Dates & deadlines</h2><p>Confirm contract dates before relying on the timeline.</p></div><CalendarDays size={18} strokeWidth={1.3}/></div><div className={s.sectionBody}>{m.deadlines?.length?m.deadlines.map(d=><div className={s.taskLine} key={d.id}><div style={{flex:1}}>{d.label}<p className={s.fieldHint}>{label(d.status)}{d.sourceDocumentId?' · Source document linked':''}</p></div><strong style={{fontFamily:'Georgia',fontWeight:400}}>{date(d.date)}</strong>{d.status==='proposed'&&<button className={s.buttonSmall} disabled={!!busy} onClick={()=>void act(d.id,()=>mutate(`/api/v1/matters/${id}/deadlines/${d.id}`,{expectedRevision:d.revision,status:'confirmed'},'PATCH'))}>Confirm</button>}</div>):<div className={s.empty}>Confirmed contract deadlines will appear here.</div>}</div></section></>}
- {tab==='Documents'&&<section className={s.section}><div className={s.sectionHead}><div><h2>Every document, in its place</h2><p>Private storage, accessible to the people authorized on this file.</p></div><FileText size={18} strokeWidth={1.3}/></div><div className={s.sectionBody}>{m.documents?.length?m.documents.map(d=><div key={d.id} className={s.taskLine}><FileText size={17} color="#a38b6b"/><div style={{flex:1}}>{d.name||d.filename}<small className={s.fieldHint}>{label(d.status)}</small></div><a className={s.buttonSmall} href={`/api/v1/documents/${d.id}/download`} target="_blank" rel="noreferrer"><Download size={12}/>Download</a></div>):<div className={s.empty}><FileText/>The file is ready for its first document.</div>}<form style={{marginTop:22}} onSubmit={e=>{e.preventDefault();const form=e.currentTarget;const f=new FormData(form);f.set('matterId',id);f.set('visibility','agent');f.set('category','other');void act('upload',async()=>{await api('/api/v1/documents',{method:'POST',body:f});form.reset();});}}><label className={s.field}>Upload a document<input className={s.input} name="file" type="file" required accept=".pdf,.docx"/></label><button className={s.buttonSecondary} disabled={!!busy} style={{marginTop:12}}><Upload/>{busy==='upload'?'Uploading…':'Upload securely'}</button></form></div></section>}
- {tab==='Emails'&&<section className={s.section}><div className={s.sectionHead}><div><h2>Communication, kept together</h2><p>Connected email and drafts for the people on this deal.</p></div></div><div className={s.sectionBody}><div className={s.notice}>Gmail connection is required before messages can be synced or sent. Your coordinator’s contact permissions still apply.</div><Link className={s.buttonSecondary} href={`/workspace/inbox?matterId=${id}`}>Open transaction inbox</Link></div></section>}
- {tab==='Broker file'&&<section className={s.section}><div className={s.sectionHead}><div><h2>Broker file & compliance</h2><p>Approved brokerage requirements guide the final file review.</p></div></div><div className={s.sectionBody}>{tasks.filter(t=>t.kind==='compliance').map(t=><div className={s.taskLine} key={t.id}><span style={{flex:1}}>{t.title}</span><span className={s.pill}>{label(t.status)}</span></div>)}<div className={s.notice}>Review the approved brokerage checklist and supporting documents before marking a file complete. AI findings require coordinator review.</div><Link href={`/workspace/review?matterId=${id}`} className={s.buttonSecondary}>Open document review</Link></div></section>}
- {tab==='My notes & to-do'&&<section className={s.section}><div className={s.sectionHead}><div><h2>A little space for your notes</h2><p className={s.privateLabel}><LockKeyhole/>Coordinator only. Agents and clients cannot see this.</p></div></div><div className={s.sectionBody}>{tasks.filter(t=>t.visibility==='coordinator').map(t=><div className={s.taskLine} key={t.id}><input aria-label={`Complete ${t.title}`} type="checkbox" checked={t.status==='complete'} disabled={!!busy} onChange={e=>void act(t.id,()=>mutate(`/api/v1/matters/${id}/tasks/${t.id}`,{expectedRevision:t.revision,status:e.target.checked?'complete':'needed'},'PATCH'))}/><span>{t.title}</span></div>)}{m.notes?.map(n=><div className={s.note} key={n.id}><p>{n.content||n.text||n.body}</p><small>{date(n.createdAt)}</small></div>)}<form style={{marginTop:20}} onSubmit={e=>{e.preventDefault();void act('note',async()=>{await mutate(`/api/v1/matters/${id}/notes`,{body:note,visibility:'coordinator'});setNote('');});}}><label className={s.field}>Notes on this transaction<textarea className={s.textarea} value={note} onChange={e=>setNote(e.target.value)} required placeholder="Keep the details you’ll want to remember…"/></label><button className={s.button} style={{marginTop:12}} disabled={!!busy||!note.trim()}>{busy==='note'?'Saving…':'Save private note'}</button></form></div></section>}
- </div><aside><section className={s.section}><div className={s.sectionHead}><div><h2>People on this deal</h2><p>One file. Everyone in the loop.</p></div><Users size={17} strokeWidth={1.3}/></div><div className={s.sectionBody}>{m.participants?.length?m.participants.map(p=><div className={s.attention} key={p.id}><div className={s.avatar}>{p.name?.slice(0,1)||p.role?.slice(0,1).toUpperCase()||'?'}</div><div><strong>{p.name||p.userId||label(p.role)}</strong><p>{label(p.role)}<br/>{p.email}</p></div></div>):<p className={`${s.muted} ${s.tiny}`}>No additional participants have been added.</p>}<details style={{marginTop:18}}><summary style={{cursor:'pointer',fontSize:11,color:'#8b7151'}}>Add a person</summary><form onSubmit={e=>{e.preventDefault();void act('person',async()=>{await mutate(`/api/v1/matters/${id}/participants`,person);setPerson({userId:'',role:'client'});});}} style={{display:'grid',gap:10,marginTop:15}}><input className={s.input} placeholder="Authorized account ID" aria-label="Participant account ID" required value={person.userId} onChange={e=>setPerson({...person,userId:e.target.value})}/><p className={s.fieldHint}>Grant access only to an existing agent or client account. Contact details from the intake remain in its saved record.</p><select className={s.select} aria-label="Participant role" value={person.role} onChange={e=>setPerson({...person,role:e.target.value})}>{['client','agent'].map(r=><option key={r}>{r}</option>)}</select><button className={s.buttonSmall} disabled={!!busy}>Add to this file</button></form></details></div></section><div className={s.notice}><LockKeyhole size={16}/><p style={{margin:'7px 0 0'}}>Coordinator: complete file.<br/>Agent: assigned file and shared updates.<br/>Client: permitted timeline and documents.</p><p className={s.tiny}>Private notes stay private. Portal access requires an authorized invitation.</p></div><Link href="/portal" className={s.buttonSecondary}>Open your portal</Link></aside></div></>;
+"use client";
+import { use, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Plus,
+  FileText,
+  Download,
+  LockKeyhole,
+  Upload,
+  Users,
+  CalendarDays,
+} from "lucide-react";
+import {
+  useData,
+  api,
+  mutate,
+  address,
+  date,
+  label,
+  progress,
+  type Matter,
+} from "../../_components/data";
+import s from "../../_components/workspace.module.css";
+export default function Detail({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const q = useData<Matter>(`/api/v1/matters/${id}`);
+  const [tab, setTab] = useState("Checklist");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
+  const [task, setTask] = useState("");
+  const [person, setPerson] = useState({ userId: "", role: "client" });
+  const [notice, setNotice] = useState("");
+  async function act(key: string, fn: () => Promise<unknown>) {
+    setBusy(key);
+    setError("");
+    setNotice("");
+    try {
+      await fn();
+      await q.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
+  if (q.loading)
+    return <div className={s.loading}>Opening your transaction…</div>;
+  if (!q.data)
+    return (
+      <div className={s.error}>
+        {q.error || "Transaction not found."}
+        <p>
+          <Link href="/workspace">Return to workspace</Link>
+        </p>
+      </div>
+    );
+  const m = q.data;
+  const tasks = m.tasks || [];
+  return (
+    <>
+      <Link className={s.backLink} href="/workspace/transactions">
+        <ArrowLeft />
+        All transactions
+      </Link>
+      <div className={s.detailHeader}>
+        <div className={s.split}>
+          <div>
+            <p className={s.eyebrow}>Your transaction file</p>
+            <h1>{m.title || address(m)}</h1>
+            <p>{address(m)}</p>
+          </div>
+          <span
+            className={`${s.pill} ${m.stage === "closed" ? s.pillGreen : ""}`}
+          >
+            {label(m.stage)}
+          </span>
+        </div>
+        <div className={s.chips}>
+          <label className={s.fieldHint}>
+            Stage{" "}
+            <select
+              className={s.select}
+              value={m.stage}
+              disabled={!!busy}
+              onChange={(e) =>
+                void act("stage", () =>
+                  mutate(
+                    `/api/v1/matters/${id}`,
+                    { expectedRevision: m.revision, stage: e.target.value },
+                    "PATCH",
+                  ),
+                )
+              }
+            >
+              {[
+                "listing",
+                "under_contract",
+                "closing",
+                "closed",
+                "terminated",
+                "archived",
+              ].map((v) => (
+                <option value={v} key={v}>
+                  {label(v)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className={s.pill}>{label(m.side)} side</span>
+          <span className={s.pill}>{label(m.packageCode)}</span>
+          {m.details?.cash === true && (
+            <span className={s.pill}>Cash purchase</span>
+          )}
+          <span className={s.pill}>{progress(m)}% of checklist complete</span>
+        </div>
+        <div className={s.progress} style={{ marginTop: 23 }}>
+          <span style={{ width: `${progress(m)}%` }} />
+        </div>
+      </div>
+      {error && (
+        <div className={s.error} role="alert">
+          {error}
+        </div>
+      )}
+      {notice && <div className={s.notice}>{notice}</div>}
+      <div className={s.tabs}>
+        {[
+          "Checklist",
+          "Documents",
+          "Emails",
+          "Broker file",
+          "My notes & to-do",
+        ].map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={tab === t ? s.tabActive : ""}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <div className={s.twoCol}>
+        <div>
+          {tab === "Checklist" && (
+            <>
+              <section className={s.section}>
+                <div className={s.sectionHead}>
+                  <div>
+                    <h2>A clear path to closing</h2>
+                    <p>
+                      Keep every milestone moving. Updates are shared according
+                      to visibility.
+                    </p>
+                  </div>
+                </div>
+                <div className={s.sectionBody}>
+                  {tasks.filter((t) => t.visibility !== "coordinator")
+                    .length ? (
+                    tasks
+                      .filter((t) => t.visibility !== "coordinator")
+                      .map((t) => (
+                        <div className={s.taskLine} key={t.id}>
+                          <input
+                            aria-label={`Mark ${t.title} complete`}
+                            type="checkbox"
+                            checked={t.status === "complete"}
+                            disabled={!!busy}
+                            onChange={(e) =>
+                              void act(t.id, () =>
+                                mutate(
+                                  `/api/v1/matters/${id}/tasks/${t.id}`,
+                                  {
+                                    expectedRevision: t.revision,
+                                    status: e.target.checked
+                                      ? "complete"
+                                      : "needed",
+                                  },
+                                  "PATCH",
+                                ),
+                              )
+                            }
+                          />
+                          <label>
+                            {t.title}
+                            <small>
+                              {label(t.visibility)} · {date(t.dueDate)}
+                            </small>
+                          </label>
+                          <span className={s.pill}>{label(t.status)}</span>
+                        </div>
+                      ))
+                  ) : (
+                    <div className={s.empty}>
+                      No checklist steps yet. Add the first step below.
+                    </div>
+                  )}
+                  <form
+                    className={s.formRow}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void act("task", async () => {
+                        await mutate(`/api/v1/matters/${id}/tasks`, {
+                          title: task,
+                          visibility: "agent",
+                          kind: "custom",
+                        });
+                        setTask("");
+                      });
+                    }}
+                  >
+                    <input
+                      className={s.input}
+                      aria-label="New checklist step"
+                      placeholder="Add a checklist step…"
+                      value={task}
+                      onChange={(e) => setTask(e.target.value)}
+                      required
+                    />
+                    <button
+                      className={s.buttonSmall}
+                      disabled={!!busy || !task.trim()}
+                    >
+                      <Plus size={13} />
+                      Add
+                    </button>
+                  </form>
+                </div>
+              </section>
+              <section className={s.section}>
+                <div className={s.sectionHead}>
+                  <div>
+                    <h2>Dates & deadlines</h2>
+                    <p>
+                      Confirm contract dates before relying on the timeline.
+                    </p>
+                  </div>
+                  <CalendarDays size={18} strokeWidth={1.3} />
+                </div>
+                <div className={s.sectionBody}>
+                  {m.deadlines?.length ? (
+                    m.deadlines.map((d) => (
+                      <div className={s.taskLine} key={d.id}>
+                        <div style={{ flex: 1 }}>
+                          {d.label}
+                          <p className={s.fieldHint}>
+                            {label(d.status)}
+                            {d.sourceDocumentId
+                              ? " · Source document linked"
+                              : ""}
+                          </p>
+                        </div>
+                        <strong
+                          style={{ fontFamily: "Georgia", fontWeight: 400 }}
+                        >
+                          {date(d.date)}
+                        </strong>
+                        {d.status === "proposed" && (
+                          <button
+                            className={s.buttonSmall}
+                            disabled={!!busy}
+                            onClick={() =>
+                              void act(d.id, () =>
+                                mutate(
+                                  `/api/v1/matters/${id}/deadlines/${d.id}`,
+                                  {
+                                    expectedRevision: d.revision,
+                                    status: "confirmed",
+                                  },
+                                  "PATCH",
+                                ),
+                              )
+                            }
+                          >
+                            Confirm
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className={s.empty}>
+                      Confirmed contract deadlines will appear here.
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+          {tab === "Documents" && (
+            <section className={s.section}>
+              <div className={s.sectionHead}>
+                <div>
+                  <h2>Every document, in its place</h2>
+                  <p>
+                    Private storage, accessible to the people authorized on this
+                    file.
+                  </p>
+                </div>
+                <FileText size={18} strokeWidth={1.3} />
+              </div>
+              <div className={s.sectionBody}>
+                {m.documents?.length ? (
+                  m.documents.map((d) => (
+                    <div key={d.id} className={s.taskLine}>
+                      <FileText size={17} color="#a38b6b" />
+                      <div style={{ flex: 1 }}>
+                        {d.name || d.filename}
+                        <small className={s.fieldHint}>{label(d.status)}</small>
+                      </div>
+                      <a
+                        className={s.buttonSmall}
+                        href={`/api/v1/documents/${d.id}/download`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Download size={12} />
+                        Download
+                      </a>
+                    </div>
+                  ))
+                ) : (
+                  <div className={s.empty}>
+                    <FileText />
+                    The file is ready for its first document.
+                  </div>
+                )}
+                <form
+                  style={{ marginTop: 22 }}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const form = e.currentTarget;
+                    const f = new FormData(form);
+                    f.set("matterId", id);
+                    f.set("visibility", "agent");
+                    f.set("category", "other");
+                    void act("upload", async () => {
+                      await api("/api/v1/documents", {
+                        method: "POST",
+                        body: f,
+                      });
+                      form.reset();
+                    });
+                  }}
+                >
+                  <label className={s.field}>
+                    Upload a document
+                    <input
+                      className={s.input}
+                      name="file"
+                      type="file"
+                      required
+                      accept=".pdf,.docx"
+                    />
+                  </label>
+                  <button
+                    className={s.buttonSecondary}
+                    disabled={!!busy}
+                    style={{ marginTop: 12 }}
+                  >
+                    <Upload />
+                    {busy === "upload" ? "Uploading…" : "Upload securely"}
+                  </button>
+                </form>
+              </div>
+            </section>
+          )}
+          {tab === "Emails" && (
+            <section className={s.section}>
+              <div className={s.sectionHead}>
+                <div>
+                  <h2>Communication, kept together</h2>
+                  <p>Connected email and drafts for the people on this deal.</p>
+                </div>
+              </div>
+              <div className={s.sectionBody}>
+                <div className={s.notice}>
+                  Gmail connection is required before messages can be synced or
+                  sent. Your coordinator’s contact permissions still apply.
+                </div>
+                <Link
+                  className={s.buttonSecondary}
+                  href={`/workspace/inbox?matterId=${id}`}
+                >
+                  Open transaction inbox
+                </Link>
+              </div>
+            </section>
+          )}
+          {tab === "Broker file" && (
+            <section className={s.section}>
+              <div className={s.sectionHead}>
+                <div>
+                  <h2>Broker file & compliance</h2>
+                  <p>
+                    Approved brokerage requirements guide the final file review.
+                  </p>
+                </div>
+              </div>
+              <div className={s.sectionBody}>
+                {tasks
+                  .filter((t) => t.kind === "compliance")
+                  .map((t) => (
+                    <div className={s.taskLine} key={t.id}>
+                      <span style={{ flex: 1 }}>{t.title}</span>
+                      <span className={s.pill}>{label(t.status)}</span>
+                    </div>
+                  ))}
+                <div className={s.notice}>
+                  Review the approved brokerage checklist and supporting
+                  documents before marking a file complete. AI findings require
+                  coordinator review.
+                </div>
+                <Link
+                  href={`/workspace/review?matterId=${id}`}
+                  className={s.buttonSecondary}
+                >
+                  Open document review
+                </Link>
+              </div>
+            </section>
+          )}
+          {tab === "My notes & to-do" && (
+            <section className={s.section}>
+              <div className={s.sectionHead}>
+                <div>
+                  <h2>A little space for your notes</h2>
+                  <p className={s.privateLabel}>
+                    <LockKeyhole />
+                    Coordinator only. Agents and clients cannot see this.
+                  </p>
+                </div>
+              </div>
+              <div className={s.sectionBody}>
+                {tasks
+                  .filter((t) => t.visibility === "coordinator")
+                  .map((t) => (
+                    <div className={s.taskLine} key={t.id}>
+                      <input
+                        aria-label={`Complete ${t.title}`}
+                        type="checkbox"
+                        checked={t.status === "complete"}
+                        disabled={!!busy}
+                        onChange={(e) =>
+                          void act(t.id, () =>
+                            mutate(
+                              `/api/v1/matters/${id}/tasks/${t.id}`,
+                              {
+                                expectedRevision: t.revision,
+                                status: e.target.checked
+                                  ? "complete"
+                                  : "needed",
+                              },
+                              "PATCH",
+                            ),
+                          )
+                        }
+                      />
+                      <span>{t.title}</span>
+                    </div>
+                  ))}
+                {m.notes?.map((n) => (
+                  <div className={s.note} key={n.id}>
+                    <p>{n.content || n.text || n.body}</p>
+                    <small>{date(n.createdAt)}</small>
+                  </div>
+                ))}
+                <form
+                  style={{ marginTop: 20 }}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void act("note", async () => {
+                      await mutate(`/api/v1/matters/${id}/notes`, {
+                        body: note,
+                        visibility: "coordinator",
+                      });
+                      setNote("");
+                    });
+                  }}
+                >
+                  <label className={s.field}>
+                    Notes on this transaction
+                    <textarea
+                      className={s.textarea}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      required
+                      placeholder="Keep the details you’ll want to remember…"
+                    />
+                  </label>
+                  <button
+                    className={s.button}
+                    style={{ marginTop: 12 }}
+                    disabled={!!busy || !note.trim()}
+                  >
+                    {busy === "note" ? "Saving…" : "Save private note"}
+                  </button>
+                </form>
+              </div>
+            </section>
+          )}
+        </div>
+        <aside>
+          <section className={s.section}>
+            <div className={s.sectionHead}>
+              <div>
+                <h2>People on this deal</h2>
+                <p>One file. Everyone in the loop.</p>
+              </div>
+              <Users size={17} strokeWidth={1.3} />
+            </div>
+            <div className={s.sectionBody}>
+              {m.participants?.length ? (
+                m.participants.map((p) => (
+                  <div className={s.attention} key={p.id}>
+                    <div className={s.avatar}>
+                      {p.name?.slice(0, 1) ||
+                        p.role?.slice(0, 1).toUpperCase() ||
+                        "?"}
+                    </div>
+                    <div>
+                      <strong>{p.name || p.userId || label(p.role)}</strong>
+                      <p>
+                        {label(p.role)}
+                        <br />
+                        {p.email}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className={`${s.muted} ${s.tiny}`}>
+                  No additional participants have been added.
+                </p>
+              )}
+              <details style={{ marginTop: 18 }}>
+                <summary
+                  style={{ cursor: "pointer", fontSize: 11, color: "#8b7151" }}
+                >
+                  Add a person
+                </summary>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void act("person", async () => {
+                      await mutate(
+                        `/api/v1/matters/${id}/participants`,
+                        person,
+                      );
+                      setPerson({ userId: "", role: "client" });
+                    });
+                  }}
+                  style={{ display: "grid", gap: 10, marginTop: 15 }}
+                >
+                  <input
+                    className={s.input}
+                    placeholder="Authorized account ID"
+                    aria-label="Participant account ID"
+                    required
+                    value={person.userId}
+                    onChange={(e) =>
+                      setPerson({ ...person, userId: e.target.value })
+                    }
+                  />
+                  <p className={s.fieldHint}>
+                    Grant access only to an existing agent or client account.
+                    Contact details from the intake remain in its saved record.
+                  </p>
+                  <select
+                    className={s.select}
+                    aria-label="Participant role"
+                    value={person.role}
+                    onChange={(e) =>
+                      setPerson({ ...person, role: e.target.value })
+                    }
+                  >
+                    {["client", "agent"].map((r) => (
+                      <option key={r}>{r}</option>
+                    ))}
+                  </select>
+                  <button className={s.buttonSmall} disabled={!!busy}>
+                    Add to this file
+                  </button>
+                </form>
+              </details>
+            </div>
+          </section>
+          <div className={s.notice}>
+            <LockKeyhole size={16} />
+            <p style={{ margin: "7px 0 0" }}>
+              Coordinator: complete file.
+              <br />
+              Agent: assigned file and shared updates.
+              <br />
+              Client: permitted timeline and documents.
+            </p>
+            <p className={s.tiny}>
+              Private notes stay private. Portal access requires an authorized
+              invitation.
+            </p>
+          </div>
+          <Link href="/portal" className={s.buttonSecondary}>
+            Open your portal
+          </Link>
+        </aside>
+      </div>
+    </>
+  );
 }

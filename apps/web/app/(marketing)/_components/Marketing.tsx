@@ -1,10 +1,266 @@
-import Link from 'next/link';
-import type {ReactNode} from 'react';
-import { ArrowUpRight, ArrowRight, Leaf, CalendarCheck, Handshake, Gift } from 'lucide-react';
-import s from './marketing.module.css';
-export const pages=[['/','About Me'],['/services','Services'],['/process','Process'],['/onboarding','New Agent Onboarding'],['/testimonials','Testimonials'],['/faq','FAQ'],['/agent-portal','Agent Portal'],['/contact','Contact']];
-export function MarketingShell({children}:{children:ReactNode}){return <div className={s.site}><header className={s.header}><Link className={s.brand} href="/" aria-label="Weatherly home"><span>WEATHERLY</span><small>TRANSACTION CO.</small></Link><nav className={s.nav} aria-label="Main navigation">{pages.map(([href,name])=><Link key={href} href={href} className={href==='/agent-portal'?s.portal:''}>{name}</Link>)}</nav></header><main className={s.main}>{children}</main><footer className={s.footer}><div className={s.footerTop}><div><Link className={s.brand} style={{margin:0}} href="/"><span style={{fontSize:20}}>WEATHERLY</span><small>TRANSACTION CO.</small></Link><p>Thoughtfully coordinated. Confidently closed.</p></div><div><Link href="/onboarding">Work with Ireland</Link><Link href="/agent-portal">Agent portal</Link><Link href="/contact">Get in touch <ArrowUpRight size={10}/></Link></div></div><div className={s.footerBottom}><p>© {new Date().getFullYear()} Weatherly Transaction Co.</p><Link href="/faq">Questions? Start here.</Link></div></footer></div>;}
-export function PageHead({eyebrow,title,children}:{eyebrow:string;title:string;children?:ReactNode}){return <div className={s.pageHead}><p className={s.eyebrow}>{eyebrow}</p><h1>{title}</h1>{children&&<p>{children}</p>}</div>;}
-export function CTA(){return <section className={s.cta}><p className={s.eyebrow}>Less to manage. More room to grow.</p><h2>Let’s make your next closing a little simpler.</h2><p>Start with a conversation. We’ll find the right level of support for your business.</p><div className={s.actions}><Link className={s.button} href="/onboarding">Let’s get acquainted <ArrowUpRight size={13}/></Link></div></section>;}
-export function About(){return <><section className={s.hero}><div><p className={s.eyebrow}>Details handled. Possibilities open.</p><h1>A higher standard of <em>transaction coordination.</em></h1><p className={s.lead}>Dependable, detail-oriented support for real estate professionals. From contract to close, the behind-the-scenes work is in thoughtful hands.</p><div className={s.actions}><Link className={s.button} href="/onboarding">Let’s work together <ArrowUpRight size={13}/></Link><Link className={s.secondary} href="/services">Explore the services <ArrowRight size={13}/></Link></div></div><div className={s.portrait}><img src="/brand/portrait.jpeg" alt="Ireland, founder of Weatherly Transaction Co."/><div className={s.portraitCaption}>A personal approach.<small>A little less on your plate.</small></div></div></section><div className={s.ribbon}><span><Leaf/>Thoughtful support</span><span><CalendarCheck/>Details in order</span><span><Handshake/>People kept in the loop</span></div><section className={s.section}><div className={s.bioGrid}><div><p className={s.eyebrow}>Meet your coordinator</p><h2 className={s.sectionTitle}>Hello, I’m Ireland.</h2><p className={s.body}>I founded Weatherly Transaction Co. to provide real estate professionals with dependable support for the details that keep each transaction moving.</p><p className={s.body}>My goal is simple: to handle the behind-the-scenes coordination so you can focus on serving your clients and growing your business.</p><Link className={s.textLink} href="/onboarding">A good partnership starts with a conversation <ArrowUpRight size={12}/></Link></div><div className={s.bioAccent}>A smoother process.<br/>A clearer next step.<br/>A little more peace of mind.</div></div></section><CTA/></>;}
-export function Services(){return <><PageHead eyebrow="What I do" title="Support that fits your transaction.">Choose the level of coordination that gives you the room to do what you do best.</PageHead><div className={s.cards}>{[{name:'Essentials',tag:'Contract to Close',price:375,list:['Contract intake and timeline','Deadline tracking and status updates','Title, lender and closing coordination'],code:'essentials'},{name:'Complete',tag:'Coordination + Compliance',price:475,list:['Everything in Essentials','Document review and broker checklist','File submission and post-closing wrap-up'],code:'complete'},{name:'Full Listing',tag:'Seller side, start to finish',price:625,list:['Everything in Complete','Pre-listing paperwork and disclosures','Listing support through closing'],code:'full_listing'}].map((p,i)=><article className={`${s.card} ${i===1?s.recommended:''}`} key={p.name}>{i===1&&<div className={s.cardTag}>A little more taken care of</div>}<p className={s.eyebrow}>{p.tag}</p><h2>{p.name}</h2><p className={s.price}>${p.price}</p><small>{p.code==='full_listing'?'Seller side only':'Buyer or seller side'} · USD per transaction</small><ul>{p.list.map(t=><li key={t}>{t}</li>)}</ul><Link className={s.secondary} href="/onboarding">Find your fit <ArrowUpRight size={12}/></Link></article>)}</div><section className={s.gift}><div><p className={s.eyebrow}>A thoughtful finishing touch</p><h2>Closing gifts, coordinated.</h2><p>Ask about gift options and personalization. Catalog and pricing will be confirmed by Ireland.<br/>Gift payment is required before ordering. Service fee timing is confirmed during onboarding.</p></div><Gift size={37} strokeWidth={.8} color="#aa9068"/></section><CTA/></>;}
+import Link from "next/link";
+import type { ReactNode } from "react";
+import {
+  ArrowUpRight,
+  ArrowRight,
+  Leaf,
+  CalendarCheck,
+  Handshake,
+  Gift,
+} from "lucide-react";
+import s from "./marketing.module.css";
+export const pages = [
+  ["/", "About Me"],
+  ["/services", "Services"],
+  ["/process", "Process"],
+  ["/onboarding", "New Agent Onboarding"],
+  ["/testimonials", "Testimonials"],
+  ["/faq", "FAQ"],
+  ["/agent-portal", "Agent Portal"],
+  ["/contact", "Contact"],
+];
+export function MarketingShell({ children }: { children: ReactNode }) {
+  return (
+    <div className={s.site}>
+      <header className={s.header}>
+        <Link className={s.brand} href="/" aria-label="Weatherly home">
+          <span>WEATHERLY</span>
+          <small>TRANSACTION CO.</small>
+        </Link>
+        <nav className={s.nav} aria-label="Main navigation">
+          {pages.map(([href, name]) => (
+            <Link
+              key={href}
+              href={href}
+              className={href === "/agent-portal" ? s.portal : ""}
+            >
+              {name}
+            </Link>
+          ))}
+        </nav>
+      </header>
+      <main className={s.main}>{children}</main>
+      <footer className={s.footer}>
+        <div className={s.footerTop}>
+          <div>
+            <Link className={s.brand} style={{ margin: 0 }} href="/">
+              <span style={{ fontSize: 20 }}>WEATHERLY</span>
+              <small>TRANSACTION CO.</small>
+            </Link>
+            <p>Thoughtfully coordinated. Confidently closed.</p>
+          </div>
+          <div>
+            <Link href="/onboarding">Work with Ireland</Link>
+            <Link href="/agent-portal">Agent portal</Link>
+            <Link href="/contact">
+              Get in touch <ArrowUpRight size={10} />
+            </Link>
+          </div>
+        </div>
+        <div className={s.footerBottom}>
+          <p>© {new Date().getFullYear()} Weatherly Transaction Co.</p>
+          <Link href="/faq">Questions? Start here.</Link>
+        </div>
+      </footer>
+    </div>
+  );
+}
+export function PageHead({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className={s.pageHead}>
+      <p className={s.eyebrow}>{eyebrow}</p>
+      <h1>{title}</h1>
+      {children && <p>{children}</p>}
+    </div>
+  );
+}
+export function CTA() {
+  return (
+    <section className={s.cta}>
+      <p className={s.eyebrow}>Less to manage. More room to grow.</p>
+      <h2>Let’s make your next closing a little simpler.</h2>
+      <p>
+        Start with a conversation. We’ll find the right level of support for
+        your business.
+      </p>
+      <div className={s.actions}>
+        <Link className={s.button} href="/onboarding">
+          Let’s get acquainted <ArrowUpRight size={13} />
+        </Link>
+      </div>
+    </section>
+  );
+}
+export function About() {
+  return (
+    <>
+      <section className={s.hero}>
+        <div>
+          <p className={s.eyebrow}>Details handled. Possibilities open.</p>
+          <h1>
+            A higher standard of <em>transaction coordination.</em>
+          </h1>
+          <p className={s.lead}>
+            Dependable, detail-oriented support for real estate professionals.
+            From contract to close, the behind-the-scenes work is in thoughtful
+            hands.
+          </p>
+          <div className={s.actions}>
+            <Link className={s.button} href="/onboarding">
+              Let’s work together <ArrowUpRight size={13} />
+            </Link>
+            <Link className={s.secondary} href="/services">
+              Explore the services <ArrowRight size={13} />
+            </Link>
+          </div>
+        </div>
+        <div className={s.portrait}>
+          <img
+            src="/brand/portrait.jpeg"
+            alt="Ireland, founder of Weatherly Transaction Co."
+          />
+          <div className={s.portraitCaption}>
+            A personal approach.<small>A little less on your plate.</small>
+          </div>
+        </div>
+      </section>
+      <div className={s.ribbon}>
+        <span>
+          <Leaf />
+          Thoughtful support
+        </span>
+        <span>
+          <CalendarCheck />
+          Details in order
+        </span>
+        <span>
+          <Handshake />
+          People kept in the loop
+        </span>
+      </div>
+      <section className={s.section}>
+        <div className={s.bioGrid}>
+          <div>
+            <p className={s.eyebrow}>Meet your coordinator</p>
+            <h2 className={s.sectionTitle}>Hello, I’m Ireland.</h2>
+            <p className={s.body}>
+              I founded Weatherly Transaction Co. to provide real estate
+              professionals with dependable support for the details that keep
+              each transaction moving.
+            </p>
+            <p className={s.body}>
+              My goal is simple: to handle the behind-the-scenes coordination so
+              you can focus on serving your clients and growing your business.
+            </p>
+            <Link className={s.textLink} href="/onboarding">
+              A good partnership starts with a conversation{" "}
+              <ArrowUpRight size={12} />
+            </Link>
+          </div>
+          <div className={s.bioAccent}>
+            A smoother process.
+            <br />A clearer next step.
+            <br />A little more peace of mind.
+          </div>
+        </div>
+      </section>
+      <CTA />
+    </>
+  );
+}
+export function Services() {
+  return (
+    <>
+      <PageHead eyebrow="What I do" title="Support that fits your transaction.">
+        Choose the level of coordination that gives you the room to do what you
+        do best.
+      </PageHead>
+      <div className={s.cards}>
+        {[
+          {
+            name: "Essentials",
+            tag: "Contract to Close",
+            price: 375,
+            list: [
+              "Contract intake and timeline",
+              "Deadline tracking and status updates",
+              "Title, lender and closing coordination",
+            ],
+            code: "essentials",
+          },
+          {
+            name: "Complete",
+            tag: "Coordination + Compliance",
+            price: 475,
+            list: [
+              "Everything in Essentials",
+              "Document review and broker checklist",
+              "File submission and post-closing wrap-up",
+            ],
+            code: "complete",
+          },
+          {
+            name: "Full Listing",
+            tag: "Seller side, start to finish",
+            price: 625,
+            list: [
+              "Everything in Complete",
+              "Pre-listing paperwork and disclosures",
+              "Listing support through closing",
+            ],
+            code: "full_listing",
+          },
+        ].map((p, i) => (
+          <article
+            className={`${s.card} ${i === 1 ? s.recommended : ""}`}
+            key={p.name}
+          >
+            {i === 1 && (
+              <div className={s.cardTag}>A little more taken care of</div>
+            )}
+            <p className={s.eyebrow}>{p.tag}</p>
+            <h2>{p.name}</h2>
+            <p className={s.price}>${p.price}</p>
+            <small>
+              {p.code === "full_listing"
+                ? "Seller side only"
+                : "Buyer or seller side"}{" "}
+              · USD per transaction
+            </small>
+            <ul>
+              {p.list.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+            <Link className={s.secondary} href="/onboarding">
+              Find your fit <ArrowUpRight size={12} />
+            </Link>
+          </article>
+        ))}
+      </div>
+      <section className={s.gift}>
+        <div>
+          <p className={s.eyebrow}>A thoughtful finishing touch</p>
+          <h2>Closing gifts, coordinated.</h2>
+          <p>
+            Ask about gift options and personalization. Catalog and pricing will
+            be confirmed by Ireland.
+            <br />
+            Gift payment is required before ordering. Service fee timing is
+            confirmed during onboarding.
+          </p>
+        </div>
+        <Gift size={37} strokeWidth={0.8} color="#aa9068" />
+      </section>
+      <CTA />
+    </>
+  );
+}

@@ -1,6 +1,8 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
+import { rm, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type Credentials } from "google-auth-library";
 import { prisma } from "@weatherly/db";
 import { encryptSecret, HttpError, type Principal } from "@weatherly/platform";
@@ -150,11 +152,13 @@ const config: CommunicationsConfig = {
 };
 let service: ReturnType<typeof createCommunicationsService>,
   jobs: ReturnType<typeof createCommunicationJobHandlers>;
+let objectDirectory: string | undefined;
 beforeAll(async () => {
   process.env.CREDENTIAL_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString(
     "base64",
   );
-  process.env.OBJECT_STORAGE_DIR = `/private/tmp/weatherly-mail-tests-${suffix}`;
+  objectDirectory = await mkdtemp(join(tmpdir(), "weatherly-mail-tests-"));
+  process.env.OBJECT_STORAGE_DIR = objectDirectory;
   process.env.GMAIL_IMPORT_QUERY = "all";
   for (const [id, role, email] of [
     [ownerId, "coordinator", mail],
@@ -229,7 +233,8 @@ afterAll(async () => {
     where: { id: { in: [ownerId, agentId, clientId] } },
   });
   await prisma.$disconnect();
-  await rm(process.env.OBJECT_STORAGE_DIR!, { recursive: true, force: true });
+  if (objectDirectory)
+    await rm(objectDirectory, { recursive: true, force: true });
 });
 describe("Gmail integration with fake providers and real PostgreSQL", () => {
   it("fails closed for placeholder mailbox and rejects cross-user/reused OAuth states", async () => {

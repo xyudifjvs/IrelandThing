@@ -676,6 +676,7 @@ export async function applyReviewedFacts(
   actor: Principal,
   matterId: string,
   input: unknown,
+  transaction?: Prisma.TransactionClient,
 ) {
   assertCoordinator(actor);
   const data = z
@@ -704,7 +705,7 @@ export async function applyReviewedFacts(
     })
     .strict()
     .parse(input);
-  return prisma.$transaction(async (tx) => {
+  const apply = async (tx: Prisma.TransactionClient) => {
     const matter = await requireMatter(actor, matterId, true, tx);
     const changed = await tx.matter.updateMany({
       where: { id: matterId, revision: data.expectedRevision },
@@ -840,7 +841,8 @@ export async function applyReviewedFacts(
       where: { id: matterId },
       include: { deadlines: true },
     });
-  });
+  };
+  return transaction ? apply(transaction) : prisma.$transaction(apply);
 }
 
 export const updateTask = (

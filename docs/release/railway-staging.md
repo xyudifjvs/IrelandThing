@@ -11,7 +11,15 @@ Deployed at the user's explicit request on October 20, 2026 (America/New_York). 
 - PostgreSQL 17 uses a persistent volume. API, worker, web and database use one replica each in `sfo`; the document bucket is in `iad`.
 - The three application services build their repository Dockerfiles from their pinned GitHub commits. No local image or `.next` output is uploaded, and branch pushes do not automatically change the pinned release.
 
-## Copy revision awaiting Railway recovery
+## Launch-readiness candidate awaiting Railway recovery
+
+The October 21 launch-readiness batch supersedes the copy-only rollout below. Integrated product checkpoint `d1f7d8b` includes SEO/indexing safeguards, local fonts, mobile/accessibility and intake recovery improvements, document sharing/version controls, shared request limits, worker/queue visibility, payment-mode isolation and grounded assistant retrieval. All three application services need the reviewed release commit. The additive ninth migration `20261021180000_launch_operations` must run before the new API and worker start; it adds request-limit/heartbeat tables and inquiry deduplication fields. Do not deploy only the web service for this batch.
+
+At the latest October 21 check, Railway still reports builds paused. All four existing services are healthy with no pending deployment; application services still serve `ed5b4aa`. No source pin, credential or provider-account change was made for the launch-readiness batch. The local preview and repository therefore contain changes absent from the hosted staging site.
+
+After Railway resumes builds: inspect pending work, choose the final CI-passing commit from `validation.md`, pin API/worker/web to that same commit, apply the additive migration through API predeploy, then verify all three deployments and worker operations status. Keep `SITE_INDEXING_ENABLED=false` and provider activation disabled. Recheck health, sign-in/MFA, unauthorized denials, private-document permissions, SEO headers and the real proxy chain before recording new serving revisions. Configure `TRUSTED_PROXY_CIDRS` only from verified Railway peers/subnets; an empty value remains conservative but groups anonymous users at the web proxy. The manifest must record actual successful deployments, not intended pins.
+
+## Historical copy-only deployment attempt
 
 On October 21, 2026 at approximately 11:04 EDT, the reviewed copy revision `c5a3e38da3a5823c0ca52b66b818d85e29f4c708` was saved as the web service's source pin. API and worker pins remain `ed5b4aa`. The staged change affected only the web source commit; no variables, storage or network configuration changed.
 
@@ -19,7 +27,7 @@ The connector accepted the staged change but created no deployment. A direct, co
 
 [GitHub quality run 39621674869](https://github.com/xyudifjvs/IrelandThing/actions/runs/39621674869) passed on the exact copy revision: fresh PostgreSQL migrations, TypeScript, tests, production build, HTTP acceptance and deployment safeguards. Independent copy review passed after corrections to deadline scope, saved contact instructions, Dotloop availability and email suggestions. Local browser checks covered the revised login, homepage, workspace, portal and intake entry; this pass did not add mobile or real-provider acceptance.
 
-After Railway resumes builds, inspect the deployment queue first. If this revision is still absent, deploy the web service from `c5a3e38`, then verify Railway `SUCCESS`, public `/health`, unauthenticated session denial and the rendered login copy before updating the manifest's serving revision. Do not redeploy API, worker or PostgreSQL for this copy change.
+The original recovery instruction was a web-only rollout of `c5a3e38`. That instruction is superseded by the launch-readiness candidate above; it does not cover the new API/worker changes or database migration.
 
 ## Verified on the initial deployment
 

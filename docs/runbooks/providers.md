@@ -2,6 +2,12 @@
 
 Unconfigured features return actionable unavailable states. Local and CI validation use synthetic data and injected provider doubles; they do not prove real provider account access. No activation or outbound operation is authorized merely by this runbook.
 
+Current account decision (October 21, 2026): wait for Ireland's Gmail, Stripe, Dotloop and system-mail accounts. Carson authorized using his ClassDocket OpenRouter credential only for initial testing, and reports that prompt/completion logging may be enabled. Client-facing AI remains disabled, `OPENROUTER_ACCOUNT_PRIVACY_VERIFIED` remains false, and that credential has not been installed in Weatherly or Railway.
+
+An opt-in synthetic-only route probe passed five cases using `anthropic/claude-sonnet-4.6` through `amazon-bedrock/us`, with ZDR required, data collection denied, plugins/tools/transforms disabled and no provider fallback. It made eight requests costing $0.022605. The probe reads fixed invented records, never the application database; it does not approve account privacy or production use. Evidence: `../release/evidence/2026-10-21-openrouter-synthetic.json`. Run manually with `ALLOW_SYNTHETIC_OPENROUTER=true`, `OPENROUTER_TEST_KEY_FILE` pointing to the authorized environment file, and `node --import tsx tests/acceptance/openrouter-synthetic.ts`. Do not print, commit or copy the key. This probe is excluded from normal tests and CI.
+
+Payment mode defaults to test. Live mode additionally requires `PAYMENT_LIVE_APPROVED=true`, `DEPLOYMENT_ENV=production` and `APP_ENV=production`; mismatched key/mode/webhook combinations fail closed. These safeguards do not authorize configuring Carson's Stripe account or taking payments.
+
 | Capability         | Activation gate                                                                                            | Operational check                                                                                                                |
 | ------------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Gmail              | Actual mailbox approval, Google OAuth credentials/scopes/callback and consent; the placeholder is unusable | Connect, verify account identity, test sync recovery/watch renewal, review a draft, then send only to an explicit test recipient |

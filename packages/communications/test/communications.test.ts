@@ -711,6 +711,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     await updateDeadline(owner, matter.id, custom.id, {
       expectedRevision: custom.revision,
       date: "2026-12-23",
+      status: "confirmed",
     });
     refreshed = await prisma.emailDraft.findUniqueOrThrow({
       where: { id: draft.id },

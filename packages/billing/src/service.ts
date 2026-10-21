@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
 import {
   HttpError,
@@ -49,7 +50,16 @@ export async function listCatalog() {
     orderBy: { priceCents: "asc" },
   });
 }
-export async function listPayments(actor: Principal, matterId?: string) {
+const pageOptions = z.object({
+  cursor: z.string().optional(),
+  limit: z.number().int().min(1).max(200).default(200),
+});
+export async function listPayments(
+  actor: Principal,
+  matterId?: string,
+  options: { cursor?: string; limit?: number } = {},
+) {
+  const page = pageOptions.parse(options);
   if (matterId) await requireMatter(actor, matterId);
   if (actor.role === "client") return [];
   const matters = await prisma.matter.findMany({
@@ -58,8 +68,9 @@ export async function listPayments(actor: Principal, matterId?: string) {
   });
   return prisma.paymentOrder.findMany({
     where: { matterId: { in: matters.map((m) => m.id) } },
-    orderBy: { createdAt: "desc" },
-    take: 200,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: page.limit,
+    ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
   });
 }
 export async function createCheckout(actor: Principal, raw: unknown) {
@@ -339,7 +350,13 @@ export function verifyStripeWebhook(body: Buffer, signature: string) {
     process.env.STRIPE_WEBHOOK_SECRET!,
   );
 }
-export async function listGifts(actor: Principal, matterId?: string) {
+export async function listGifts(
+  actor: Principal,
+  matterId?: string,
+  options: { cursor?: string; limit?: number } = {},
+) {
+  const page = pageOptions.parse(options);
+  if (matterId) await requireMatter(actor, matterId);
   if (actor.role === "client") return [];
   const matters = await prisma.matter.findMany({
     where: { ...matterScope(actor), ...(matterId ? { id: matterId } : {}) },
@@ -347,7 +364,9 @@ export async function listGifts(actor: Principal, matterId?: string) {
   });
   return prisma.giftOrder.findMany({
     where: { matterId: { in: matters.map((m) => m.id) } },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: page.limit,
+    ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
   });
 }
 export async function recordIntakeGift(matterId: string, submissionId: string) {

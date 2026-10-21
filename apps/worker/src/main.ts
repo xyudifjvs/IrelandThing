@@ -6,7 +6,10 @@ import { prisma } from "@weatherly/db";
 import {
   createCommunicationsService,
   createCommunicationJobHandlers,
+  refreshTemplateDrafts,
 } from "@weatherly/communications";
+import { registerMatterChangeHook } from "@weatherly/matters";
+import { syncDotloop } from "@weatherly/dotloop";
 import { processReview } from "@weatherly/ai";
 import { recordIntakeGift } from "@weatherly/billing";
 import {
@@ -16,9 +19,14 @@ import {
   type JobRegistry,
 } from "../../../packages/platform/src/jobs";
 const id = workerIdentity();
+registerMatterChangeHook(refreshTemplateDrafts);
 let stopping = false;
 let lastPoll = Date.now();
 const handlers: JobRegistry = {
+  "dotloop.sync": async (payload) => {
+    const { linkId } = z.object({ linkId: z.string() }).parse(payload);
+    await syncDotloop(linkId);
+  },
   ...createCommunicationJobHandlers(createCommunicationsService()),
   "ai.extract": async (payload) => {
     const input = z.object({ proposalId: z.string() }).parse(payload);

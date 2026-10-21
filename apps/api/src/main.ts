@@ -30,6 +30,7 @@ import {
   listMessages,
   connectionStatus,
   sendSystemEmail,
+  refreshTemplateDrafts,
 } from "@weatherly/communications";
 import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { createWorkflowsRouter } from "../../../packages/matters/src/rules";
@@ -39,7 +40,11 @@ import {
   sessionMiddleware,
   createIdentityRouter,
 } from "@weatherly/identity";
-import { createMattersRouter } from "@weatherly/matters";
+import {
+  createMattersRouter,
+  registerMatterChangeHook,
+} from "@weatherly/matters";
+import { createDotloopRouter, dotloopConfigured } from "@weatherly/dotloop";
 import { createDocumentsRouter } from "@weatherly/documents";
 import { createIntakeRouter } from "@weatherly/intake";
 import { createOnboardingRouter } from "@weatherly/onboarding";
@@ -70,6 +75,7 @@ app.get("/health", async (_req, res) => {
 });
 const auth = createAuth({ sendSystemEmail });
 registerAssistantMessages(listMessages);
+registerMatterChangeHook(refreshTemplateDrafts);
 app.all("/api/auth/*splat", authHandler(auth));
 app.post(
   "/api/webhooks/stripe",
@@ -126,6 +132,7 @@ app.use("/api/v1/ai", createAIRouter());
 app.use("/api/v1/assistant", createAssistantRouter());
 app.use("/api/v1/communications", createCommunicationsRouter());
 app.use("/api/v1/workflows", createWorkflowsRouter());
+app.use("/api/v1/dotloop", createDotloopRouter());
 app.get(
   "/api/v1/integrations",
   asyncHandler(async (req, res) => {
@@ -134,15 +141,10 @@ app.get(
     const connections = await prisma.integrationConnection.findMany({
       where: { ownerId: actor.id },
     });
+    const gmail = await connectionStatus(actor);
     const configured: Record<string, boolean> = {
-      gmail: Boolean(
-        process.env.GOOGLE_CLIENT_ID &&
-        process.env.GOOGLE_CLIENT_SECRET &&
-        process.env.GOOGLE_MAILBOX_EMAIL,
-      ),
-      dotloop: Boolean(
-        process.env.DOTLOOP_CLIENT_ID && process.env.DOTLOOP_CLIENT_SECRET,
-      ),
+      gmail: gmail.configured,
+      dotloop: dotloopConfigured(),
       stripe: billingConfigured(),
       openrouter: aiConfigured(),
       resend: Boolean(

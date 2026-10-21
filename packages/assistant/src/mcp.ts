@@ -119,7 +119,7 @@ export function createMcpRouter() {
         "query_records",
         {
           description:
-            "Read saved intake drafts/submissions, onboarding inquiries, signed agreements, catalog, communication/workflow templates, AI review history, activity, provider freshness, safe job status, and assistant history. Coordinator-only. Follow nextCursor for complete results; no secrets or token payloads.",
+            "Read saved matters, documents, payments, gifts, Dotloop links, intake, onboarding, agreements, templates, AI reviews, activity, provider freshness, safe job status and conversations. Follow nextCursor until null for complete results. Administrative families are coordinator-only; secrets and job payloads are never returned.",
           inputSchema: {
             kind: z.enum(recordKinds),
             matterId: z.string().optional(),
@@ -137,16 +137,23 @@ export function createMcpRouter() {
         "list_matters",
         {
           description:
-            "Find authorized transactions by name or address; current statuses/deadlines/tasks. Limited to200 per search.",
+            "Find authorized transactions by name or address. Supply cursor using the last record id to continue; up to200 per page. query_records provides explicit nextCursor.",
           inputSchema: {
             query: z.string().max(300).optional(),
             stage: z.string().max(50).optional(),
+            cursor: z.string().optional(),
+            limit: z.number().int().min(1).max(200).optional(),
           },
           annotations,
         },
         (input) =>
           run("list_matters", input, (actor) =>
-            listMatters(actor, { q: input.query, stage: input.stage }),
+            listMatters(actor, {
+              q: input.query,
+              stage: input.stage,
+              cursor: input.cursor,
+              limit: input.limit,
+            }),
           ),
       );
       server.registerTool(
@@ -167,12 +174,19 @@ export function createMcpRouter() {
         {
           description:
             "List accessible document versions and processing states.",
-          inputSchema: { matterId: z.string().optional() },
+          inputSchema: {
+            matterId: z.string().optional(),
+            cursor: z.string().optional(),
+            limit: z.number().int().min(1).max(200).optional(),
+          },
           annotations,
         },
         (input) =>
           run("list_documents", input, (actor) =>
-            listDocuments(actor, input.matterId),
+            listDocuments(actor, input.matterId, {
+              cursor: input.cursor,
+              limit: input.limit,
+            }),
           ),
       );
       server.registerTool(
@@ -196,6 +210,7 @@ export function createMcpRouter() {
           inputSchema: {
             query: z.string().min(2).max(300),
             matterId: z.string().optional(),
+            cursor: z.string().optional(),
           },
           annotations,
         },
@@ -209,12 +224,19 @@ export function createMcpRouter() {
         {
           description:
             "Read verified payment state and the price snapshot; cannot create charges.",
-          inputSchema: { matterId: z.string().optional() },
+          inputSchema: {
+            matterId: z.string().optional(),
+            cursor: z.string().optional(),
+            limit: z.number().int().min(1).max(200).optional(),
+          },
           annotations,
         },
         (input) =>
           run("list_payments", input, (actor) =>
-            listPayments(actor, input.matterId),
+            listPayments(actor, input.matterId, {
+              cursor: input.cursor,
+              limit: input.limit,
+            }),
           ),
       );
       server.registerTool(
@@ -222,11 +244,20 @@ export function createMcpRouter() {
         {
           description:
             "Read gift selection and fulfillment state; cannot order gifts.",
-          inputSchema: { matterId: z.string().optional() },
+          inputSchema: {
+            matterId: z.string().optional(),
+            cursor: z.string().optional(),
+            limit: z.number().int().min(1).max(200).optional(),
+          },
           annotations,
         },
         (input) =>
-          run("list_gifts", input, (actor) => listGifts(actor, input.matterId)),
+          run("list_gifts", input, (actor) =>
+            listGifts(actor, input.matterId, {
+              cursor: input.cursor,
+              limit: input.limit,
+            }),
+          ),
       );
       server.registerResource(
         "matter",
@@ -238,15 +269,23 @@ export function createMcpRouter() {
           mimeType: "application/json",
         },
         async (uri, vars) => {
-          const { actor } = await grantPrincipal(token);
+          const { actor, grant } = await grantPrincipal(token);
+          const data = await readMatterBundle(actor, String(vars.matterId));
+          await audit(
+            prisma,
+            actor,
+            "assistant.resource_read",
+            "AssistantGrant",
+            grant.id,
+            String(vars.matterId),
+            { resource: "matter", outcome: "success" },
+          );
           return {
             contents: [
               {
                 uri: uri.toString(),
                 mimeType: "application/json",
-                text: JSON.stringify(
-                  await readMatterBundle(actor, String(vars.matterId)),
-                ),
+                text: JSON.stringify(data),
               },
             ],
           };

@@ -2,7 +2,23 @@ import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
 import { requireMatter, matterScope, audit } from "@weatherly/matters";
 import { assertCoordinator, type Principal } from "@weatherly/platform";
+import { listMatters } from "@weatherly/matters";
+import { listDocuments } from "@weatherly/documents";
+import { listPayments, listGifts } from "@weatherly/billing";
+import {
+  listMessages,
+  listThreads,
+  listDrafts,
+} from "@weatherly/communications";
 export const recordKinds = [
+  "matters",
+  "documents",
+  "payments",
+  "gifts",
+  "dotloop_links",
+  "messages",
+  "threads",
+  "email_drafts",
   "intake_drafts",
   "intake_submissions",
   "inquiries",
@@ -34,6 +50,59 @@ export async function queryStoredRecords(actor: Principal, raw: unknown) {
   };
   let items: unknown[];
   switch (input.kind) {
+    case "messages":
+      items = await listMessages(actor, input.matterId, {
+        cursor: input.cursor,
+        limit: input.limit + 1,
+      });
+      break;
+    case "threads":
+      items = await listThreads(actor, input.matterId, {
+        cursor: input.cursor,
+        limit: input.limit + 1,
+      });
+      break;
+    case "email_drafts":
+      items = await listDrafts(actor, input.matterId, {
+        cursor: input.cursor,
+        limit: input.limit + 1,
+      });
+      break;
+    case "matters":
+      items = await listMatters(actor, {
+        cursor: input.cursor,
+        limit: input.limit + 1,
+      });
+      break;
+    case "documents":
+      items = await listDocuments(actor, input.matterId, {
+        cursor: input.cursor,
+        limit: input.limit + 1,
+      });
+      break;
+    case "payments":
+      items = await listPayments(actor, input.matterId, {
+        cursor: input.cursor,
+        limit: input.limit + 1,
+      });
+      break;
+    case "gifts":
+      items = await listGifts(actor, input.matterId, {
+        cursor: input.cursor,
+        limit: input.limit + 1,
+      });
+      break;
+    case "dotloop_links":
+      assertCoordinator(actor);
+      items = await prisma.dotloopLink.findMany({
+        where: {
+          ownerId: actor.id,
+          ...(input.matterId ? { matterId: input.matterId } : {}),
+        },
+        ...pagination,
+        orderBy: { id: "asc" },
+      });
+      break;
     case "intake_drafts":
       if (actor.role !== "coordinator") assertCoordinator(actor); // Intake drafts may contain contacts not shared through client portals.
       items = await prisma.intakeDraft.findMany({

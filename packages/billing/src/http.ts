@@ -26,6 +26,13 @@ export function createBillingRouter() {
           typeof req.query.matterId === "string"
             ? req.query.matterId
             : undefined,
+          {
+            cursor:
+              typeof req.query.cursor === "string"
+                ? req.query.cursor
+                : undefined,
+            limit: req.query.limit ? Number(req.query.limit) : undefined,
+          },
         ),
       ),
     ),
@@ -39,6 +46,13 @@ export function createBillingRouter() {
           typeof req.query.matterId === "string"
             ? req.query.matterId
             : undefined,
+          {
+            cursor:
+              typeof req.query.cursor === "string"
+                ? req.query.cursor
+                : undefined,
+            limit: req.query.limit ? Number(req.query.limit) : undefined,
+          },
         ),
       ),
     ),

@@ -97,7 +97,7 @@ model Matter {
   propertyAddress String
   side            String
   packageCode     String
-  stage           String              @default("active")
+  stage           String              @default("under_contract")
   agentId         String?
   agent           User?               @relation("AgentMatters", fields: [agentId], references: [id], onDelete: SetNull)
   revision        Int                 @default(1)
@@ -129,7 +129,7 @@ model Task {
   id         String   @id @default(cuid())
   matterId   String
   title      String
-  status     String   @default("needed")
+  status     String   @default("pending")
   visibility String   @default("agent")
   kind       String   @default("checklist")
   dueDate    String?
@@ -321,6 +321,22 @@ model IntegrationConnection {
   updatedAt    DateTime  @updatedAt
 
   @@unique([provider, ownerId])
+}
+
+model DotloopLink {
+  id           String    @id @default(cuid())
+  matterId     String    @unique
+  ownerId      String
+  profileId    String
+  loopId       String
+  revision     Int       @default(1)
+  status       String    @default("linked")
+  lastSyncedAt DateTime?
+  leaseUntil   DateTime?
+  error        String?
+  metadata     Json      @default("{}")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model OAuthState {

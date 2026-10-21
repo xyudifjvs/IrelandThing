@@ -38,15 +38,31 @@ export async function readMatterBundle(actor: Principal, matterId: string) {
     matterId,
     matterId,
   );
-  return { matter, documents, payments, gifts, messages };
+  return {
+    matter,
+    documents,
+    payments,
+    gifts,
+    messages,
+    coverage: {
+      documentsPossiblyTruncated: documents.length === 200,
+      paymentsPossiblyTruncated: payments.length === 200,
+      giftsPossiblyTruncated: gifts.length === 200,
+      messagesPossiblyTruncated: messages.length >= 100,
+      completeRecordsTool: "query_records",
+    },
+  };
 }
 export async function searchEvidence(
   actor: Principal,
-  input: { query: string; matterId?: string },
+  input: { query: string; matterId?: string; cursor?: string },
 ) {
   const query = z.string().min(2).max(300).parse(input.query);
   if (input.matterId) await requireMatter(actor, input.matterId);
-  const docs = await listDocuments(actor, input.matterId);
+  const docs = await listDocuments(actor, input.matterId, {
+    cursor: input.cursor,
+    limit: 25,
+  });
   const results: {
     documentId: string;
     versionId: string;
@@ -74,9 +90,8 @@ export async function searchEvidence(
         page: page.page || null,
         quote: text.slice(Math.max(0, start - 120), start + 700),
       });
-      if (results.length === 30) break;
+      break; // One exact excerpt per document; every document in this page is scanned.
     }
-    if (results.length === 30) break;
   }
   await audit(
     prisma,
@@ -89,9 +104,10 @@ export async function searchEvidence(
   );
   return {
     results,
-    limit: 30,
+    limit: 25,
     documentsScanned: docs.length,
-    possiblyTruncated: docs.length === 200 || results.length === 30,
+    nextCursor: docs.length === 25 ? docs.at(-1)!.id : null,
+    possiblyTruncated: docs.length === 25,
   };
 }
 const answerSchema = z
@@ -214,9 +230,20 @@ export async function askAssistant(actor: Principal, raw: unknown) {
     },
   ];
   const conversation = existing
-    ? await prisma.assistantConversation.update({
-        where: { id: existing.id },
-        data: { messages: messages as Prisma.InputJsonValue },
+    ? await prisma.$transaction(async (tx) => {
+        const changed = await tx.assistantConversation.updateMany({
+          where: { id: existing!.id, updatedAt: existing!.updatedAt },
+          data: { messages: messages as Prisma.InputJsonValue },
+        });
+        if (!changed.count)
+          throw new HttpError(
+            409,
+            "CONVERSATION_CHANGED",
+            "Another reply was saved. Reload this conversation before asking again.",
+          );
+        return tx.assistantConversation.findUniqueOrThrow({
+          where: { id: existing!.id },
+        });
       })
     : await prisma.assistantConversation.create({
         data: {

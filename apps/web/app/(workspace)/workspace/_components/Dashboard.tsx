@@ -21,6 +21,7 @@ import {
   label,
   progress,
   mutate,
+  api,
   type Matter,
   type Session,
   type Task,
@@ -31,15 +32,27 @@ export default function Dashboard({
 }: {
   transactions?: boolean;
 }) {
-  const query = useData<Matter[]>("/api/v1/matters");
+  const [submittedSearch, setSubmittedSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
+  const pageLimit = 50;
+  const params = new URLSearchParams({ limit: String(pageLimit) });
+  if (submittedSearch) params.set("q", submittedSearch);
+  if (stageFilter) params.set("stage", stageFilter);
+  const query = useData<Matter[]>(
+    transactions ? `/api/v1/matters?${params}` : "/api/v1/matters",
+  );
   const session = useData<Session>("/api/v1/session");
   const [search, setSearch] = useState("");
   const [todo, setTodo] = useState("");
+  const [todoMatter, setTodoMatter] = useState("");
+  const [older, setOlder] = useState<Matter[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const matters = rows(query.data),
+  const matters = [...rows(query.data), ...older],
     active = matters.filter(
-      (m) => !["closed", "terminated"].includes(m.stage || ""),
+      (m) => !["closed", "terminated", "archived"].includes(m.stage || ""),
     );
   const allTasks = matters.flatMap((m) =>
     (m.tasks || []).map((t) => ({
@@ -72,16 +85,37 @@ export default function Dashboard({
       parseDate(value).getFullYear() === new Date().getFullYear()
     );
   });
-  const filtered = matters.filter((m) =>
-    address(m).toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = matters;
+  async function loadMore() {
+    const last = matters.at(-1);
+    if (!last) return;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("cursor", last.id);
+      const next = await api<Matter[]>(`/api/v1/matters?${nextParams}`);
+      setOlder((current) => [
+        ...current,
+        ...next.filter(
+          (m) => !matters.some((existing) => existing.id === m.id),
+        ),
+      ]);
+      setHasMore(next.length === pageLimit);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
   async function addTodo(e: React.FormEvent) {
     e.preventDefault();
-    if (!todo.trim() || !active[0]) return;
+    const target = active.find((m) => m.id === todoMatter) || active[0];
+    if (!todo.trim() || !target) return;
     setSaving(true);
     setError("");
     try {
-      await mutate(`/api/v1/matters/${active[0].id}/tasks`, {
+      await mutate(`/api/v1/matters/${target.id}/tasks`, {
         title: todo,
         visibility: "coordinator",
         kind: "personal",
@@ -126,6 +160,12 @@ export default function Dashboard({
           </button>{" "}
           <Link href="/login">Sign in</Link>
         </div>
+      )}
+      {!transactions && (
+        <p className={s.fieldHint}>
+          Overview of the most recent 200 transactions. Use All transactions to
+          search and load earlier records.
+        </p>
       )}
       <div className={s.stats}>
         {[
@@ -215,7 +255,16 @@ export default function Dashboard({
               )}
             </div>
             {transactions && (
-              <div className={s.sectionBody} style={{ paddingBottom: 15 }}>
+              <form
+                className={s.sectionBody}
+                style={{ paddingBottom: 15 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setOlder([]);
+                  setHasMore(true);
+                  setSubmittedSearch(search.trim());
+                }}
+              >
                 <label className={s.srOnly} htmlFor="search">
                   Search transactions
                 </label>
@@ -223,10 +272,45 @@ export default function Dashboard({
                   id="search"
                   className={s.input}
                   placeholder="Search by property address…"
+                  disabled={loadingMore}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
-              </div>
+                <label className={s.field}>
+                  Stage
+                  <select
+                    className={s.select}
+                    value={stageFilter}
+                    disabled={loadingMore}
+                    onChange={(e) => {
+                      setStageFilter(e.target.value);
+                      setOlder([]);
+                      setHasMore(true);
+                    }}
+                  >
+                    <option value="">All stages</option>
+                    {[
+                      "listing",
+                      "under_contract",
+                      "closing",
+                      "closed",
+                      "terminated",
+                      "archived",
+                    ].map((stage) => (
+                      <option key={stage} value={stage}>
+                        {label(stage)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className={s.buttonSmall} disabled={loadingMore}>
+                  Search all transactions
+                </button>
+                <p className={s.fieldHint}>
+                  Counts reflect the records loaded below. Search includes
+                  historical transactions.
+                </p>
+              </form>
             )}
             {query.loading ? (
               <div className={s.loading}>Loading your transactions…</div>
@@ -295,6 +379,20 @@ export default function Dashboard({
                 </p>
               </div>
             )}
+            {transactions &&
+              !query.loading &&
+              matters.length >= pageLimit &&
+              hasMore && (
+                <div className={s.sectionBody}>
+                  <button
+                    className={s.buttonSecondary}
+                    disabled={loadingMore}
+                    onClick={() => void loadMore()}
+                  >
+                    {loadingMore ? "Loading…" : "Load older transactions"}
+                  </button>
+                </div>
+              )}
           </section>
           <div
             className={s.notice}
@@ -375,6 +473,24 @@ export default function Dashboard({
                 </p>
               )}
               {error && <p className={s.error}>{error}</p>}
+              <label className={s.field}>
+                Save private task to
+                <select
+                  className={s.select}
+                  value={todoMatter || active[0]?.id || ""}
+                  onChange={(e) => setTodoMatter(e.target.value)}
+                  disabled={!active.length}
+                >
+                  {!active.length && (
+                    <option value="">Create a transaction first</option>
+                  )}
+                  {active.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {address(m)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <form onSubmit={addTodo} className={s.formRow}>
                 <label className={s.srOnly} htmlFor="todo">
                   New private to-do
@@ -400,9 +516,6 @@ export default function Dashboard({
                   <Plus size={13} />
                 </button>
               </form>
-              {active[0] && (
-                <p className={s.fieldHint}>Saved to {address(active[0])}.</p>
-              )}
             </div>
           </section>
         </div>

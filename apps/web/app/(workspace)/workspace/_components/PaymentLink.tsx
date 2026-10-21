@@ -13,6 +13,7 @@ export default function PaymentLink() {
     [error, setError] = useState(""),
     [url, setUrl] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [checkoutKey, setCheckoutKey] = useState(() => crypto.randomUUID());
   const ready = integrations.data?.some(
     (i) =>
       i.provider === "stripe" && ["configured", "connected"].includes(i.status),
@@ -44,7 +45,7 @@ export default function PaymentLink() {
             }>("/api/v1/billing/checkout", {
               matterId: matter,
               kind: "service",
-              idempotencyKey: crypto.randomUUID(),
+              idempotencyKey: checkoutKey,
             });
             if (!result.url)
               throw new Error(
@@ -66,6 +67,8 @@ export default function PaymentLink() {
             value={matter}
             onChange={(e) => {
               setMatter(e.target.value);
+              setCheckoutKey(crypto.randomUUID());
+              setConfirmed(false);
               setUrl("");
             }}
           >

@@ -24,7 +24,10 @@ import {
 import s from "./workspace.module.css";
 import ReviewQueue from "./ReviewQueue";
 import PaymentLink from "./PaymentLink";
+import BillingOperations from "./BillingOperations";
 import WorkflowTemplates from "./WorkflowTemplates";
+import DotloopSettings from "./DotloopSettings";
+import EmailSuggestions from "./EmailSuggestions";
 import {
   Composer,
   Templates,
@@ -196,6 +199,7 @@ export function Settings() {
         )}
       </section>
       <GmailConnection />
+      <DotloopSettings />
       <Templates />
       <WorkflowTemplates />
       <div
@@ -270,6 +274,7 @@ export function Payments() {
       </div>
       {catalog.error && <p className={s.error}>{catalog.error}</p>}
       <PaymentLink />
+      <BillingOperations onChanged={q.refresh} />
       <section className={s.section} style={{ marginTop: 28 }}>
         <div className={s.sectionHead}>
           <div>
@@ -436,6 +441,10 @@ export function Inbox() {
                       "Message body unavailable.",
                   )}
                 </p>
+                <EmailSuggestions
+                  key={"ai-" + String(selected.id)}
+                  message={selected}
+                />
                 <MessageReview
                   key={String(selected.id)}
                   message={selected}

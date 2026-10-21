@@ -41,3 +41,11 @@ Real Gmail, Dotloop, Stripe and OpenRouter/ZDR credentials/access are intentiona
 Parent/services must validate and attach `broker.checklistDocumentId` to the submitted matter in addition to executed-contract `documentIds`; this integration requirement was reported. Owner decisions remain for gift catalog/prices, service fee timing, approved legal templates, brokerage rules and real service/contact details. Source placeholder testimonials are not published as real statements.
 
 Run independent integrated browser checks after parent cherry-picks the final frontend commit. Neither this handover nor a successful compilation grants launch approval.
+
+## Final operations additions
+
+Coordinator settings now provide gated Dotloop authorization, profile/loop selection, revisioned matter association and sync status. Communication drafts retain template identity/revision/recipient values, expose source-change warnings and explicit reload/reset actions; optional email AI suggestions show quoted source evidence and only start an unsaved recipient-free draft. Payments include explicit gift quotes/terms, approved-quote checkout, recorded paid fulfillment, refund requests and verified reconciliation. Ireland’s future Stripe account is the only allowed account; no real provider action was performed in validation.
+
+Private task creation has a visible transaction selector. All-transactions search and stage filtering run on the API and cursor-based Load older transactions reaches records beyond the initial page. Overview counts are explicitly scoped to the most recent 200 records. The settings pickers currently show the API’s most recent 200 transactions and first Dotloop loop page; broader provider/picker search remains a usability follow-up, not a claim of provider validation.
+
+Validation: TypeScript and deployment-source checks passed; API and web Docker images built successfully before these final frontend additions. Final exact integrated browser/provider checks belong to the independent review team.

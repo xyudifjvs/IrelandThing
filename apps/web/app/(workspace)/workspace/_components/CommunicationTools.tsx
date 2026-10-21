@@ -30,6 +30,13 @@ type Draft = {
   attachmentIds: string[];
   status: string;
   revision: number;
+  details?: {
+    templateId?: string;
+    templateRevision?: number;
+    templateValues?: Record<string, string>;
+    reviewNeeded?: boolean;
+    mergeError?: string | null;
+  };
 };
 export function GmailConnection() {
   const integrations = useData<{ provider: string; status: string }[]>(
@@ -325,8 +332,20 @@ export function Composer() {
   const integrations = useData<{ provider: string; status: string }[]>(
     "/api/v1/integrations",
   );
+  const [binding, setBinding] = useState<{
+    id: string;
+    revision: number;
+    recipientName: string;
+  } | null>(null);
   const [matter, setMatter] = useState("");
   const detail = useData<Matter>(matter ? `/api/v1/matters/${matter}` : null);
+  const mergeFields = useData<
+    { key: string; label: string; value: string | null; status: string }[]
+  >(
+    matter
+      ? `/api/v1/communications/merge-fields?matterId=${encodeURIComponent(matter)}`
+      : null,
+  );
   const drafts = useData<Draft[]>(
     `/api/v1/communications/drafts${matter ? "?matterId=" + encodeURIComponent(matter) : ""}`,
   );
@@ -350,6 +369,36 @@ export function Composer() {
     const value = new URLSearchParams(window.location.search).get("matterId");
     if (value) setMatter(value);
   }, []);
+  useEffect(() => {
+    function receive(event: Event) {
+      const value = (
+        event as CustomEvent<{
+          matterId: string;
+          subject: string;
+          body: string;
+        }>
+      ).detail;
+      if (!value?.matterId) return;
+      setMatter(value.matterId);
+      setDraft(null);
+      setTemplate("");
+      setBinding(null);
+      setRecipientName("");
+      setTo("");
+      setCc("");
+      setSubject(value.subject);
+      setBody(value.body);
+      setAttachments([]);
+      setDirty(true);
+      setConfirmed(false);
+      setMessage(
+        "Suggested text is ready in a new unsaved draft. Choose recipients and review every detail before saving.",
+      );
+    }
+    window.addEventListener("weatherly:suggested-draft", receive);
+    return () =>
+      window.removeEventListener("weatherly:suggested-draft", receive);
+  }, []);
   const edit = (setter: (v: string) => void, v: string) => {
     setter(v);
     setDirty(true);
@@ -363,6 +412,17 @@ export function Composer() {
     setSubject(d.subject);
     setBody(d.body);
     setAttachments(d.attachmentIds || []);
+    setTemplate(d.details?.templateId || "");
+    setRecipientName(d.details?.templateValues?.recipientName || "");
+    setBinding(
+      d.details?.templateId && d.details.templateRevision
+        ? {
+            id: d.details.templateId,
+            revision: d.details.templateRevision,
+            recipientName: d.details.templateValues?.recipientName || "",
+          }
+        : null,
+    );
     setDirty(false);
     setConfirmed(false);
     setMessage("");
@@ -386,6 +446,15 @@ export function Composer() {
         subject,
         body,
         attachmentIds: attachments,
+        ...(!draft && binding
+          ? {
+              templateId: binding.id,
+              templateRevision: binding.revision,
+              templateValues: binding.recipientName
+                ? { recipientName: binding.recipientName }
+                : {},
+            }
+          : {}),
       };
       const saved = await mutate<Draft>(
         `/api/v1/communications/drafts${draft ? "/" + draft.id : ""}`,
@@ -432,6 +501,7 @@ export function Composer() {
                 setBody("");
                 setRecipientName("");
                 setTemplate("");
+                setBinding(null);
                 setDraft(null);
                 setDirty(true);
                 setAttachments([]);
@@ -458,6 +528,9 @@ export function Composer() {
                 if (selected) loadDraft(selected);
                 else {
                   setDraft(null);
+                  setTemplate("");
+                  setBinding(null);
+                  setRecipientName("");
                   setTo("");
                   setCc("");
                   setSubject("");
@@ -489,7 +562,11 @@ export function Composer() {
                 <select
                   className={s.select}
                   value={template}
-                  onChange={(e) => setTemplate(e.target.value)}
+                  disabled={!!draft}
+                  onChange={(e) => {
+                    setTemplate(e.target.value);
+                    setBinding(null);
+                  }}
                 >
                   <option value="">Choose a template</option>
                   {templates.data
@@ -514,7 +591,7 @@ export function Composer() {
             </div>
             <button
               className={s.buttonSmall}
-              disabled={!template || busy}
+              disabled={!template || busy || !!draft}
               onClick={async () => {
                 setBusy(true);
                 setError("");
@@ -522,12 +599,19 @@ export function Composer() {
                   const result = await mutate<{
                     subject: string;
                     body: string;
+                    templateId: string;
+                    templateRevision: number;
                   }>(`/api/v1/communications/templates/${template}/render`, {
                     matterId: matter,
                     values: recipientName ? { recipientName } : {},
                   });
                   setSubject(result.subject);
                   setBody(result.body);
+                  setBinding({
+                    id: result.templateId,
+                    revision: result.templateRevision,
+                    recipientName,
+                  });
                   setDirty(true);
                   setConfirmed(false);
                 } catch (e) {
@@ -539,6 +623,39 @@ export function Composer() {
             >
               Fill template with confirmed details
             </button>
+          </details>
+        )}
+        {matter && (
+          <details style={{ margin: "15px 0" }}>
+            <summary className={s.fieldHint} style={{ cursor: "pointer" }}>
+              Available confirmed merge fields
+            </summary>
+            {mergeFields.error && (
+              <p className={s.error}>{mergeFields.error}</p>
+            )}
+            <div className={s.tableWrap}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    <th>Field</th>
+                    <th>Value</th>
+                    <th>Review</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mergeFields.data?.map((f) => (
+                    <tr key={f.key}>
+                      <td>
+                        <code>{"{{" + f.key + "}}"}</code>
+                        <small>{f.label}</small>
+                      </td>
+                      <td>{f.value || "Not confirmed"}</td>
+                      <td>{label(f.status)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </details>
         )}
         {detail.data && (
@@ -722,6 +839,9 @@ export function Composer() {
             disabled={
               busy ||
               !matter ||
+              (!draft &&
+                !!template &&
+                (!binding || binding.recipientName !== recipientName)) ||
               ["queued", "sent"].includes(draft?.status || "")
             }
           >
@@ -731,6 +851,74 @@ export function Composer() {
         </form>
         {draft && (
           <div style={{ marginTop: 20 }}>
+            {draft.details?.reviewNeeded && (
+              <div className={s.notice}>
+                <strong>
+                  The transaction changed. Review this draft again.
+                </strong>
+                <p>
+                  Confirmed dates may have refreshed. Hand-edited text was
+                  preserved and may need a correction before sending.
+                </p>
+                {draft.details.mergeError && <p>{draft.details.mergeError}</p>}
+              </div>
+            )}
+            <div className={s.formRow} style={{ flexWrap: "wrap" }}>
+              <button
+                className={s.buttonSmall}
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    const saved = await api<Draft[]>(
+                      `/api/v1/communications/drafts?matterId=${encodeURIComponent(matter)}`,
+                    );
+                    const latest = saved.find((d) => d.id === draft.id);
+                    if (!latest)
+                      throw new Error("This draft is no longer available.");
+                    loadDraft(latest);
+                    await drafts.refresh();
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Reload saved draft (replace unsaved changes)
+              </button>
+              {draft.details?.templateId && draft.status === "draft" && (
+                <button
+                  className={s.buttonSmall}
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    setError("");
+                    try {
+                      const reset = await mutate<Draft>(
+                        `/api/v1/communications/drafts/${draft.id}/reset-template`,
+                        {
+                          expectedRevision: draft.revision,
+                          values: recipientName ? { recipientName } : {},
+                        },
+                      );
+                      loadDraft(reset);
+                      await drafts.refresh();
+                      setMessage(
+                        "The message was replaced with current template text. Review before sending.",
+                      );
+                    } catch (e) {
+                      setError((e as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Replace message with current template
+                </button>
+              )}
+            </div>
             <p className={s.fieldHint}>
               Saved draft: {label(draft.status)}
               {dirty ? " · Unsaved changes" : ""}

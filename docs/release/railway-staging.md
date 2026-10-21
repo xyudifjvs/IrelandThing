@@ -5,11 +5,21 @@ Deployed at the user's explicit request on October 20, 2026 (America/New_York). 
 - Site: https://web-staging-be4e.up.railway.app
 - Railway project: https://railway.com/project/5b58af24-8d43-4226-8901-a5dd63c5dfbb
 - GitHub repository: `xyudifjvs/IrelandThing`, branch `build/B00-foundation`.
-- Resource identifiers and pinned source revision: `infra/railway/staging.json`.
+- Resource identifiers, configured source pins and actual serving revisions: `infra/railway/staging.json`.
 - Completed rollout verified at October 21, 2026 00:16 EDT: API, worker and web all serve the pinned `ed5b4aa` revision successfully. PostgreSQL and all three application services have one running replica, no crashed replicas, no reported issues and no pending work. The manifest records each healthy deployment ID.
 - Only web has a public domain. API, worker and PostgreSQL have no public domains or TCP proxies. Documents use a private Railway bucket.
 - PostgreSQL 17 uses a persistent volume. API, worker, web and database use one replica each in `sfo`; the document bucket is in `iad`.
-- The three application services build their repository Dockerfiles from the pinned GitHub commit. No local image or `.next` output is uploaded, and branch pushes do not automatically change the pinned release.
+- The three application services build their repository Dockerfiles from their pinned GitHub commits. No local image or `.next` output is uploaded, and branch pushes do not automatically change the pinned release.
+
+## Copy revision awaiting Railway recovery
+
+On October 21, 2026 at approximately 11:04 EDT, the reviewed copy revision `c5a3e38da3a5823c0ca52b66b818d85e29f4c708` was saved as the web service's source pin. API and worker pins remain `ed5b4aa`. The staged change affected only the web source commit; no variables, storage or network configuration changed.
+
+The connector accepted the staged change but created no deployment. A direct, commit-specific deploy request then returned `Deploys have been paused temporarily`. Railway's [status page](https://status.railway.com/) confirms an active platform incident with builds paused in all regions. The existing four services remain healthy, and all three application services still serve `ed5b4aa`. The revised copy is visible only in the local preview until a new web deployment succeeds. A saved source pin is not proof of a completed or queued rollout.
+
+[GitHub quality run 39621674869](https://github.com/xyudifjvs/IrelandThing/actions/runs/39621674869) passed on the exact copy revision: fresh PostgreSQL migrations, TypeScript, tests, production build, HTTP acceptance and deployment safeguards. Independent copy review passed after corrections to deadline scope, saved contact instructions, Dotloop availability and email suggestions. Local browser checks covered the revised login, homepage, workspace, portal and intake entry; this pass did not add mobile or real-provider acceptance.
+
+After Railway resumes builds, inspect the deployment queue first. If this revision is still absent, deploy the web service from `c5a3e38`, then verify Railway `SUCCESS`, public `/health`, unauthenticated session denial and the rendered login copy before updating the manifest's serving revision. Do not redeploy API, worker or PostgreSQL for this copy change.
 
 ## Verified on the initial deployment
 
@@ -31,4 +41,4 @@ Hosted HTTPS sign-in passed with Secure/HttpOnly session cookies. The authentica
 
 Gmail, Stripe, Dotloop, OpenRouter, transactional email and external MCP remain unconfigured/disabled. Ireland's own Stripe account is still required. No real email, AI request or payment was sent. The remaining acceptance/operations work in `validation.md` still applies, including real provider journeys, a hosted restore rehearsal and monitoring. The API's current process-local rate limiter treats requests arriving through the web proxy as a shared origin; review proxy-aware limits before broader traffic. Bucket/database backups are not claimed to be scheduled by this deployment.
 
-To publish a reviewed update, stage the desired GitHub commit for each application service, inspect the changes, deploy and verify all services/HTTP checks. Keeping a commit pinned intentionally prevents an unrelated branch push from silently replacing the hosted version.
+To publish a reviewed update, stage the desired GitHub commit for each affected application service, inspect the changes, deploy and verify service/HTTP checks. Keeping commits pinned intentionally prevents an unrelated branch push from silently replacing the hosted version.

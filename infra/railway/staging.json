@@ -5,9 +5,20 @@
   "environmentName": "staging",
   "repository": "xyudifjvs/IrelandThing",
   "branch": "build/B00-foundation",
-  "pinnedCommit": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
+  "pinnedCommitByService": {
+    "api": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
+    "worker": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
+    "web": "c5a3e38da3a5823c0ca52b66b818d85e29f4c708"
+  },
   "deploymentStatus": "healthy",
-  "verifiedAt": "2026-10-21T04:16:22Z",
+  "verifiedAt": "2026-10-21T15:01:51Z",
+  "pendingRelease": {
+    "service": "web",
+    "commit": "c5a3e38da3a5823c0ca52b66b818d85e29f4c708",
+    "status": "blocked_by_provider",
+    "reason": "Railway has temporarily paused new deploys during a platform incident. The source pin is saved, but no new deployment was created.",
+    "providerStatusUrl": "https://status.railway.com/"
+  },
   "servingCommitByService": {
     "api": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
     "worker": "ed5b4aa3eb8c6be65b83d886f827218562efd468",

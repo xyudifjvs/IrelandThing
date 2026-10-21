@@ -131,6 +131,49 @@ describe("question-driven authorized retrieval", () => {
       ),
     ).toBe(true);
   });
+  it.each([
+    "What did the lender last say?",
+    "Has the title company replied?",
+    "What is blocking this file?",
+  ])(
+    "reads operational messages and status for ordinary wording: %s",
+    async (question) => {
+      const deps = fixture(0, 0);
+      const queried: string[] = [];
+      deps.records = async (_, input) => {
+        queried.push(input.kind);
+        return {
+          items:
+            input.kind === "messages"
+              ? [
+                  {
+                    id: "lender-update",
+                    matterId: "m",
+                    body: "The lender's last update: title clearance is blocking the file.",
+                  },
+                ]
+              : input.kind === "payments"
+                ? [{ id: "current-payment", matterId: "m", status: "pending" }]
+                : [],
+          nextCursor: null,
+          hasMore: false,
+        };
+      };
+      const result = await retrieveSources(actor, { question }, deps);
+      expect(queried).toEqual(["payments", "gifts", "messages"]);
+      expect(result.coverage.recordKindsScanned).toEqual(queried);
+      expect(
+        result.sources.some((source) =>
+          source.id.startsWith("messages:lender-update:"),
+        ),
+      ).toBe(true);
+      expect(
+        result.sources.some((source) =>
+          source.id.startsWith("payments:current-payment:"),
+        ),
+      ).toBe(true);
+    },
+  );
   it.each(["name", "association", "both"])(
     "prioritizes document %s affinity over 79 unrelated generic closing clauses",
     async (affinity) => {

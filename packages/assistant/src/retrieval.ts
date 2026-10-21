@@ -256,21 +256,10 @@ export async function retrieveSources(
           addRecord(value as Row, kind, `${title} — ${kind}`, url);
   }
   // Domain record services preserve visibility and omit credentials. The same services back API/MCP.
-  const kinds = new Set<"payments" | "gifts" | "messages">();
-  if (
-    input.matterId ||
-    terms.some((term) =>
-      ["payment", "refund", "billing", "gift"].includes(term),
-    )
-  ) {
-    kinds.add("payments");
-    kinds.add("gifts");
-  }
-  if (
-    input.matterId ||
-    terms.some((term) => ["email", "message", "sent"].includes(term))
-  )
-    kinds.add("messages");
+  // Natural operational questions need not contain schema labels (for example,
+  // "What did the lender last say?"). Always scan these bounded authorized
+  // families, so missing keyword routing cannot masquerade as complete evidence.
+  const kinds = ["payments", "gifts", "messages"] as const;
   for (const kind of kinds) {
     coverage.recordKindsScanned.push(kind);
     let cursor: string | undefined;

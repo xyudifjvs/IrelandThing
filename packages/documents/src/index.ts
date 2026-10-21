@@ -181,8 +181,26 @@ function validateDocxArchive(bytes: Buffer) {
       bytes.readUInt16LE(cursor + 32);
   }
 }
-function fileType(name: string, bytes: Buffer) {
+function fileType(name: string, bytes: Buffer, emailAttachment = false) {
   const ext = path.extname(name).toLowerCase();
+  if (emailAttachment) {
+    if (
+      ext === ".png" &&
+      bytes
+        .subarray(0, 8)
+        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    )
+      return "image/png";
+    if (
+      [".jpg", ".jpeg"].includes(ext) &&
+      bytes[0] === 255 &&
+      bytes[1] === 216 &&
+      bytes[2] === 255
+    )
+      return "image/jpeg";
+    if ([".txt", ".csv"].includes(ext) && !bytes.includes(0))
+      return ext === ".csv" ? "text/csv" : "text/plain";
+  }
   if (ext === ".pdf" && bytes.subarray(0, 5).toString() === "%PDF-")
     return "application/pdf";
   if (ext === ".docx" && bytes[0] === 0x50 && bytes[1] === 0x4b) {
@@ -202,6 +220,23 @@ function fileType(name: string, bytes: Buffer) {
   );
 }
 export async function extractDocument(bytes: Buffer, mime: string) {
+  if (mime.startsWith("text/")) {
+    const text = bytes.toString("utf8");
+    return {
+      text,
+      pages: [{ page: 1, text, anchorType: "document" }],
+      status: "complete",
+      error: null,
+    };
+  }
+  if (mime.startsWith("image/"))
+    return {
+      text: "",
+      pages: [],
+      status: "needs_ocr",
+      error:
+        "Image original saved; OCR must use the approved OpenRouter gateway",
+    };
   if (mime === "application/pdf") {
     const parser = new PDFParse({ data: bytes });
     try {
@@ -278,7 +313,11 @@ export async function uploadDocument(
       "FORBIDDEN",
       "The coordinator approves sharing permissions",
     );
-  const mimeType = fileType(file.originalname, file.buffer);
+  const mimeType = fileType(
+    file.originalname,
+    file.buffer,
+    data.category === "email_attachment",
+  );
   if (previous && previous.mimeType !== mimeType)
     throw new HttpError(
       415,
@@ -568,4 +607,32 @@ export async function assignDocumentToMatter(
     return tx.document.findUniqueOrThrow({ where: { id: documentId } });
   };
   return transaction ? apply(transaction) : prisma.$transaction(apply);
+}
+
+/** Authorized byte access for trusted server adapters; storage keys never cross the API boundary. */
+export async function readDocumentVersion(
+  actor: Principal,
+  documentId: string,
+  versionId: string,
+  store = createObjectStore(),
+) {
+  const doc = await authorizedDocument(actor, documentId);
+  const version = await prisma.documentVersion.findFirst({
+    where: { id: versionId, documentId },
+  });
+  if (!version)
+    throw new HttpError(404, "VERSION_NOT_FOUND", "Version not found");
+  const bytes = await store.get(version.objectKey);
+  if (createHash("sha256").update(bytes).digest("hex") !== version.checksum)
+    throw new HttpError(
+      500,
+      "CHECKSUM_MISMATCH",
+      "Stored evidence failed integrity validation",
+    );
+  return {
+    name: doc.name,
+    mimeType: doc.mimeType,
+    checksum: version.checksum,
+    bytes,
+  };
 }

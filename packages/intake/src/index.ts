@@ -81,6 +81,11 @@ export const intakePayload = z
   .superRefine((v, c) => {
     const err = (path: (string | number)[], message: string) =>
       c.addIssue({ code: "custom", path, message });
+    if (v.broker?.checklistDocumentId && !v.broker.ownChecklist)
+      err(
+        ["broker", "checklistDocumentId"],
+        "Remove checklist evidence when no brokerage checklist is selected",
+      );
     if (v.packageCode !== "essentials" && !v.broker)
       err(["broker"], "Compliance and Full Listing require broker details");
     if (v.packageCode === "full_listing" && v.side !== "seller")
@@ -291,10 +296,18 @@ export async function submitIntake(
       });
       if (!claim.count)
         throw new HttpError(409, "REVISION_CONFLICT", "Draft changed; refresh");
+      const allDocumentIds = [
+        ...new Set([
+          ...data.documentIds,
+          ...(data.broker?.checklistDocumentId
+            ? [data.broker.checklistDocumentId]
+            : []),
+        ]),
+      ];
       const docs = await tx.document.findMany({
-        where: { id: { in: data.documentIds }, createdById: draft.userId },
+        where: { id: { in: allDocumentIds }, createdById: draft.userId },
       });
-      if (docs.length !== new Set(data.documentIds).size)
+      if (docs.length !== allDocumentIds.length)
         throw new HttpError(
           422,
           "INVALID_DOCUMENT",

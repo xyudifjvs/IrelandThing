@@ -10,6 +10,7 @@ export type Source = {
   content: string;
   kind: "record" | "document";
   page?: number | null;
+  matterId?: string | null;
 };
 export type Coverage = {
   scope: string;
@@ -19,6 +20,7 @@ export type Coverage = {
   unreadableDocuments: number;
   charactersScanned: number;
   recordsScanned: number;
+  recordKindsScanned: string[];
   candidates: number;
   sourcesIncluded: number;
   contextCharacters: number;
@@ -74,6 +76,11 @@ const readers: RetrievalReaders = {
   document: getDocument,
   records: queryStoredRecords,
 };
+const identityNoise = new Set(
+  "closing settlement close deadline deadlines date dates due payment payments paid refund invoice billing email message messages sent reply amendment amended extension extended addendum attention task tasks pending overdue unconfirmed missing document documents required incomplete transaction transactions property address file status say said latest current original confirmed definite needs need show give look about".split(
+    " ",
+  ),
+);
 const stop = new Set(
   "a an the is are was were be been to of for in on at and or what which who when where how my this that it its about does do did can needs need please tell me your you i we our still from with by has have had all any".split(
     " ",
@@ -95,6 +102,19 @@ export function queryTerms(question: string) {
   for (const group of groups)
     if (group.some((w) => terms.has(w))) group.forEach((w) => terms.add(w));
   return [...terms].slice(0, 80);
+}
+/** Distinctive names/address tokens carry stronger affinity than generic workflow words. */
+export function identityAffinity(text: string, question: string) {
+  const identities = [
+    ...new Set(
+      (question.toLowerCase().match(/[a-z0-9]+/g) || []).filter(
+        (word) =>
+          word.length > 1 && !stop.has(word) && !identityNoise.has(word),
+      ),
+    ),
+  ];
+  const words = new Set(text.toLowerCase().match(/[a-z0-9]+/g) || []);
+  return identities.filter((word) => words.has(word)).length;
 }
 export function relevance(text: string, terms: string[]) {
   const lower = text.toLowerCase();
@@ -148,6 +168,7 @@ export async function retrieveSources(
     unreadableDocuments: 0,
     charactersScanned: 0,
     recordsScanned: 0,
+    recordKindsScanned: [],
     candidates: 0,
     sourcesIncluded: 0,
     contextCharacters: 0,
@@ -160,6 +181,7 @@ export async function retrieveSources(
   };
   const terms = queryTerms(input.question);
   const candidates: (Source & { score: number })[] = [];
+  const matterTitles = new Map<string, string>();
   const addRecord = (row: Row, kind: string, title: string, url: string) => {
     coverage.recordsScanned++;
     const content = JSON.stringify(row);
@@ -180,7 +202,17 @@ export async function retrieveSources(
         url,
         content: chunk.text,
         kind: "record",
-        score: chunk.score * 3 + 0.25 + relevance(title, terms),
+        matterId:
+          typeof row.matterId === "string"
+            ? row.matterId
+            : kind === "matter"
+              ? row.id
+              : undefined,
+        score:
+          chunk.score * 3 +
+          0.25 +
+          relevance(title, terms) +
+          identityAffinity(title, input.question) * 40,
       }),
     );
   };
@@ -194,6 +226,20 @@ export async function retrieveSources(
   if (matters.truncated)
     omit(
       `Transaction scan stopped at ${retrievalLimits.matters}; narrow the question to a transaction.`,
+    );
+  for (const matter of matters.items)
+    matterTitles.set(
+      matter.id,
+      `${matter.propertyAddress || ""} ${matter.title || ""}`.trim() ||
+        matter.id,
+    );
+  const matchingMatters = matters.items.filter(
+    (matter) =>
+      identityAffinity(matterTitles.get(matter.id)!, input.question) > 0,
+  );
+  if (!input.matterId && matchingMatters.length > 1)
+    omit(
+      "Several transactions match the name or address in this question; specify the transaction before relying on a single transaction's answer.",
     );
   for (const matter of matters.items) {
     const { tasks, deadlines, notes, documents: _documents, ...base } = matter;
@@ -210,53 +256,49 @@ export async function retrieveSources(
           addRecord(value as Row, kind, `${title} — ${kind}`, url);
   }
   // Domain record services preserve visibility and omit credentials. The same services back API/MCP.
+  const kinds = new Set<"payments" | "gifts" | "messages">();
   if (
     input.matterId ||
     terms.some((term) =>
-      [
-        "payment",
-        "refund",
-        "billing",
-        "gift",
-        "email",
-        "message",
-        "sent",
-      ].includes(term),
+      ["payment", "refund", "billing", "gift"].includes(term),
     )
   ) {
-    const kinds: ("payments" | "gifts" | "messages")[] = input.matterId
-      ? ["payments", "gifts", "messages"]
-      : terms.some((term) => ["email", "message", "sent"].includes(term))
-        ? ["messages"]
-        : ["payments", "gifts"];
-    for (const kind of kinds) {
-      let cursor: string | undefined;
-      let count = 0;
-      while (count < retrievalLimits.recordsPerKind) {
-        const page = await deps.records(actor, {
+    kinds.add("payments");
+    kinds.add("gifts");
+  }
+  if (
+    input.matterId ||
+    terms.some((term) => ["email", "message", "sent"].includes(term))
+  )
+    kinds.add("messages");
+  for (const kind of kinds) {
+    coverage.recordKindsScanned.push(kind);
+    let cursor: string | undefined;
+    let count = 0;
+    while (count < retrievalLimits.recordsPerKind) {
+      const page = await deps.records(actor, {
+        kind,
+        matterId: input.matterId,
+        cursor,
+        limit: 100,
+      });
+      for (const row of page.items) {
+        addRecord(
+          row as Row,
           kind,
-          matterId: input.matterId,
-          cursor,
-          limit: 100,
-        });
-        for (const row of page.items) {
-          addRecord(
-            row as Row,
-            kind,
-            `Saved ${kind} record`,
-            `/workspace/transactions/${(row as { matterId?: string }).matterId || input.matterId || ""}`,
-          );
-          count++;
-        }
-        if (!page.hasMore) break;
-        if (!page.nextCursor || page.nextCursor === cursor) {
-          omit(`${kind} pagination could not continue.`);
-          break;
-        }
-        cursor = page.nextCursor;
-        if (count >= retrievalLimits.recordsPerKind)
-          omit(`${kind} scan stopped at ${retrievalLimits.recordsPerKind}.`);
+          `${matterTitles.get((row as { matterId?: string }).matterId || "") || ""} — Saved ${kind} record`,
+          `/workspace/transactions/${(row as { matterId?: string }).matterId || input.matterId || ""}`,
+        );
+        count++;
       }
+      if (!page.hasMore) break;
+      if (!page.nextCursor || page.nextCursor === cursor) {
+        omit(`${kind} pagination could not continue.`);
+        break;
+      }
+      cursor = page.nextCursor;
+      if (count >= retrievalLimits.recordsPerKind)
+        omit(`${kind} scan stopped at ${retrievalLimits.recordsPerKind}.`);
     }
   }
   const docs = await collect(
@@ -267,6 +309,18 @@ export async function retrieveSources(
     omit(
       `Document scan stopped at ${retrievalLimits.documents}; use paginated search_evidence or narrow the transaction.`,
     );
+  const documentAffinity = (doc: (typeof docs.items)[number]) =>
+    identityAffinity(doc.name, input.question) * 40 +
+    identityAffinity(
+      matterTitles.get(doc.matterId || "") || "",
+      input.question,
+    ) *
+      80;
+  // Scan likely named-transaction documents first if the global text budget is reached.
+  docs.items.sort(
+    (a, b) =>
+      documentAffinity(b) - documentAffinity(a) || a.id.localeCompare(b.id),
+  );
   for (const doc of docs.items) {
     if (coverage.charactersScanned >= retrievalLimits.characters) {
       omit(
@@ -290,11 +344,15 @@ export async function retrieveSources(
     for (const chunk of chunks) {
       candidates.push({
         id: `document:${doc.id}:${version.id}:${chunk.offset}`,
-        title: doc.name,
+        title: `${matterTitles.get(doc.matterId || "") || "Unassigned transaction"} — ${doc.name}`,
         url: `/api/v1/documents/${doc.id}/download?versionId=${version.id}`,
         content: chunk.text,
         kind: "document",
-        score: chunk.score * 3,
+        matterId: doc.matterId,
+        score:
+          chunk.score * 3 +
+          relevance(doc.name, terms) * 2 +
+          documentAffinity(doc),
       });
     }
   }

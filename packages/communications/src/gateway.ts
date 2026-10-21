@@ -1,4 +1,8 @@
-import { OAuth2Client, type Credentials } from "google-auth-library";
+import {
+  OAuth2Client,
+  CodeChallengeMethod,
+  type Credentials,
+} from "google-auth-library";
 import { HttpError } from "@weatherly/platform";
 export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -79,7 +83,7 @@ export function createGmailProvider(
         scope: GMAIL_SCOPES,
         state,
         code_challenge: challenge,
-        code_challenge_method: "S256" as never,
+        code_challenge_method: CodeChallengeMethod.S256,
         login_hint: config.mailbox,
       });
     },

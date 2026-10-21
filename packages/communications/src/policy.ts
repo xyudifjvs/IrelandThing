@@ -72,6 +72,12 @@ export async function recipientPolicy(
     (v) => !normalizedTo.includes(v),
   );
   for (const address of [...normalizedTo, ...normalizedCc]) {
+    if (address === "ireland@ireland.com")
+      throw new HttpError(
+        422,
+        "PLACEHOLDER_EMAIL",
+        "The preview address cannot receive external messages",
+      );
     if (!allowed.has(address))
       throw new HttpError(
         422,

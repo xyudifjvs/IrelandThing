@@ -1166,7 +1166,7 @@ export class CommunicationsService {
       !this.config.outboundEnabled ||
       !this.config.resendApiKey ||
       !this.config.systemFrom ||
-      this.config.systemFrom.includes("ireland@ireland.com")
+      this.config.systemFrom.toLowerCase().includes("ireland@ireland.com")
     )
       throw new HttpError(
         503,
@@ -1181,6 +1181,12 @@ export class CommunicationsService {
         purpose: z.literal("password_reset"),
       })
       .parse(input);
+    if (data.to.toLowerCase() === "ireland@ireland.com")
+      throw new HttpError(
+        503,
+        "PLACEHOLDER_EMAIL",
+        "The preview address cannot receive external messages",
+      );
     const key = `system-email:${hashToken(JSON.stringify(data))}`;
     return prisma.outboxJob
       .upsert({

@@ -5,6 +5,7 @@ import { prisma, Prisma } from "@weatherly/db";
 import {
   HttpError,
   decryptSecret,
+  hashToken,
   encryptSecret,
   type Principal,
 } from "@weatherly/platform";
@@ -833,25 +834,50 @@ export function createCommunicationJobHandlers(
     return { renewed: true, expiresAt: watch.expiration };
   }
   async function systemEmail(payload: unknown) {
+    const existing = asRecord(payload);
+    if (existing.redacted === true)
+      return { providerMessageId: existing.providerMessageId, redacted: true };
     const input = z
       .object({
         to: z.email(),
         subject: z.string().max(998),
         text: z.string().max(20000),
         purpose: z.literal("password_reset"),
+        expiresAt: z.iso.datetime().optional(),
       })
       .parse(payload);
     if (
       !service.config.outboundEnabled ||
       !service.config.resendApiKey ||
       !service.config.systemFrom ||
-      service.config.systemFrom.includes("ireland@ireland.com")
+      service.config.systemFrom.toLowerCase().includes("ireland@ireland.com")
     )
       throw new HttpError(
         503,
         "SYSTEM_EMAIL_NOT_CONFIGURED",
         "System email delivery is not configured",
       );
+    if (input.to.toLowerCase() === "ireland@ireland.com")
+      throw new HttpError(
+        503,
+        "PLACEHOLDER_EMAIL",
+        "The preview address cannot receive external messages",
+      );
+    const key = `system-email:${hashToken(JSON.stringify({ to: input.to, subject: input.subject, text: input.text, purpose: input.purpose }))}`;
+    if (input.expiresAt && new Date(input.expiresAt) <= new Date()) {
+      await prisma.outboxJob.updateMany({
+        where: { idempotencyKey: key },
+        data: {
+          payload: {
+            to: input.to,
+            purpose: input.purpose,
+            redacted: true,
+            expired: true,
+          },
+        },
+      });
+      return { expired: true };
+    }
     const response = await service.fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -874,6 +900,17 @@ export function createCommunicationJobHandlers(
         "System notification delivery failed",
       );
     const result = z.object({ id: z.string() }).parse(await response.json());
+    await prisma.outboxJob.updateMany({
+      where: { idempotencyKey: key, topic: "system.email" },
+      data: {
+        payload: {
+          to: input.to,
+          purpose: input.purpose,
+          redacted: true,
+          providerMessageId: result.id,
+        },
+      },
+    });
     return { providerMessageId: result.id };
   }
   return {

@@ -8,7 +8,10 @@ export function aiConfigured() {
     process.env.OPENROUTER_APPROVED_PROVIDERS?.split(",").some((x) =>
       x.trim(),
     ) &&
-    process.env.OPENROUTER_ZDR_APPROVED === "true",
+    process.env.OPENROUTER_ZDR_APPROVED === "true" &&
+    process.env.OPENROUTER_ACCOUNT_PRIVACY_VERIFIED === "true" &&
+    /^[a-zA-Z0-9_-]+\/[a-zA-Z0-9._-]+$/.test(process.env.OPENROUTER_MODEL!) &&
+    !process.env.OPENROUTER_MODEL!.startsWith("openrouter/"),
   );
 }
 export function gatewayPolicy() {
@@ -66,6 +69,11 @@ export async function generateStructured<T>(
       body: JSON.stringify({
         model: process.env.OPENROUTER_MODEL,
         provider: policy,
+        plugins: ["web", "file-parser", "response-healing", "fusion"].map(
+          (id) => ({ id, enabled: false }),
+        ),
+        transforms: [],
+        tools: [],
         max_tokens: Math.min(input.maxTokens || 6000, 10000),
         temperature: 0,
         messages: [

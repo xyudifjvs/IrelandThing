@@ -118,6 +118,15 @@ export async function processReview(proposalId: string) {
   });
   const source = normalize(version.extractedText);
   const warnings = [...result.data.warnings];
+  const pages = Array.isArray(version.pages)
+    ? (version.pages as { page?: number; text?: string }[])
+    : [];
+  const sourcePage = (quote: string) => {
+    const matches = pages.filter(
+      (p) => p.text && normalize(p.text).includes(normalize(quote)),
+    );
+    return matches.length === 1 ? matches[0].page || null : null;
+  };
   const deadlines = result.data.deadlines
     .filter((d) => {
       const valid =
@@ -129,6 +138,7 @@ export async function processReview(proposalId: string) {
     })
     .map((d) => ({
       ...d,
+      page: sourcePage(d.sourceQuote),
       sourceDocumentId: document.id,
       sourceVersionId: version.id,
     }));
@@ -138,6 +148,7 @@ export async function processReview(proposalId: string) {
     )
     .map((f) => ({
       ...f,
+      page: sourcePage(f.sourceQuote),
       sourceDocumentId: document.id,
       sourceVersionId: version.id,
     }));
@@ -208,6 +219,7 @@ export async function approveReview(
       versionId: string;
     }[];
     for (const ref of refs) {
+      await tx.$queryRaw`SELECT id FROM "Document" WHERE id = ${ref.documentId} FOR UPDATE`;
       const latest = await tx.documentVersion.findFirst({
         where: { documentId: ref.documentId },
         orderBy: { version: "desc" },

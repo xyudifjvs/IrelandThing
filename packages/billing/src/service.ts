@@ -68,7 +68,7 @@ export async function createCheckout(actor: Principal, raw: unknown) {
   const input = checkoutInput.parse(raw);
   const stripe = await verifiedStripe();
   const order = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`service-payment:${input.matterId}`}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`service-payment:${input.matterId}`}))`;
     const matter = await requireMatter(actor, input.matterId, false, tx);
     const catalog = await tx.catalogItem.findUnique({
       where: { code: matter.packageCode },
@@ -202,7 +202,7 @@ export async function applyStripeEvent(event: Stripe.Event) {
   )
     return;
   await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`stripe-event:${event.id}`}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`stripe-event:${event.id}`}))`;
     if (
       await tx.webhookReceipt.findUnique({
         where: { provider_eventId: { provider: "stripe", eventId: event.id } },
@@ -213,7 +213,7 @@ export async function applyStripeEvent(event: Stripe.Event) {
       const session = event.data.object as Stripe.Checkout.Session;
       const orderId = session.metadata?.paymentOrderId;
       if (!orderId) return;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${orderId}`}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${orderId}`}))`;
       const order = await tx.paymentOrder.findUnique({
         where: { id: orderId },
       });
@@ -269,20 +269,52 @@ export async function applyStripeEvent(event: Stripe.Event) {
           : object.payment_intent?.id;
       if (intent) {
         const order = await tx.paymentOrder.findFirst({
-          where: { stripePaymentIntentId: intent },
+          where: {
+            OR: [
+              { stripePaymentIntentId: intent },
+              ...(object.metadata?.paymentOrderId
+                ? [{ id: object.metadata.paymentOrderId }]
+                : []),
+            ],
+          },
         });
         if (order) {
-          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${order.id}`}))`;
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${order.id}`}))`;
+          const current = await tx.paymentOrder.findUniqueOrThrow({
+            where: { id: order.id },
+          });
+          const details = current.details as Record<
+            string,
+            Prisma.InputJsonValue
+          >;
+          const refundedCents = Math.max(
+            Number(details.refundedCents || 0),
+            event.type === "charge.refunded"
+              ? (object as Stripe.Charge).amount_refunded
+              : 0,
+          );
           const status =
-            event.type === "charge.dispute.created"
+            event.type === "charge.dispute.created" ||
+            current.status === "disputed"
               ? "disputed"
-              : (object as Stripe.Charge).refunded
+              : current.status === "refunded" ||
+                  refundedCents >= current.amountCents ||
+                  (object as Stripe.Charge).refunded
                 ? "refunded"
                 : "partially_refunded";
           await tx.paymentOrder.update({
             where: { id: order.id },
-            data: { status },
+            data: {
+              status,
+              details: { ...details, refundedCents, lastStripeEvent: event.id },
+            },
           });
+        } else {
+          throw new HttpError(
+            409,
+            "PAYMENT_NOT_YET_RECONCILED",
+            "The checkout event must be reconciled before this payment update.",
+          );
         }
       }
     }

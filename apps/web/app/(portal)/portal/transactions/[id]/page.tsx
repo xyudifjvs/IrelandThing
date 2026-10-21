@@ -102,7 +102,9 @@ export default function Detail({
             {m.tasks?.length ? (
               m.tasks.map((t) => (
                 <div className={s.line} key={t.id}>
-                  {t.status === "complete" ? (
+                  {["completed", "signed", "not_applicable"].includes(
+                    t.status,
+                  ) ? (
                     <CircleCheck className={s.done} />
                   ) : (
                     <Circle />

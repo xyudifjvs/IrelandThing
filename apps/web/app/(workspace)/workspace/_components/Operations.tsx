@@ -109,6 +109,14 @@ export function Settings() {
           </button>
         </form>
       </section>
+      <div className={s.notice}>
+        <strong>Account security</strong>
+        <p>
+          Authenticator verification protects coordinator access.{" "}
+          <Link href="/security">Set up your authenticator</Link> ·{" "}
+          <Link href="/forgot-password">Password recovery</Link>
+        </p>
+      </div>
       <section>
         <div className={s.sectionHead} style={{ paddingLeft: 0 }}>
           <div>

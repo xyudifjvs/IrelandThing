@@ -48,7 +48,7 @@ export default function Dashboard({
     })),
   );
   const openTasks = allTasks.filter(
-    (t) => !["complete", "not_applicable"].includes(t.status),
+    (t) => !["completed", "signed", "not_applicable"].includes(t.status),
   );
   const week = new Date(Date.now() + 7 * 86400000);
   const due = openTasks
@@ -409,7 +409,9 @@ function Todo({ task, refresh }: { task: Task; refresh: () => Promise<void> }) {
       <label className={s.todo}>
         <input
           type="checkbox"
-          checked={task.status === "complete"}
+          checked={["completed", "signed", "not_applicable"].includes(
+            task.status,
+          )}
           disabled={busy}
           onChange={async (e) => {
             setBusy(true);
@@ -418,7 +420,7 @@ function Todo({ task, refresh }: { task: Task; refresh: () => Promise<void> }) {
                 `/api/v1/matters/${task.matterId}/tasks/${task.id}`,
                 {
                   expectedRevision: task.revision,
-                  status: e.target.checked ? "complete" : "needed",
+                  status: e.target.checked ? "completed" : "pending",
                 },
                 "PATCH",
               );
@@ -432,8 +434,11 @@ function Todo({ task, refresh }: { task: Task; refresh: () => Promise<void> }) {
         />
         <span
           style={{
-            textDecoration:
-              task.status === "complete" ? "line-through" : "none",
+            textDecoration: ["completed", "signed", "not_applicable"].includes(
+              task.status,
+            )
+              ? "line-through"
+              : "none",
           }}
         >
           {task.title}

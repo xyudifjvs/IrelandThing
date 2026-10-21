@@ -15,7 +15,7 @@ export default function Page() {
       setError("This recovery link is invalid or expired. Request a new link.");
   }, []);
   return (
-    <main
+    <div
       className={s.formSide}
       style={{ minHeight: "100vh", background: "#f5efe2" }}
     >
@@ -98,6 +98,6 @@ export default function Page() {
           Request a new recovery link
         </Link>
       </div>
-    </main>
+    </div>
   );
 }

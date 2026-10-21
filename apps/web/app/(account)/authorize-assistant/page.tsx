@@ -48,7 +48,7 @@ export default function Page() {
     }
   }
   return (
-    <main
+    <div
       className={s.formSide}
       style={{ minHeight: "100vh", background: "#f5efe2" }}
     >
@@ -108,6 +108,6 @@ export default function Page() {
           Return to your account
         </Link>
       </div>
-    </main>
+    </div>
   );
 }

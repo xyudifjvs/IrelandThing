@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useData, mutate, api, label, date } from "../_components/data";
+import MatterPicker from "../_components/MatterPicker";
 import { Heading } from "../_components/Operations";
 import s from "../_components/workspace.module.css";
 type Inquiry = {
@@ -28,6 +29,7 @@ type Agreement = {
   documentId?: string;
 };
 export default function Page() {
+  const [invitationMatter, setInvitationMatter] = useState("");
   const q = useData<Inquiry[]>("/api/v1/onboarding/inquiries");
   const agreements = useData<Agreement[]>("/api/v1/onboarding/agreements");
   const [busy, setBusy] = useState(false);
@@ -171,9 +173,17 @@ export default function Page() {
                   {a.userId}
                   <p className={s.fieldHint}>
                     Version {a.version} ·{" "}
-                    {a.documentId
-                      ? "Evidence attached"
-                      : "No evidence attached"}
+                    {a.documentId ? (
+                      <a
+                        href={`/api/v1/documents/${a.documentId}/download`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Download signed evidence
+                      </a>
+                    ) : (
+                      "No evidence attached"
+                    )}
                   </p>
                 </div>
                 <span className={s.pill}>{label(a.status)}</span>
@@ -215,8 +225,13 @@ export default function Page() {
               }}
             >
               <label className={s.field}>
-                Agent account ID or email
-                <input className={s.input} name="userId" required />
+                Agent email
+                <input
+                  className={s.input}
+                  name="userId"
+                  type="email"
+                  required
+                />
               </label>
               <label className={s.field}>
                 Agreement version
@@ -263,12 +278,7 @@ export default function Page() {
                   }>("/api/v1/invitations", {
                     email: String(f.get("email")),
                     role: String(f.get("role")),
-                    ...(f.get("matterId")
-                      ? { matterId: String(f.get("matterId")) }
-                      : {}),
-                    ...(f.get("agreementId")
-                      ? { agreementId: String(f.get("agreementId")) }
-                      : {}),
+                    ...(invitationMatter ? { matterId: invitationMatter } : {}),
                   });
                   setInvite({
                     email: result.email,
@@ -289,18 +299,17 @@ export default function Page() {
                   <option value="client">Client</option>
                 </select>
               </label>
-              <label className={s.field}>
-                Matter ID (for shared file access)
-                <input className={s.input} name="matterId" />
-              </label>
-              <label className={s.field}>
-                Approved agreement ID (agents)
-                <input className={s.input} name="agreementId" />
-              </label>
+              <MatterPicker
+                label="Transaction to share (optional)"
+                value={invitationMatter}
+                onChange={setInvitationMatter}
+                disabled={busy}
+                emptyLabel="No transaction access with this invitation"
+              />
               <p className={s.fieldHint}>
-                Agent invitations require an approved signed agreement.
-                Invitations are prepared for manual delivery; this does not send
-                an email.
+                Agent invitations require an approved signed agreement matching
+                the recipient’s email. Invitations are prepared for manual
+                delivery; this does not send an email.
               </p>
               <button className={s.button} disabled={busy}>
                 Prepare invitation

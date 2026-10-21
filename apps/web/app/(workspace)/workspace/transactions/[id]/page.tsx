@@ -22,6 +22,8 @@ import {
   type Matter,
 } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
+import DocumentFiles from "../../_components/DocumentFiles";
+import UserPicker from "../../_components/UserPicker";
 import Contacts, { AgentAssignment } from "../../_components/Contacts";
 export default function Detail({
   params,
@@ -50,7 +52,7 @@ export default function Detail({
       setBusy("");
     }
   }
-  if (q.loading)
+  if (q.loading && !q.data)
     return <div className={s.loading}>Opening your transaction…</div>;
   if (!q.data)
     return (
@@ -130,16 +132,33 @@ export default function Detail({
         </div>
       )}
       {notice && <div className={s.notice}>{notice}</div>}
-      <div className={s.tabs}>
+      <div className={s.tabs} role="tablist" aria-label="Transaction sections">
         {[
           "Checklist",
           "Documents",
           "Emails",
           "Broker file",
           "My notes & to-do",
-        ].map((t) => (
+        ].map((t, index, tabs) => (
           <button
             key={t}
+            role="tab"
+            id={`transaction-tab-${index}`}
+            aria-selected={tab === t}
+            aria-controls="transaction-panel"
+            tabIndex={tab === t ? 0 : -1}
+            onKeyDown={(event) => {
+              let next = index;
+              if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+              else if (event.key === "ArrowLeft")
+                next = (index - 1 + tabs.length) % tabs.length;
+              else if (event.key === "Home") next = 0;
+              else if (event.key === "End") next = tabs.length - 1;
+              else return;
+              event.preventDefault();
+              setTab(tabs[next]);
+              document.getElementById(`transaction-tab-${next}`)?.focus();
+            }}
             onClick={() => setTab(t)}
             className={tab === t ? s.tabActive : ""}
           >
@@ -147,7 +166,13 @@ export default function Detail({
           </button>
         ))}
       </div>
-      <div className={s.twoCol}>
+      <div
+        className={s.twoCol}
+        role="tabpanel"
+        id="transaction-panel"
+        tabIndex={0}
+        aria-labelledby={`transaction-tab-${["Checklist", "Documents", "Emails", "Broker file", "My notes & to-do"].indexOf(tab)}`}
+      >
         <div>
           {tab === "Checklist" && (
             <>
@@ -358,84 +383,7 @@ export default function Detail({
               </section>
             </>
           )}
-          {tab === "Documents" && (
-            <section className={s.section}>
-              <div className={s.sectionHead}>
-                <div>
-                  <h2>Transaction documents</h2>
-                  <p>
-                    Private storage, accessible to the people authorized on this
-                    file.
-                  </p>
-                </div>
-                <FileText size={18} strokeWidth={1.3} />
-              </div>
-              <div className={s.sectionBody}>
-                {m.documents?.length ? (
-                  m.documents.map((d) => (
-                    <div key={d.id} className={s.taskLine}>
-                      <FileText size={17} color="#a38b6b" />
-                      <div style={{ flex: 1 }}>
-                        {d.name || d.filename}
-                        <small className={s.fieldHint}>{label(d.status)}</small>
-                      </div>
-                      <a
-                        className={s.buttonSmall}
-                        href={`/api/v1/documents/${d.id}/download`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Download size={12} />
-                        Download
-                      </a>
-                    </div>
-                  ))
-                ) : (
-                  <div className={s.empty}>
-                    <FileText />
-                    No documents uploaded yet.
-                  </div>
-                )}
-                <form
-                  style={{ marginTop: 22 }}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const form = e.currentTarget;
-                    const f = new FormData(form);
-                    f.set("matterId", id);
-                    f.set("visibility", "agent");
-                    f.set("category", "other");
-                    void act("upload", async () => {
-                      await api("/api/v1/documents", {
-                        method: "POST",
-                        body: f,
-                      });
-                      form.reset();
-                    });
-                  }}
-                >
-                  <label className={s.field}>
-                    Upload a document
-                    <input
-                      className={s.input}
-                      name="file"
-                      type="file"
-                      required
-                      accept=".pdf,.docx"
-                    />
-                  </label>
-                  <button
-                    className={s.buttonSecondary}
-                    disabled={!!busy}
-                    style={{ marginTop: 12 }}
-                  >
-                    <Upload />
-                    {busy === "upload" ? "Uploading…" : "Upload securely"}
-                  </button>
-                </form>
-              </div>
-            </section>
-          )}
+          {tab === "Documents" && <DocumentFiles matterId={id} coordinator />}
           {tab === "Emails" && (
             <section className={s.section}>
               <div className={s.sectionHead}>
@@ -662,15 +610,12 @@ export default function Detail({
                   }}
                   style={{ display: "grid", gap: 10, marginTop: 15 }}
                 >
-                  <input
-                    className={s.input}
-                    placeholder="Authorized account ID"
-                    aria-label="Participant account ID"
-                    required
+                  <UserPicker
+                    label="Portal account"
+                    role={person.role}
                     value={person.userId}
-                    onChange={(e) =>
-                      setPerson({ ...person, userId: e.target.value })
-                    }
+                    onChange={(userId) => setPerson({ ...person, userId })}
+                    disabled={!!busy}
                   />
                   <p className={s.fieldHint}>
                     Grant access only to an existing agent or client account.
@@ -681,7 +626,7 @@ export default function Detail({
                     aria-label="Participant role"
                     value={person.role}
                     onChange={(e) =>
-                      setPerson({ ...person, role: e.target.value })
+                      setPerson({ userId: "", role: e.target.value })
                     }
                   >
                     {["client", "agent"].map((r) => (

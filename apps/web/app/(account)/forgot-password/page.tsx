@@ -8,7 +8,7 @@ export default function Page() {
     [error, setError] = useState(""),
     [done, setDone] = useState(false);
   return (
-    <main
+    <div
       className={s.formSide}
       style={{ minHeight: "100vh", background: "#f5efe2" }}
     >
@@ -68,6 +68,6 @@ export default function Page() {
           ← Return to sign in
         </Link>
       </div>
-    </main>
+    </div>
   );
 }

@@ -1,8 +1,10 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 import { Plus, ArrowUpRight, FolderHeart, LockKeyhole } from "lucide-react";
 import {
   useData,
+  useAllMatters,
   type Matter,
   type Session,
   address,
@@ -13,10 +15,16 @@ import {
 import s from "./_components/portal.module.css";
 export default function Portal() {
   const session = useData<Session>("/api/v1/session");
-  const q = useData<Matter[]>("/api/v1/matters");
+  const q = useAllMatters();
+  const [search, setSearch] = useState("");
+  const filtered = q.data.filter((m) =>
+    `${address(m)} ${m.title || ""}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase()),
+  );
   const client = session.data?.user?.role === "client";
   return (
-    <main className={s.main}>
+    <div className={s.main}>
       <div className={s.intro}>
         <div>
           <p className={s.eyebrow}>
@@ -39,6 +47,9 @@ export default function Portal() {
       {q.error && (
         <div className={s.error} role="alert">
           {q.error}
+          <button className={s.secondary} onClick={() => void q.refresh()}>
+            Try again
+          </button>
           <p>
             <Link href="/login">Sign in to your portal</Link>
           </p>
@@ -50,11 +61,21 @@ export default function Portal() {
           <Link href="/workspace">Return to your coordinator workspace.</Link>
         </div>
       )}
+      <label style={{ display: "grid", gap: 8, marginBottom: 22 }}>
+        Search your transactions
+        <input
+          className={s.input}
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Property address or transaction name"
+        />
+      </label>
       {q.loading ? (
         <div className={s.loading}>Opening your transactions…</div>
-      ) : q.data?.length ? (
+      ) : filtered.length ? (
         <div className={s.grid}>
-          {q.data.map((m) => (
+          {filtered.map((m) => (
             <section className={s.card} key={m.id}>
               <div className={s.split}>
                 <p className={s.eyebrow}>
@@ -102,12 +123,16 @@ export default function Portal() {
         !q.error && (
           <div className={s.empty}>
             <FolderHeart />
-            No transactions yet.
+            {search.trim()
+              ? "No matching transactions."
+              : "No transactions yet."}
             <br />
-            {client
-              ? "Your transaction will appear here when Ireland shares it with you."
-              : "Submit an intake to get your file started."}
-            {!client && (
+            {search.trim()
+              ? "Try another address or transaction name."
+              : client
+                ? "Your transaction will appear here when Ireland shares it with you."
+                : "Submit an intake to get your file started."}
+            {!client && !search.trim() && (
               <p>
                 <Link className={s.button} href="/portal/intake">
                   Start your first intake
@@ -121,6 +146,6 @@ export default function Portal() {
         <LockKeyhole size={10} /> Only the transactions and documents shared
         with your account appear here.
       </p>
-    </main>
+    </div>
   );
 }

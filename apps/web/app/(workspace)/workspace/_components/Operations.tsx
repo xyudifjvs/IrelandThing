@@ -24,6 +24,7 @@ import {
 import s from "./workspace.module.css";
 import MatterPicker from "./MatterPicker";
 import ReviewQueue from "./ReviewQueue";
+import OperationsStatus from "./OperationsStatus";
 import PaymentLink from "./PaymentLink";
 import BillingOperations from "./BillingOperations";
 import WorkflowTemplates from "./WorkflowTemplates";
@@ -130,7 +131,8 @@ export function Settings() {
           <Link href="/forgot-password">Password recovery</Link>
         </p>
       </div>
-      <section>
+      <OperationsStatus />
+      <section id="connected-tools">
         <div className={s.sectionHead} style={{ paddingLeft: 0 }}>
           <div>
             <h2>Your connected tools</h2>

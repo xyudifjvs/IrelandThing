@@ -25,7 +25,7 @@ export default function Page() {
           </p>
         </div>
       </aside>
-      <main className={s.formSide}>
+      <div className={s.formSide}>
         <div className={s.form}>
           <p className={s.eyebrow}>Your personal invitation</p>
           <h2>{done ? "Account created." : "Create your account."}</h2>
@@ -136,7 +136,7 @@ export default function Page() {
             Need help? Contact Ireland.
           </Link>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

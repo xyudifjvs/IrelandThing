@@ -6,6 +6,7 @@ Deployed at the user's explicit request on October 20, 2026 (America/New_York). 
 - Railway project: https://railway.com/project/5b58af24-8d43-4226-8901-a5dd63c5dfbb
 - GitHub repository: `xyudifjvs/IrelandThing`, branch `build/B00-foundation`.
 - Resource identifiers, configured source pins and actual serving revisions: `infra/railway/staging.json`.
+- Custom domain preparation: `www.weatherlytc.com` is attached to web but awaits owner DNS access and TLS verification. Existing public origin and deployed authentication settings are unchanged. Exact DNS records and coordinated cutover steps: `../runbooks/custom-domain.md` and `infra/railway/custom-domain.json`.
 - Completed rollout verified at October 21, 2026 00:16 EDT: API, worker and web all serve the pinned `ed5b4aa` revision successfully. PostgreSQL and all three application services have one running replica, no crashed replicas, no reported issues and no pending work. The manifest records each healthy deployment ID.
 - Only web has a public domain. API, worker and PostgreSQL have no public domains or TCP proxies. Documents use a private Railway bucket.
 - PostgreSQL 17 uses a persistent volume. API, worker, web and database use one replica each in `sfo`; the document bucket is in `iad`.

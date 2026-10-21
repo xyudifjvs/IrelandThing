@@ -91,6 +91,111 @@ describe("question-driven authorized retrieval", () => {
       ),
     ).toBe(true);
   });
+  it("unions email and current payment families for a mixed question", async () => {
+    const deps = fixture(0, 0);
+    const queried: string[] = [];
+    deps.records = async (_, input) => {
+      queried.push(input.kind);
+      return {
+        items:
+          input.kind === "messages"
+            ? [
+                {
+                  id: "email",
+                  matterId: "m",
+                  body: "The email says payment was made.",
+                },
+              ]
+            : input.kind === "payments"
+              ? [{ id: "payment", matterId: "m", status: "pending" }]
+              : [],
+        nextCursor: null,
+        hasMore: false,
+      };
+    };
+    const result = await retrieveSources(
+      actor,
+      { question: "What did the email say about payment, and is it paid?" },
+      deps,
+    );
+    expect(queried).toEqual(["payments", "gifts", "messages"]);
+    expect(result.coverage.recordKindsScanned).toEqual(queried);
+    expect(
+      result.sources.some((source) => source.id.startsWith("messages:email:")),
+    ).toBe(true);
+    expect(
+      result.sources.some(
+        (source) =>
+          source.id.startsWith("payments:payment:") &&
+          source.content.includes("pending"),
+      ),
+    ).toBe(true);
+  });
+  it.each(["name", "association", "both"])(
+    "prioritizes document %s affinity over 79 unrelated generic closing clauses",
+    async (affinity) => {
+      const deps = fixture(0, 0);
+      deps.matters = async () => [
+        { id: "ordinary", propertyAddress: "100 Ordinary Street" },
+        { id: "magnolia", propertyAddress: "200 Magnolia Lane" },
+      ];
+      deps.documents = async () =>
+        Array.from({ length: 80 }, (_, index) => ({
+          id: `d${String(index).padStart(3, "0")}`,
+          name:
+            index === 79 && affinity !== "association"
+              ? "Magnolia amendment"
+              : "Closing agreement",
+          matterId:
+            index === 79 && affinity !== "name" ? "magnolia" : "ordinary",
+        }));
+      deps.document = async (_, id) => ({
+        versions: [
+          {
+            id: `v-${id}`,
+            extractedText:
+              id === "d079"
+                ? "The closing date is November 29, 2026."
+                : "The closing date is November 10, 2026.",
+            pages: null,
+          },
+        ],
+      });
+      const result = await retrieveSources(
+        actor,
+        { question: "When is Magnolia closing?" },
+        deps,
+      );
+      expect(result.coverage.documentsScanned).toBe(80);
+      const target = result.sources.find((source) =>
+        source.id.startsWith("document:d079:"),
+      );
+      expect(target?.content).toContain("November 29");
+      expect(target?.title).toContain(
+        affinity === "name" ? "Magnolia amendment" : "Magnolia Lane",
+      );
+      expect(
+        result.sources.filter((source) => source.kind === "document")[0].id,
+      ).toContain("d079");
+      expect(result.coverage.incomplete).toBe(true);
+    },
+  );
+  it("discloses ambiguous property-name matches in server coverage", async () => {
+    const deps = fixture(0, 0);
+    deps.matters = async () => [
+      { id: "magnolia-a", propertyAddress: "200 Magnolia Lane" },
+      { id: "magnolia-b", propertyAddress: "300 Magnolia Avenue" },
+    ];
+    const result = await retrieveSources(
+      actor,
+      { question: "When is Magnolia closing?" },
+      deps,
+    );
+    expect(result.coverage.incomplete).toBe(true);
+    expect(result.coverage.omissions.join(" ")).toContain(
+      "Several transactions match",
+    );
+  });
   it("uses meaningful question terms and domain expansions instead of the entire literal question", () => {
     expect(queryTerms("When is closing?")).toContain("settlement");
     expect(

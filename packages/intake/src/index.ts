@@ -319,10 +319,16 @@ export async function submitIntake(
             "DOCUMENT_ALREADY_ASSIGNED",
             "Upload a separate copy of evidence for another matter",
           );
-        await tx.document.update({
-          where: { id: doc.id },
+        const assignment = await tx.document.updateMany({
+          where: { id: doc.id, matterId: null, createdById: draft.userId },
           data: { matterId: matter.id },
         });
+        if (!assignment.count)
+          throw new HttpError(
+            409,
+            "DOCUMENT_ALREADY_ASSIGNED",
+            "This document was assigned concurrently; upload a separate copy",
+          );
       }
       const tasks: {
         title: string;

@@ -764,27 +764,39 @@ export async function applyReviewedFacts(
         reason: data.reason,
         manualOverride: false,
       };
-      const deadline = previous
-        ? await tx.deadline.update({
-            where: { id: previous.id },
-            data: {
-              date: proposed.date,
-              status: "confirmed",
-              sourceDocumentId: doc.id,
-              details,
-              revision: { increment: 1 },
-            },
-          })
-        : await tx.deadline.create({
-            data: {
-              matterId,
-              label: proposed.label,
-              date: proposed.date,
-              status: "confirmed",
-              sourceDocumentId: doc.id,
-              details,
-            },
-          });
+      let deadline;
+      if (previous) {
+        const result = await tx.deadline.updateMany({
+          where: { id: previous.id, revision: previous.revision },
+          data: {
+            date: proposed.date,
+            status: "confirmed",
+            sourceDocumentId: doc.id,
+            details,
+            revision: { increment: 1 },
+          },
+        });
+        if (!result.count)
+          throw new HttpError(
+            409,
+            "REVISION_CONFLICT",
+            "Deadline changed during review; refresh before applying",
+          );
+        deadline = await tx.deadline.findUniqueOrThrow({
+          where: { id: previous.id },
+        });
+      } else {
+        deadline = await tx.deadline.create({
+          data: {
+            matterId,
+            label: proposed.label,
+            date: proposed.date,
+            status: "confirmed",
+            sourceDocumentId: doc.id,
+            details,
+          },
+        });
+      }
       await audit(
         tx,
         actor,

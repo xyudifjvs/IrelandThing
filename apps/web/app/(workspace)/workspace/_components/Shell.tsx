@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  CalendarDays,
   FolderOpen,
   Inbox,
   Settings2,
@@ -21,6 +22,7 @@ const nav = [
   { href: "/workspace", label: "Overview", icon: LayoutDashboard },
   { href: "/workspace/transactions", label: "Transactions", icon: FolderOpen },
   { href: "/workspace/inbox", label: "Inbox", icon: Inbox },
+  { href: "/workspace/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/workspace/onboarding", label: "Onboarding", icon: HelpCircle },
   { href: "/workspace/review", label: "AI review", icon: Sparkles },
   { href: "/workspace/payments", label: "Payments", icon: CreditCard },

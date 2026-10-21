@@ -22,6 +22,7 @@ import {
   type Session,
 } from "../../../../(workspace)/workspace/_components/data";
 import s from "../../_components/portal.module.css";
+import SharedMessages from "../../_components/SharedMessages";
 export default function Detail({
   params,
 }: {
@@ -36,7 +37,7 @@ export default function Detail({
   const [uploaded, setUploaded] = useState("");
   const [assistant, setAssistant] = useState("");
   const [answer, setAnswer] = useState("");
-  if (q.loading)
+  if (q.loading || session.loading)
     return (
       <main className={s.main}>
         <div className={s.loading}>Opening your file…</div>
@@ -218,58 +219,9 @@ export default function Detail({
               </p>
             </section>
           )}
-          <section className={s.card} style={{ marginTop: 23 }}>
-            <h2>Ask about your file</h2>
-            <p>
-              The assistant uses the information you’re authorized to see. AI
-              responses require your review.
-            </p>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setBusy(true);
-                setError("");
-                try {
-                  const result = await mutate<{
-                    answer?: string;
-                    message?: string;
-                  }>("/api/v1/assistant/ask", {
-                    question: assistant,
-                    matterId: id,
-                  });
-                  setAnswer(
-                    result.answer || result.message || JSON.stringify(result),
-                  );
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <label className={s.hint}>
-                Your question
-                <input
-                  className={s.input}
-                  style={{ margin: "9px 0 12px" }}
-                  value={assistant}
-                  onChange={(e) => setAssistant(e.target.value)}
-                  placeholder="What is the next step?"
-                  required
-                />
-              </label>
-              <button className={s.secondary} disabled={busy}>
-                {busy ? "Checking…" : "Ask assistant"}
-              </button>
-            </form>
-            {answer && (
-              <div className={s.notice} role="status">
-                {answer}
-              </div>
-            )}
-          </section>
         </aside>
       </div>
+      <SharedMessages matterId={id} />
       {m.notes?.length ? (
         <>
           <h2 className={s.sectionHead}>Shared updates</h2>

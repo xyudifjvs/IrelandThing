@@ -22,7 +22,7 @@ import {
   type Matter,
 } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
-import Contacts from "../../_components/Contacts";
+import Contacts, { AgentAssignment } from "../../_components/Contacts";
 export default function Detail({
   params,
 }: {
@@ -277,7 +277,23 @@ export default function Detail({
                       Confirm contract dates before relying on the timeline.
                     </p>
                   </div>
-                  <CalendarDays size={18} strokeWidth={1.3} />
+                  <button
+                    className={s.buttonSmall}
+                    disabled={!!busy}
+                    onClick={() =>
+                      void act("recalculate", async () => {
+                        await mutate(
+                          `/api/v1/workflows/matters/${id}/recalculate`,
+                          { expectedRevision: m.revision },
+                        );
+                        setNotice(
+                          "Proposed timeline recalculated. Manual dates are preserved. Review the updated milestones below.",
+                        );
+                      })
+                    }
+                  >
+                    Recalculate timeline
+                  </button>
                 </div>
                 <div className={s.sectionBody}>
                   {m.deadlines?.length ? (
@@ -457,7 +473,9 @@ export default function Detail({
               </div>
               <div className={s.sectionBody}>
                 {tasks
-                  .filter((t) => t.kind === "compliance")
+                  .filter((t) =>
+                    ["compliance", "broker"].includes(t.kind || ""),
+                  )
                   .map((t) => (
                     <div className={s.taskLine} key={t.id}>
                       <span style={{ flex: 1 }}>{t.title}</span>
@@ -594,6 +612,7 @@ export default function Detail({
           )}
         </div>
         <aside>
+          <AgentAssignment matter={m} refresh={q.refresh} />
           <Contacts matter={m} refresh={q.refresh} />
           <section className={s.section}>
             <div className={s.sectionHead}>

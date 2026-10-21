@@ -24,7 +24,13 @@ import {
 import s from "./workspace.module.css";
 import ReviewQueue from "./ReviewQueue";
 import PaymentLink from "./PaymentLink";
-import { Composer, Templates, GmailConnection } from "./CommunicationTools";
+import WorkflowTemplates from "./WorkflowTemplates";
+import {
+  Composer,
+  Templates,
+  GmailConnection,
+  MessageReview,
+} from "./CommunicationTools";
 type Integration = {
   provider: string;
   status: string;
@@ -191,6 +197,7 @@ export function Settings() {
       </section>
       <GmailConnection />
       <Templates />
+      <WorkflowTemplates />
       <div
         className={s.notice}
         style={{ marginTop: 24, display: "flex", gap: 13 }}
@@ -429,6 +436,14 @@ export function Inbox() {
                       "Message body unavailable.",
                   )}
                 </p>
+                <MessageReview
+                  key={String(selected.id)}
+                  message={selected}
+                  onChanged={() => {
+                    void q.refresh();
+                    setSelected(null);
+                  }}
+                />
               </>
             ) : (
               <p className={`${s.muted} ${s.tiny}`}>

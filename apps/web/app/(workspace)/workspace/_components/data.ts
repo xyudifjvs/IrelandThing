@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@weatherly/ui";
 export { api };
 export type Task = {
@@ -40,6 +40,7 @@ export type Matter = {
   side?: string;
   serviceLevel?: string;
   packageCode?: string;
+  agentId?: string | null;
   revision?: number;
   details?: Record<string, unknown>;
   closingDate?: string | null;
@@ -86,30 +87,52 @@ export function rows<T>(
   return value.items || value.matters || value.tasks || value.documents || [];
 }
 export function useData<T>(path: string | null) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [data, setData] = useState<T | null>(null),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState("");
+  const [resolvedPath, setResolvedPath] = useState<string | null>(null);
+  const request = useRef(0);
   const refresh = useCallback(async () => {
+    const token = ++request.current;
     if (!path) {
+      setData(null);
+      setResolvedPath(null);
       setLoading(false);
+      setError("");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      setData(await api<T>(path));
+      const next = await api<T>(path);
+      if (token === request.current) {
+        setData(next);
+        setResolvedPath(path);
+      }
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Unable to load. Please try again.",
-      );
+      if (token === request.current) {
+        setData(null);
+        setError(
+          e instanceof Error ? e.message : "Unable to load. Please try again.",
+        );
+        setResolvedPath(path);
+      }
     } finally {
-      setLoading(false);
+      if (token === request.current) setLoading(false);
     }
   }, [path]);
   useEffect(() => {
     void refresh();
+    return () => {
+      request.current++;
+    };
   }, [refresh]);
-  return { data, loading, error, refresh };
+  return {
+    data: resolvedPath === path ? data : null,
+    loading: !!path && (loading || resolvedPath !== path),
+    error: resolvedPath === path ? error : "",
+    refresh,
+  };
 }
 export function address(m: Matter) {
   return (
@@ -120,9 +143,12 @@ export function address(m: Matter) {
     "Untitled transaction"
   );
 }
+export function parseDate(value: string) {
+  return new Date(value.length === 10 ? value + "T12:00:00" : value);
+}
 export function date(value?: string | null) {
   if (!value) return "Not scheduled";
-  const d = new Date(value);
+  const d = parseDate(value);
   return Number.isNaN(d.getTime())
     ? value
     : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });

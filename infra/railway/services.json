@@ -1,0 +1,14 @@
+{
+  "format": "weatherly-deployment-review-v1",
+  "status": "prepared-not-deployed",
+  "note": "Review matrix for Railway service settings or current Railway IaC authoring; this file is not an automatically executable Railway schema.",
+  "shared": {"rootDirectory": "/", "source": "reviewed exact Git commit", "environmentIsolation": true, "automaticDeploy": false},
+  "services": {
+    "postgres": {"kind": "Railway PostgreSQL", "publicNetworking": false, "backupPolicy": "docs/runbooks/recovery.md"},
+    "documents": {"kind": "Railway private storage bucket", "publicNetworking": false, "urlStyle": "virtual-host", "region": "owner-selected US region"},
+    "api": {"dockerfile": "infra/docker/api.Dockerfile", "port": 4000, "publicNetworking": false, "healthcheckPath": "/health", "healthcheckTimeout": 120, "preDeployCommand": "npm run db:deploy", "restartPolicy": "ON_FAILURE", "replicas": 1},
+    "worker": {"dockerfile": "infra/docker/worker.Dockerfile", "port": 5000, "publicNetworking": false, "healthcheckPath": "/health", "healthcheckTimeout": 120, "restartPolicy": "ON_FAILURE", "replicas": 1},
+    "web": {"dockerfile": "infra/docker/web.Dockerfile", "port": 3000, "publicNetworking": true, "healthcheckPath": "/health", "healthcheckTimeout": 120, "restartPolicy": "ON_FAILURE", "replicas": 1, "buildArguments": {"API_INTERNAL_URL": "http://${{api.RAILWAY_PRIVATE_DOMAIN}}:4000", "NEXT_PUBLIC_APP_ENV": "production"}}
+  },
+  "releaseGate": "Independent review, isolated restore evidence and explicit owner deployment approval required. No provision/apply/deploy step is part of CI."
+}

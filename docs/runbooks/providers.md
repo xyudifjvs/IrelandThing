@@ -1,0 +1,16 @@
+# Provider activation and incident operations
+
+Unconfigured features return actionable unavailable states. Local and CI validation use synthetic data and injected provider doubles; they do not prove real provider account access. No activation or outbound operation is authorized merely by this runbook.
+
+| Capability | Activation gate | Operational check |
+| --- | --- | --- |
+| Gmail | Actual mailbox approval, Google OAuth credentials/scopes/callback and consent; the placeholder is unusable | Connect, verify account identity, test sync recovery/watch renewal, review a draft, then send only to an explicit test recipient |
+| Stripe | Ireland's own account and its test credentials/webhook secret; no Carson account reuse | Verify signed webhook replay, catalog totals, payment receipt and refund/reconciliation in test mode before live-money approval |
+| Dotloop | Verified developer/account permissions and supported endpoints | Connect to the approved account; retrieve a known authorized loop/document and test revoked/missing access |
+| OpenRouter | Account privacy verified, explicit approved model/providers and ZDR route | Confirm routing fails closed; review source quotes/uncertainty and malicious document instructions without authorizing a write |
+| System mail | Approved transactional provider/sender | Test invitation/recovery delivery to a controlled recipient; do not describe a persisted inquiry as sent mail |
+| External assistant | Approved client and evidence that its own inference follows the OpenRouter/ZDR policy | Verify OAuth consent, scoped tokens, revocation, resource access and cross-role denial |
+
+For an incident, preserve audit/receipt evidence, disable the affected capability or outbound flag, and stop/reconcile uncertain jobs rather than replaying them blindly. Rotate the affected credentials, reconnect through the approved flow and rerun independent role/failure checks. Keep document/email bodies, tokens, backup keys and payment secrets out of logs. Database/audit truth takes precedence over a UI success label.
+
+Check process/readiness, database connectivity, worker heartbeat/queue age, failed/retrying jobs and provider status after release. Record and investigate overdue deadlines, repeated credential failures and uncertain external delivery. Deployment health probes alone do not provide continuous monitoring. [Railway health-check behavior](https://docs.railway.com/deployments/healthchecks).

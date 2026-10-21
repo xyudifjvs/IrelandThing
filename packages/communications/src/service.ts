@@ -344,7 +344,7 @@ export class CommunicationsService {
         details: { path: ["visibility"], equals: v },
       })),
     };
-    return prisma.emailThread.findMany({
+    const visibleThreads = await prisma.emailThread.findMany({
       where: {
         matterId:
           matterId && allowed.includes(matterId) ? matterId : { in: allowed },
@@ -376,6 +376,10 @@ export class CommunicationsService {
       orderBy: { updatedAt: "desc" },
       take: 100,
     });
+    return visibleThreads.map((t) => ({
+      ...t,
+      subject: t.messages[0]?.subject || "(Shared message)",
+    }));
   }
   async listMessages(actor: Principal, matterId?: string) {
     const threads = await this.listThreads(actor, matterId);
@@ -415,6 +419,20 @@ export class CommunicationsService {
           "REVISION_CONFLICT",
           "Thread association changed; refresh",
         );
+      if (thread.matterId !== matterId) {
+        for (const message of thread.messages)
+          await tx.emailMessage.update({
+            where: { id: message.id },
+            data: {
+              revision: { increment: 1 },
+              details: {
+                ...asRecord(message.details),
+                visibility: "coordinator",
+                sharingResetReason: "Matter association changed",
+              },
+            },
+          });
+      }
       const row = await tx.emailThread.update({
         where: { id },
         data: {

@@ -77,7 +77,7 @@ export async function recipientPolicy(
         "UNAPPROVED_RECIPIENT",
         "Save the recipient as a matter contact before sending",
       );
-    if (details.directContact === "through_agent" && clientEmails.has(address))
+    if (details.directContact !== "copy_agent" && clientEmails.has(address))
       throw new HttpError(
         403,
         "CLIENT_CONTACT_RESTRICTED",

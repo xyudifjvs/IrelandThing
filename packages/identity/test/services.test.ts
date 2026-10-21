@@ -318,6 +318,15 @@ describe("real PostgreSQL services and Better Auth", () => {
     );
     documentIds.push(doc.id);
     expect(doc.versions[0].processingStatus).toBe("complete");
+    const nextVersion = await uploadDocument(
+      agent,
+      {},
+      { originalname: "synthetic.pdf", buffer: bytes, size: bytes.length },
+      store,
+      doc.id,
+    );
+    expect(nextVersion.revision).toBe(doc.revision + 1);
+    expect(nextVersion.versions[0].version).toBe(2);
     expect(doc.versions[0].extractedText).toContain(
       "Synthetic contract evidence",
     );

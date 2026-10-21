@@ -312,6 +312,7 @@ export async function uploadDocument(
             "REVISION_CONFLICT",
             "Another version was uploaded; retry",
           );
+        doc = await tx.document.findUniqueOrThrow({ where: { id: doc.id } });
       } else {
         doc = await tx.document.create({
           data: {
@@ -519,4 +520,52 @@ export function createDocumentsRouter(store = createObjectStore()) {
     }),
   );
   return r;
+}
+
+export async function assignDocumentToMatter(
+  actor: Principal,
+  documentId: string,
+  matterId: string,
+  transaction?: Prisma.TransactionClient,
+) {
+  if (actor.role !== "coordinator")
+    throw new HttpError(
+      403,
+      "FORBIDDEN",
+      "Only the coordinator can associate imported evidence",
+    );
+  const apply = async (tx: Prisma.TransactionClient) => {
+    await requireMatter(actor, matterId, true, tx);
+    const doc = await tx.document.findUnique({ where: { id: documentId } });
+    if (!doc)
+      throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+    if (doc.matterId && doc.matterId !== matterId)
+      throw new HttpError(
+        409,
+        "DOCUMENT_ALREADY_ASSIGNED",
+        "Evidence is associated with another matter",
+      );
+    if (!doc.matterId) {
+      const changed = await tx.document.updateMany({
+        where: { id: documentId, matterId: null, revision: doc.revision },
+        data: { matterId, revision: { increment: 1 } },
+      });
+      if (!changed.count)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "Evidence changed while associating",
+        );
+      await audit(
+        tx,
+        actor,
+        "document.associated",
+        "Document",
+        documentId,
+        matterId,
+      );
+    }
+    return tx.document.findUniqueOrThrow({ where: { id: documentId } });
+  };
+  return transaction ? apply(transaction) : prisma.$transaction(apply);
 }

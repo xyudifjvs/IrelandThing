@@ -3,14 +3,13 @@ import s from "../_components/marketing.module.css";
 export default function Page() {
   return (
     <>
-      <PageHead eyebrow="Kind words" title="Good partnerships matter.">
-        Thoughtful communication and dependable coordination are at the heart of
-        Weatherly.
+      <PageHead eyebrow="Agent feedback" title="Testimonials.">
+        Testimonials will be published here only with approval.
       </PageHead>
       <div className={s.quote}>
-        Client stories are on their way.
+        No testimonials are published yet.
         <p style={{ font: "12px/1.9 Arial,sans-serif" }}>
-          Testimonials will be shared here once approved for publication.
+          To ask about working with Ireland, use the onboarding or contact form.
         </p>
       </div>
       <CTA />

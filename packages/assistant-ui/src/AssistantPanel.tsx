@@ -81,7 +81,7 @@ export function AssistantPanel() {
         >
           <header>
             <div>
-              <p className="assistant-kicker">A LITTLE HELP, AT HAND</p>
+              <p className="assistant-kicker">TRANSACTION RECORDS</p>
               <h2>Your Weatherly assistant</h2>
             </div>
             <button aria-label="Close assistant" onClick={close}>
@@ -158,7 +158,7 @@ export function AssistantPanel() {
             ) : (
               <div className="assistant-welcome">
                 <Sparkles size={28} />
-                <h3>What would help you move forward?</h3>
+                <h3>Ask about your transactions</h3>
                 <p>
                   Ask about saved dates, documents, open tasks, messages or
                   payment status. Answers link back to the records.
@@ -187,8 +187,8 @@ export function AssistantPanel() {
           </div>
           {!available && (
             <p className="assistant-connection">
-              AI is awaiting an approved OpenRouter ZDR connection. Your records
-              stay here until it is configured.
+              AI is not connected yet. Ask your workspace administrator to
+              configure it.
             </p>
           )}
           {error && (

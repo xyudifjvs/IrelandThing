@@ -69,22 +69,22 @@ export default function EmailSuggestions({
     <div
       style={{ borderTop: "1px solid #e3d6c1", paddingTop: 23, marginTop: 24 }}
     >
-      <p className={s.eyebrow}>Optional source-grounded assistance</p>
+      <p className={s.eyebrow}>Email suggestions</p>
       <p className={s.tiny}>
-        Suggestions are evidence to review. They never associate a conversation,
-        select recipients, update a checklist or send a message automatically.
+        Review each suggestion against the original email. Suggestions do not
+        link conversations, choose recipients, change checklists or send
+        messages.
       </p>
       {!matterId ? (
         <div className={s.notice}>
-          Associate this conversation with a transaction before requesting
-          assistance.
+          Link this conversation to a transaction before requesting suggestions.
         </div>
       ) : (
         <>
           {!ready && (
             <div className={s.notice}>
-              The approved OpenRouter ZDR route is not configured. Email content
-              will not be sent through an alternative provider.
+              Email suggestions are unavailable until AI is configured. Email
+              content will not be sent to another provider.
             </div>
           )}
           <label className={s.field}>

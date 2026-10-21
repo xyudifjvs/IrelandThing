@@ -59,7 +59,7 @@ export default function Detail({
       <div className={s.intro}>
         <div>
           <p className={s.eyebrow}>
-            {client ? "Your journey home" : "Your transaction file"}
+            {client ? "Client portal" : "Your transaction file"}
           </p>
           <h1>{m.title || address(m)}</h1>
           <p>{address(m)}</p>
@@ -74,13 +74,11 @@ export default function Detail({
       <div className={s.columns}>
         <div>
           <section className={s.card}>
-            <h2>
-              {client ? "Your next chapter, step by step." : "Shared checklist"}
-            </h2>
+            <h2>{client ? "Your transaction timeline" : "Shared checklist"}</h2>
             <p>
               {client
-                ? "Your confirmed dates and shared milestones, without the clutter."
-                : "Track the steps that keep your transaction moving."}
+                ? "See the dates and checklist items shared with you."
+                : "Review completed steps and upcoming work."}
             </p>
             {client ? (
               <div className={s.timeline}>
@@ -194,11 +192,11 @@ export default function Detail({
         </div>
         <aside>
           <section className={s.card}>
-            <p className={s.eyebrow}>A little peace of mind</p>
-            <h2>Here for the details.</h2>
+            <p className={s.eyebrow}>Your coordinator</p>
+            <h2>Questions about this file?</h2>
             <p>
-              Your coordinator reviews dates, documents and next steps. Have a
-              question about something on the file?
+              Contact Ireland with questions about your documents or upcoming
+              dates.
             </p>
             <Link className={s.secondary} href="/contact">
               Contact Ireland
@@ -208,14 +206,11 @@ export default function Detail({
             <section className={s.card} style={{ marginTop: 23 }}>
               <p className={s.eyebrow}>Your service</p>
               <h2>{label(m.packageCode)}</h2>
-              <p>
-                Service fee timing is confirmed with Ireland. Stripe must be
-                configured before checkout is available.
-              </p>
+              <p>Ireland will confirm when your service fee is due.</p>
               <p className={s.hint}>
-                Ireland will prepare a secure payment link once your fee timing
-                is confirmed. Check shared payment communications or contact
-                Ireland.
+                When online payment is available, Ireland can prepare a payment
+                link. Check your shared messages or contact her for payment
+                instructions.
               </p>
             </section>
           )}

@@ -15,14 +15,14 @@ export default function InquiryForm({
     <div className={s.notice} role="status">
       <CheckCircle2 size={22} strokeWidth={1} />
       <h3 style={{ fontFamily: "Georgia", fontSize: 23, fontWeight: 400 }}>
-        Your request is saved.
+        Your request has been saved.
       </h3>
       <p>
-        Ireland can review it in her workspace. A meeting time or email response
-        has not yet been confirmed.
+        Your request is ready for Ireland to review. Any meeting time still
+        needs her confirmation; no email response has been sent.
       </p>
       <button className={s.secondary} onClick={() => setSaved(false)}>
-        Send another request
+        Submit another request
       </button>
     </div>
   ) : (
@@ -97,7 +97,7 @@ export default function InquiryForm({
       )}
       {kind === "meeting" && (
         <label className={s.field}>
-          Preferred date & time
+          Preferred date and time
           <input
             type="datetime-local"
             name="meetingTime"
@@ -105,14 +105,15 @@ export default function InquiryForm({
             required
           />
           <small>
-            Your local time zone. Ireland will confirm availability.
+            Enter the time in your local time zone. Ireland will confirm
+            availability.
           </small>
         </label>
       )}
       <label className={s.field}>
         {kind === "contact"
           ? "How can I help?"
-          : "Anything you’d like me to know?"}
+          : "Questions or details (optional)"}
         <textarea name="message" className={s.textarea} maxLength={5000} />
       </label>
       {error && (
@@ -122,9 +123,9 @@ export default function InquiryForm({
       )}
       <button className={s.button} disabled={busy}>
         {busy
-          ? "Saving your request…"
+          ? "Submitting…"
           : kind === "meeting"
-            ? "Request a conversation"
+            ? "Request a meeting"
             : kind === "information"
               ? "Request information"
               : "Send your inquiry"}

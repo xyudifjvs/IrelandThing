@@ -20,13 +20,13 @@ export default function Portal() {
       <div className={s.intro}>
         <div>
           <p className={s.eyebrow}>
-            {client ? "Your journey home" : "Your agent portal"}
+            {client ? "Client portal" : "Your agent portal"}
           </p>
           <h1>Hello, {session.data?.user?.name?.split(" ")[0] || "there"}.</h1>
           <p>
             {client
-              ? "The next chapter is taking shape. Here’s what’s happening with your home."
-              : "Your files, shared updates and next steps — all in one place."}
+              ? "Review the documents and updates Ireland has shared with you."
+              : "Submit new transactions and review updates from Ireland."}
           </p>
         </div>
         {!client && session.data && (
@@ -67,7 +67,7 @@ export default function Portal() {
                 {m.title !== address(m)
                   ? address(m)
                   : client
-                    ? "A little closer to your next chapter."
+                    ? "View the shared checklist and documents for this property."
                     : label(m.packageCode)}
               </p>
               <div className={s.progress}>
@@ -101,10 +101,11 @@ export default function Portal() {
       ) : (
         !q.error && (
           <div className={s.empty}>
-            <FolderHeart />A fresh start for your next transaction.
+            <FolderHeart />
+            No transactions yet.
             <br />
             {client
-              ? "Your authorized transaction will appear here when Ireland shares access."
+              ? "Your transaction will appear here when Ireland shares it with you."
               : "Submit an intake to get your file started."}
             {!client && (
               <p>

@@ -258,7 +258,7 @@ function ProposalCard({
           >
             “
             {d.sourceQuote ||
-              "No source quote supplied — verify the source manually."}
+              "No source quote supplied. Check the source document."}
             ”{d.page && <small className={s.fieldHint}> · Page {d.page}</small>}
           </blockquote>
           {d.uncertainty && <p className={s.notice}>{d.uncertainty}</p>}

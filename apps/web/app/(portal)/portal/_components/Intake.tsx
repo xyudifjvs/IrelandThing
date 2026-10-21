@@ -290,7 +290,7 @@ export default function Intake() {
       <div className={s.wrap}>
         <div className={`${s.card} ${s.success}`}>
           <CheckCircle2 size={45} strokeWidth={1} />
-          <p className={s.eyebrow}>Every detail, thoughtfully handled</p>
+          <p className={s.eyebrow}>Intake received</p>
           <h1>Your transaction is submitted.</h1>
           <p>
             {submission.propertyAddress}
@@ -320,7 +320,8 @@ export default function Intake() {
           <p className={s.eyebrow}>Weatherly Transaction Co.</p>
           <h1>New transaction</h1>
           <p>
-            Start with the basics. Everything after this adapts to your answers.
+            Choose your service and enter the transaction details. You can save
+            a draft and finish later.
           </p>
         </div>
         <Link className={s.secondary} href="/portal">
@@ -385,7 +386,7 @@ export default function Intake() {
       <div className={s.card}>
         {step === 0 && (
           <>
-            <h2>A little support goes a long way.</h2>
+            <h2>Choose a service</h2>
             <p className={s.sub}>
               Choose the service that fits this transaction.
             </p>
@@ -476,8 +477,8 @@ export default function Intake() {
           <>
             <h2>The deal</h2>
             <p className={s.sub}>
-              Give us the address and the executed contract. We’ll take it from
-              there.
+              Enter the property address and provide the signed contract, if the
+              property is under contract.
             </p>
             <label className={s.field}>
               Property address
@@ -555,14 +556,14 @@ export default function Intake() {
                       })
                     }
                   />
-                  Not under contract yet — start a listing
+                  Not under contract yet. Start a listing.
                 </label>
               )}
             </div>
             {d.contractSource === "upload" && (
               <div className={s.file}>
                 <Upload size={25} strokeWidth={1} />
-                <p>Your executed contract belongs here.</p>
+                <p>Upload your signed contract.</p>
                 <span className={s.hint}>
                   PDF or DOCX · up to 20 MB · include amendments
                 </span>
@@ -599,9 +600,9 @@ export default function Intake() {
             {d.contractSource === "dotloop" && (
               <>
                 <div className={s.notice}>
-                  The coordinator will retrieve this contract once Dotloop is
-                  authorized. A loop reference is required; this selection does
-                  not claim a document has already synced.
+                  Enter the Dotloop loop ID. Ireland can check it after Dotloop
+                  is connected. You may still need to upload the signed
+                  contract.
                 </div>
                 <label className={s.field}>
                   Dotloop loop ID
@@ -744,7 +745,8 @@ export default function Intake() {
           <>
             <h2>Title, lender & documents</h2>
             <p className={s.sub}>
-              Tell us what you have. We’ll chase the rest.
+              Tell Ireland which documents you have and who to contact for
+              anything missing.
             </p>
             <HandlingForm
               title="Title company"
@@ -779,15 +781,15 @@ export default function Intake() {
                       ],
                       [
                         "mls_dotloop_send",
-                        "It’s in MLS or Dotloop — please send it to the buyer",
+                        "It’s in MLS or Dotloop. Please send it to the buyer",
                       ],
                       [
                         "request_listing_agent",
-                        "I haven’t received it — please reach out to the listing agent",
+                        "I haven’t received it. Please reach out to the listing agent",
                       ],
                       [
                         "agent_will_email",
-                        "I got it from the listing agent — I’ll email it to you; please send it to the buyer",
+                        "I got it from the listing agent. I’ll email it to you to send to the buyer",
                       ],
                     ]
                   : [
@@ -798,11 +800,11 @@ export default function Intake() {
                       ],
                       [
                         "mls_dotloop_send",
-                        "It’s in MLS or Dotloop — please send it to the buyer’s agent",
+                        "It’s in MLS or Dotloop. Please send it to the buyer’s agent",
                       ],
                       [
                         "seller_will_email",
-                        "I haven’t received it — the seller will email it to you; please forward it",
+                        "I haven’t received it. The seller will email it to you; please forward it",
                       ],
                     ]
               }
@@ -818,7 +820,7 @@ export default function Intake() {
                     ["not_applicable", "N/A"],
                     [
                       "dotloop_send",
-                      "It’s in Dotloop — please send it to title",
+                      "It’s in Dotloop. Please send it to title",
                     ],
                     [
                       "request_sellers",
@@ -826,7 +828,7 @@ export default function Intake() {
                     ],
                     [
                       "agent_will_email",
-                      "I got it from the sellers — I’ll email you a copy to send to title",
+                      "I got it from the sellers. I’ll email you a copy to send to title",
                     ],
                   ]}
                   onChange={(v) => update({ priorPolicy: v })}
@@ -839,8 +841,8 @@ export default function Intake() {
           <>
             <h2>The final details</h2>
             <p className={s.sub}>
-              Help us apply your brokerage requirements and add a personal
-              touch.
+              Add your broker’s details, any brokerage checklist and your gift
+              preferences.
             </p>
             <div className={s.grid}>
               <label className={s.field}>
@@ -950,9 +952,9 @@ export default function Intake() {
             {d.gift.requested && (
               <>
                 <div className={s.notice}>
-                  Gift catalog and prices require Ireland’s approval. This
-                  records your preference and creates a follow-up task. Payment
-                  is required before any gift is ordered.
+                  Ireland will confirm the gift, price and delivery details with
+                  you. This is a request, not an order. Payment is required
+                  before ordering.
                 </div>
                 <label className={s.field}>
                   Preferred gift tier
@@ -1025,7 +1027,7 @@ export default function Intake() {
         )}
         {step === 5 && (
           <>
-            <h2>A final look before we begin.</h2>
+            <h2>Review your intake</h2>
             <p className={s.sub}>
               Check your details, then send the intake to your coordinator.
               Submitting creates your transaction and its follow-up checklist.
@@ -1118,9 +1120,8 @@ export default function Intake() {
               ))}
             </dl>
             <div className={s.notice}>
-              <ShieldCheck size={16} /> Your intake is saved securely. You can
-              return to your portal for updates. Service fee timing will be
-              confirmed by Ireland.
+              <ShieldCheck size={16} /> After submitting, return to your portal
+              for updates. Ireland will confirm when the service fee is due.
             </div>
           </>
         )}
@@ -1217,7 +1218,7 @@ function HandlingForm({
   if (title === "Title company")
     options.push(
       side === "buyer"
-        ? ["listing_agent", "Not sure — please reach out to the listing agent"]
+        ? ["listing_agent", "Not sure. Please reach out to the listing agent"]
         : ["mls", "It’s listed in the MLS"],
     );
   else {
@@ -1225,7 +1226,7 @@ function HandlingForm({
     if (side === "seller")
       options.push([
         "buyers_agent",
-        "Not sure — please reach out to the buyer’s agent",
+        "Not sure. Please reach out to the buyer’s agent",
       ]);
   }
   return (

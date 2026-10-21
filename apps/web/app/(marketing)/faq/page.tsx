@@ -3,27 +3,27 @@ import s from "../_components/marketing.module.css";
 export default function Page() {
   return (
     <>
-      <PageHead eyebrow="A little clarity" title="Questions, answered.">
-        Start here, or reach out to Ireland to talk through the details of your
-        transaction.
+      <PageHead eyebrow="FAQ" title="Frequently asked questions.">
+        Read about services, intake, payment and portal access. Contact Ireland
+        if you have a question about your file.
       </PageHead>
       <div className={s.faq}>
         {[
           [
             "How do I get started?",
-            "Request a conversation through New Agent Onboarding. Ireland can discuss your needs, confirm the service agreement and arrange portal access.",
+            "Request a meeting through New Agent Onboarding. Ireland will review the services you need and your service agreement before arranging portal access.",
           ],
           [
             "Which service is right for my file?",
-            "Essentials is contract-to-close coordination. Complete adds compliance and paperwork support. Full Listing adds seller pre-listing support. Ireland can help you choose the right fit.",
+            "Essentials covers contract-to-close coordination. Complete adds broker file and compliance support. Full Listing includes Complete and adds seller pre-listing support. Ask Ireland if you’re unsure which service your file needs.",
           ],
           [
             "Can you contact my client directly?",
-            "You choose the contact instruction in your intake: direct contact with you copied, or communication only through you. That preference stays with the file.",
+            "Choose your contact instructions during intake: Ireland may contact your client and copy you, or communicate only through you. Those instructions are saved with your transaction.",
           ],
           [
             "What do I need to submit a transaction?",
-            "Your property and client details, brokerage information, and executed contract. Complete can reference an approved Dotloop loop. Full Listing can begin before a contract is executed.",
+            "Submit the property and client details and an executed contract. Complete and Full Listing also require brokerage information. When Dotloop is connected, those services can reference a loop; otherwise, upload the contract. Full Listing can begin before a contract is executed.",
           ],
           [
             "When is payment due?",
@@ -31,7 +31,7 @@ export default function Page() {
           ],
           [
             "What can clients see?",
-            "Authorized client access shows shared milestones and permitted documents. Coordinator private notes and internal tasks remain private.",
+            "Clients invited to a file can see the milestones and documents shared with them. They cannot see Ireland’s private notes or internal tasks.",
           ],
         ].map(([q, a]) => (
           <details key={q}>

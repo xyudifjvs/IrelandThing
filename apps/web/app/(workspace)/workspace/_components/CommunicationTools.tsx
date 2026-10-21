@@ -149,7 +149,8 @@ export function Templates() {
         <div>
           <h2>Your email templates</h2>
           <p>
-            Thoughtful starting points. Review merged details before sending.
+            Save reusable messages and check the filled-in details before
+            sending.
           </p>
         </div>
         <button
@@ -478,10 +479,10 @@ export function Composer() {
     <section className={s.section} style={{ marginTop: 5 }}>
       <div className={s.sectionHead}>
         <div>
-          <h2>A thoughtful note, ready for your review</h2>
+          <h2>Compose an email</h2>
           <p>
-            Saved drafts are never sent automatically. Client contact
-            instructions apply.
+            Drafts are sent only after your approval. Follow the contact
+            instructions saved for this transaction.
           </p>
         </div>
         <Mail size={19} strokeWidth={1.3} />
@@ -941,7 +942,7 @@ export function Composer() {
                   );
                   setDraft(sent);
                   setMessage(
-                    `Sending request saved with status: ${label(sent.status)}. Provider delivery status is tracked on the draft.`,
+                    `Sending request saved with status: ${label(sent.status)}. Check this draft for sending updates before trying again.`,
                   );
                   await drafts.refresh();
                 } catch (e) {
@@ -1021,7 +1022,7 @@ export function MessageReview({
           name="matterId"
           value={association}
           onChange={setAssociation}
-          emptyLabel="Unassigned — coordinator review"
+          emptyLabel="Unassigned (needs coordinator review)"
         />
         <button
           className={s.buttonSmall}

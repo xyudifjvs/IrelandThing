@@ -29,7 +29,7 @@ export default function Page() {
       </Link>
       <div className={s.heading}>
         <div>
-          <p className={s.eyebrow}>Make yourself at home</p>
+          <p className={s.eyebrow}>Account settings</p>
           <h1>Your account</h1>
           <p className={s.subtitle}>
             Keep your contact details up to date and your account protected.
@@ -110,7 +110,7 @@ export default function Page() {
         <div className={s.sectionHead}>
           <div>
             <h2>Account security</h2>
-            <p>A little extra protection for your private information.</p>
+            <p>Manage your authenticator and reset your password.</p>
           </div>
         </div>
         <div className={s.sectionBody}>

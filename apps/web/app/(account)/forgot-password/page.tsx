@@ -14,16 +14,12 @@ export default function Page() {
     >
       <div className={s.form}>
         <p className={s.eyebrow}>Account recovery</p>
-        <h2>A fresh start.</h2>
-        <p className={s.sub}>
-          Request a private password reset link. Email recovery requires the
-          approved system mail provider.
-        </p>
+        <h2>Reset your password.</h2>
+        <p className={s.sub}>Enter the email address you use for Weatherly.</p>
         {done ? (
           <p className={s.notice} role="status">
-            Your request was accepted. If an eligible account matches this email
-            and recovery delivery is configured, follow the link in your inbox.
-            Contact Ireland if you need help.
+            If reset emails are enabled and this address matches an account,
+            you’ll receive a reset link. Contact Ireland if it doesn’t arrive.
           </p>
         ) : (
           <form

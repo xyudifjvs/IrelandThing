@@ -19,20 +19,16 @@ export default function Page() {
           <small>TRANSACTION CO.</small>
         </Link>
         <div>
-          <h1>
-            A warm welcome.
-            <br />
-            <em>A thoughtful beginning.</em>
-          </h1>
+          <h1>Welcome to Weatherly.</h1>
           <p>
-            Your invitation opens a private portal for your transaction details.
+            Use your invitation to open the transaction files shared with you.
           </p>
         </div>
       </aside>
       <main className={s.formSide}>
         <div className={s.form}>
           <p className={s.eyebrow}>Your personal invitation</p>
-          <h2>{done ? "You’re ready to begin." : "Welcome to Weatherly."}</h2>
+          <h2>{done ? "Account created." : "Create your account."}</h2>
           {done ? (
             <>
               <p className={s.sub}>

@@ -91,9 +91,9 @@ export default function Page() {
   return (
     <>
       <Heading
-        eyebrow="A little room to plan ahead"
+        eyebrow="Upcoming dates"
         title="Your calendar"
-        subtitle="Contract milestones and task dates, brought into one clear view."
+        subtitle="View contract deadlines and scheduled tasks by month."
       />
       {q.error && <div className={s.error}>{q.error}</div>}
       <section className={s.section}>

@@ -4,7 +4,7 @@ import { AssistantPanel } from "@weatherly/assistant-ui";
 export const metadata: Metadata = {
   title: { default: "Weatherly Transaction Co.", template: "%s · Weatherly" },
   description:
-    "Thoughtful transaction coordination, from the first detail to the final signature.",
+    "Transaction coordination for real estate agents. Ireland manages documents, deadlines and closing details through Weatherly Transaction Co.",
 };
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (

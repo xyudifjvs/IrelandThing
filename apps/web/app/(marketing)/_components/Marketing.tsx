@@ -47,7 +47,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               <span style={{ fontSize: 20 }}>WEATHERLY</span>
               <small>TRANSACTION CO.</small>
             </Link>
-            <p>Thoughtfully coordinated. Confidently closed.</p>
+            <p>Transaction coordination with Ireland.</p>
           </div>
           <div>
             <Link href="/onboarding">Work with Ireland</Link>
@@ -59,7 +59,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
         </div>
         <div className={s.footerBottom}>
           <p>© {new Date().getFullYear()} Weatherly Transaction Co.</p>
-          <Link href="/faq">Questions? Start here.</Link>
+          <Link href="/faq">Frequently asked questions</Link>
         </div>
       </footer>
     </div>
@@ -85,15 +85,15 @@ export function PageHead({
 export function CTA() {
   return (
     <section className={s.cta}>
-      <p className={s.eyebrow}>Less to manage. More room to grow.</p>
-      <h2>Let’s make your next closing a little simpler.</h2>
+      <p className={s.eyebrow}>Work with Ireland</p>
+      <h2>Discuss your next transaction.</h2>
       <p>
-        Start with a conversation. We’ll find the right level of support for
-        your business.
+        Tell Ireland about your transaction, the support you need and your
+        brokerage’s requirements.
       </p>
       <div className={s.actions}>
         <Link className={s.button} href="/onboarding">
-          Let’s get acquainted <ArrowUpRight size={13} />
+          Request a meeting <ArrowUpRight size={13} />
         </Link>
       </div>
     </section>
@@ -104,21 +104,21 @@ export function About() {
     <>
       <section className={s.hero}>
         <div>
-          <p className={s.eyebrow}>Details handled. Possibilities open.</p>
+          <p className={s.eyebrow}>Support for real estate agents</p>
           <h1>
-            A higher standard of <em>transaction coordination.</em>
+            Transaction coordination <em>with Ireland.</em>
           </h1>
           <p className={s.lead}>
-            Dependable, detail-oriented support for real estate professionals.
-            From contract to close, the behind-the-scenes work is in thoughtful
-            hands.
+            Ireland coordinates contracts, deadlines, documents and follow-up
+            for buyer and seller transactions. Choose contract-to-close support
+            or seller pre-listing coordination.
           </p>
           <div className={s.actions}>
             <Link className={s.button} href="/onboarding">
-              Let’s work together <ArrowUpRight size={13} />
+              Work with Ireland <ArrowUpRight size={13} />
             </Link>
             <Link className={s.secondary} href="/services">
-              Explore the services <ArrowRight size={13} />
+              View services and pricing <ArrowRight size={13} />
             </Link>
           </div>
         </div>
@@ -128,22 +128,22 @@ export function About() {
             alt="Ireland, founder of Weatherly Transaction Co."
           />
           <div className={s.portraitCaption}>
-            A personal approach.<small>A little less on your plate.</small>
+            Ireland<small>Your transaction coordinator</small>
           </div>
         </div>
       </section>
       <div className={s.ribbon}>
         <span>
           <Leaf />
-          Thoughtful support
+          Transaction intake
         </span>
         <span>
           <CalendarCheck />
-          Details in order
+          Deadline tracking
         </span>
         <span>
           <Handshake />
-          People kept in the loop
+          Transaction updates
         </span>
       </div>
       <section className={s.section}>
@@ -152,23 +152,19 @@ export function About() {
             <p className={s.eyebrow}>Meet your coordinator</p>
             <h2 className={s.sectionTitle}>Hello, I’m Ireland.</h2>
             <p className={s.body}>
-              I founded Weatherly Transaction Co. to provide real estate
-              professionals with dependable support for the details that keep
-              each transaction moving.
+              I work with real estate agents to organize transaction files,
+              track deadlines and coordinate with title companies and lenders.
             </p>
             <p className={s.body}>
-              My goal is simple: to handle the behind-the-scenes coordination so
-              you can focus on serving your clients and growing your business.
+              Before we start, we’ll review your service level, brokerage
+              requirements and how you want me to communicate with your clients.
             </p>
             <Link className={s.textLink} href="/onboarding">
-              A good partnership starts with a conversation{" "}
-              <ArrowUpRight size={12} />
+              Ask about working together <ArrowUpRight size={12} />
             </Link>
           </div>
           <div className={s.bioAccent}>
-            A smoother process.
-            <br />A clearer next step.
-            <br />A little more peace of mind.
+            I keep track of the paperwork and follow up on what’s missing.
           </div>
         </div>
       </section>
@@ -179,9 +175,12 @@ export function About() {
 export function Services() {
   return (
     <>
-      <PageHead eyebrow="What I do" title="Support that fits your transaction.">
-        Choose the level of coordination that gives you the room to do what you
-        do best.
+      <PageHead
+        eyebrow="Services and pricing"
+        title="Transaction coordination services."
+      >
+        Choose from three service levels. Essentials and Complete support buyer
+        or seller transactions. Full Listing is for seller transactions.
       </PageHead>
       <div className={s.cards}>
         {[
@@ -198,18 +197,18 @@ export function Services() {
           },
           {
             name: "Complete",
-            tag: "Coordination + Compliance",
+            tag: "Coordination and Compliance",
             price: 475,
             list: [
               "Everything in Essentials",
               "Document review and broker checklist",
-              "File submission and post-closing wrap-up",
+              "File submission and post-closing follow-up",
             ],
             code: "complete",
           },
           {
             name: "Full Listing",
-            tag: "Seller side, start to finish",
+            tag: "Pre-listing through closing",
             price: 625,
             list: [
               "Everything in Complete",
@@ -224,7 +223,7 @@ export function Services() {
             key={p.name}
           >
             {i === 1 && (
-              <div className={s.cardTag}>A little more taken care of</div>
+              <div className={s.cardTag}>Includes broker file support</div>
             )}
             <p className={s.eyebrow}>{p.tag}</p>
             <h2>{p.name}</h2>
@@ -241,21 +240,21 @@ export function Services() {
               ))}
             </ul>
             <Link className={s.secondary} href="/onboarding">
-              Find your fit <ArrowUpRight size={12} />
+              Ask about this service <ArrowUpRight size={12} />
             </Link>
           </article>
         ))}
       </div>
       <section className={s.gift}>
         <div>
-          <p className={s.eyebrow}>A thoughtful finishing touch</p>
-          <h2>Closing gifts, coordinated.</h2>
+          <p className={s.eyebrow}>Closing gifts</p>
+          <h2>Add a closing gift.</h2>
           <p>
-            Ask about gift options and personalization. Catalog and pricing will
-            be confirmed by Ireland.
+            Ask Ireland about gift options and personalization. The gift, total
+            price and terms must be confirmed before payment.
             <br />
-            Gift payment is required before ordering. Service fee timing is
-            confirmed during onboarding.
+            Gifts must be paid for before ordering. Ireland will confirm when
+            your service fee is due during onboarding.
           </p>
         </div>
         <Gift size={37} strokeWidth={0.8} color="#aa9068" />

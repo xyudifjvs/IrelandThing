@@ -10,7 +10,6 @@ import {
   CircleCheck,
   Clock3,
   LockKeyhole,
-  Leaf,
 } from "lucide-react";
 import {
   useData,
@@ -132,7 +131,7 @@ export default function Dashboard({
     <>
       <div className={s.heading}>
         <div>
-          <p className={s.eyebrow}>A little clarity, a smoother closing</p>
+          <p className={s.eyebrow}>Coordinator workspace</p>
           <h1>
             {transactions
               ? "Your transactions"
@@ -140,7 +139,7 @@ export default function Dashboard({
           </h1>
           <p className={s.subtitle}>
             {transactions
-              ? "Every file, every milestone, all in one place."
+              ? "Search transactions and check their status."
               : `${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Here’s where things stand.`}
           </p>
         </div>
@@ -172,7 +171,7 @@ export default function Dashboard({
           {
             label: "Active transactions",
             value: active.length,
-            hint: "Moving toward the finish line",
+            hint: "Open transaction files",
             icon: BriefcaseBusiness,
           },
           {
@@ -186,13 +185,13 @@ export default function Dashboard({
           {
             label: "Needs your attention",
             value: due.length,
-            hint: "Deadlines in the next 7 days",
+            hint: "Overdue or due within 7 days",
             icon: Clock3,
           },
           {
             label: "Closed transactions",
             value: matters.filter((m) => m.stage === "closed").length,
-            hint: "Every detail, taken care of",
+            hint: "Files marked as closed",
             icon: CircleCheck,
           },
         ].map((st) => (
@@ -211,8 +210,8 @@ export default function Dashboard({
           <section className={s.section}>
             <div className={s.sectionHead}>
               <div>
-                <h2>From listing to closing</h2>
-                <p>A clear view of your pipeline.</p>
+                <h2>Transactions by stage</h2>
+                <p>Count of files at each stage.</p>
               </div>
               <Link href="/workspace/new?side=seller&package=full_listing">
                 Add a listing <Plus />
@@ -246,7 +245,7 @@ export default function Dashboard({
                 <h2>
                   {transactions ? "All transactions" : "Active transactions"}
                 </h2>
-                <p>The details are handled. You can see the bigger picture.</p>
+                <p>Open a file to review its checklist, documents and dates.</p>
               </div>
               {!transactions && (
                 <Link href="/workspace/transactions">
@@ -369,7 +368,8 @@ export default function Dashboard({
               </table>
             ) : (
               <div className={s.empty}>
-                <BriefcaseBusiness />A fresh start for your next closing.
+                <BriefcaseBusiness />
+                No transactions yet.
                 <br />
                 Your transactions will appear here when you submit an intake.
                 <p>
@@ -394,31 +394,13 @@ export default function Dashboard({
                 </div>
               )}
           </section>
-          <div
-            className={s.notice}
-            style={{ display: "flex", alignItems: "center", gap: 13 }}
-          >
-            <Leaf size={24} strokeWidth={1} />
-            <div>
-              <strong
-                style={{ fontFamily: "Georgia", fontWeight: 400, fontSize: 16 }}
-              >
-                The details make the difference.
-              </strong>
-              <br />
-              <span className={s.tiny}>
-                A thoughtfully managed file, from the first signature to the
-                final handoff.
-              </span>
-            </div>
-          </div>
         </div>
         <div>
           <section className={s.section}>
             <div className={s.sectionHead}>
               <div>
                 <h2>Needs attention</h2>
-                <p>Open deadlines in the next seven days.</p>
+                <p>Overdue tasks and tasks due in the next seven days.</p>
               </div>
               <Clock3 size={17} color="#a18c6e" strokeWidth={1.3} />
             </div>
@@ -443,9 +425,10 @@ export default function Dashboard({
                 ))
               ) : (
                 <div className={s.empty} style={{ padding: "20px 0" }}>
-                  <CircleCheck />A little breathing room.
+                  <CircleCheck />
+                  No task deadlines need attention in this view.
                   <br />
-                  No task deadlines due this week.
+                  Upcoming task deadlines will appear here.
                 </div>
               )}
             </div>
@@ -469,7 +452,7 @@ export default function Dashboard({
                 ))}
               {!allTasks.some((t) => t.visibility === "coordinator") && (
                 <p className={`${s.muted} ${s.tiny}`}>
-                  A place for the little things you don’t want to forget.
+                  Add a private task and link it to a transaction.
                 </p>
               )}
               {error && <p className={s.error}>{error}</p>}

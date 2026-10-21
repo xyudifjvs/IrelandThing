@@ -71,14 +71,10 @@ export default function Login() {
           <small>TRANSACTION CO.</small>
         </Link>
         <div>
-          <h1>
-            A little more clarity.
-            <br />
-            <em>A lot less to carry.</em>
-          </h1>
+          <h1>Your transaction workspace.</h1>
           <p>
-            Your people, properties and next steps — thoughtfully brought
-            together.
+            Sign in to review documents, check deadlines and see the latest
+            updates on your transactions.
           </p>
         </div>
         <p className={s.copyright}>
@@ -87,14 +83,14 @@ export default function Login() {
       </aside>
       <main className={s.formSide}>
         <div className={s.form}>
-          <p className={s.eyebrow}>Your secure workspace</p>
+          <p className={s.eyebrow}>Account sign-in</p>
           <h2>
-            {challenge ? "One more thoughtful safeguard." : "Welcome back."}
+            {challenge ? "Enter your verification code." : "Welcome back."}
           </h2>
           <p className={s.sub}>
             {challenge
-              ? "Verify your account before opening your private files."
-              : "The next step is right where you left it."}
+              ? "Use a code from your authenticator app or one of your backup codes."
+              : "Use the email address associated with your Weatherly account."}
           </p>
           <form
             onSubmit={(e) => {
@@ -192,13 +188,13 @@ export default function Login() {
               </>
             )}
             New to Weatherly?{" "}
-            <Link href="/onboarding">Let’s get acquainted.</Link>
+            <Link href="/onboarding">Ask about working with Ireland.</Link>
             <br />
             Need access or help signing in?{" "}
             <Link href="/contact">Contact Ireland.</Link>
           </p>
           <p className={s.help}>
-            <LockKeyhole size={11} /> Private files. Thoughtful access.
+            <LockKeyhole size={11} /> Access by invitation
           </p>
           <Link className={s.back} href="/">
             <ArrowLeft size={10} /> Back to Weatherly

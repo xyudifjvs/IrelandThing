@@ -154,11 +154,8 @@ export default function Detail({
               <section className={s.section}>
                 <div className={s.sectionHead}>
                   <div>
-                    <h2>A clear path to closing</h2>
-                    <p>
-                      Keep every milestone moving. Updates are shared according
-                      to visibility.
-                    </p>
+                    <h2>Transaction checklist</h2>
+                    <p>Update checklist items and choose who can see them.</p>
                   </div>
                 </div>
                 <div className={s.sectionBody}>
@@ -365,7 +362,7 @@ export default function Detail({
             <section className={s.section}>
               <div className={s.sectionHead}>
                 <div>
-                  <h2>Every document, in its place</h2>
+                  <h2>Transaction documents</h2>
                   <p>
                     Private storage, accessible to the people authorized on this
                     file.
@@ -396,7 +393,7 @@ export default function Detail({
                 ) : (
                   <div className={s.empty}>
                     <FileText />
-                    The file is ready for its first document.
+                    No documents uploaded yet.
                   </div>
                 )}
                 <form
@@ -443,7 +440,7 @@ export default function Detail({
             <section className={s.section}>
               <div className={s.sectionHead}>
                 <div>
-                  <h2>Communication, kept together</h2>
+                  <h2>Transaction email</h2>
                   <p>Connected email and drafts for the people on this deal.</p>
                 </div>
               </div>
@@ -531,7 +528,7 @@ export default function Detail({
             <section className={s.section}>
               <div className={s.sectionHead}>
                 <div>
-                  <h2>A little space for your notes</h2>
+                  <h2>Private notes</h2>
                   <p className={s.privateLabel}>
                     <LockKeyhole />
                     Coordinator only. Agents and clients cannot see this.
@@ -596,7 +593,7 @@ export default function Detail({
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
                       required
-                      placeholder="Keep the details you’ll want to remember…"
+                      placeholder="Add a note about this transaction…"
                     />
                   </label>
                   <button

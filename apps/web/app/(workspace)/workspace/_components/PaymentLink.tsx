@@ -81,7 +81,6 @@ export default function PaymentLink() {
         {!ready && (
           <div className={s.notice}>
             Connect Ireland’s own Stripe account before preparing payment links.
-            An existing personal Stripe account is not used.
           </div>
         )}
         {error && (

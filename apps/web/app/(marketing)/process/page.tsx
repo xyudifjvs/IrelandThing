@@ -3,26 +3,26 @@ import s from "../_components/marketing.module.css";
 export default function Page() {
   return (
     <>
-      <PageHead eyebrow="How it works" title="A simple process.">
-        A little clarity at every stage, from the first details to the final
-        handoff.
+      <PageHead eyebrow="How it works" title="From intake to closing.">
+        Submit your file, review the transaction details with Ireland and follow
+        progress in your portal.
       </PageHead>
       <div className={s.cards}>
         {[
           [
             "01",
             "Submit your transaction",
-            "Choose your service and submit the contract and key details through your secure portal. Starting before the contract? Full Listing supports seller pre-listing work.",
+            "Choose a service level and submit the property details, client information and contract through your portal. Full Listing can begin with seller paperwork before a contract is signed.",
           ],
           [
             "02",
-            "I take it from here",
-            "Your file, follow-up tasks and timeline are organized. Contract dates and compliance requirements are reviewed before they’re relied on.",
+            "Review the file with Ireland",
+            "Ireland reviews the contract dates, organizes the documents and sets up the transaction checklist. Broker file support is included with Complete and Full Listing.",
           ],
           [
             "03",
-            "Stay informed, close confidently",
-            "Your agent portal keeps the file in view. Authorized clients can follow shared milestones, with updates coordinated according to your contact preferences.",
+            "Follow your transaction",
+            "Check tasks, documents and confirmed dates in your agent portal. Ireland follows the client contact instructions you choose during intake.",
           ],
         ].map(([n, title, text]) => (
           <section className={s.card} key={n}>

@@ -55,9 +55,9 @@ export default function Page() {
   return (
     <>
       <Heading
-        eyebrow="Good partnerships start here"
+        eyebrow="Agent requests & access"
         title="Agent onboarding"
-        subtitle="Review requests, record service agreement evidence and arrange thoughtful access."
+        subtitle="Review inquiries, save signed agreements and invite agents or clients."
       />
       {error && (
         <div className={s.error} role="alert">
@@ -72,7 +72,7 @@ export default function Page() {
       <section className={s.section}>
         <div className={s.sectionHead}>
           <div>
-            <h2>Conversations to begin</h2>
+            <h2>New inquiries</h2>
             <p>
               Public forms save requests here. A request is not an email sent or
               a meeting confirmed.
@@ -246,7 +246,7 @@ export default function Page() {
           <div className={s.sectionHead}>
             <div>
               <h2>Invite an agent or client</h2>
-              <p>Access is personal, scoped and expires if unused.</p>
+              <p>Each invitation is for one recipient and expires if unused.</p>
             </div>
           </div>
           <div className={s.sectionBody}>

@@ -4,16 +4,18 @@ import s from "../_components/marketing.module.css";
 export default function Page() {
   return (
     <>
-      <PageHead eyebrow="New agent onboarding" title="Let’s get acquainted.">
-        A quick conversation is a good place to start. Tell me a little about
-        your business and the support you’re looking for.
+      <PageHead
+        eyebrow="New agent onboarding"
+        title="Start working with Ireland."
+      >
+        Tell me about your transactions and the support you need. We’ll review
+        services, your brokerage’s requirements and how to submit a new file.
       </PageHead>
       <div className={s.twoCol}>
         <section className={s.panel}>
-          <h2>Request a conversation</h2>
+          <h2>Request a meeting</h2>
           <p>
-            Choose a preferred time. This is a request; availability will be
-            confirmed separately.
+            Suggest a date and time. Ireland will need to confirm the meeting.
           </p>
           <InquiryForm kind="meeting" />
         </section>
@@ -27,17 +29,19 @@ export default function Page() {
               <br />
               Portal access and transaction updates.
               <br />
-              Payment arrangements through Ireland’s own Stripe account and your
-              service agreement.
+              Service fees, payment timing and your service agreement.
             </p>
             <p>
-              Portal access follows Ireland’s review of your onboarding and
-              service agreement.
+              Ireland will review your onboarding and service agreement before
+              inviting you to the portal.
             </p>
           </section>
           <section className={s.panel} style={{ marginTop: 22 }}>
-            <h2>Prefer the details first?</h2>
-            <p>Request information to review on your own time.</p>
+            <h2>Request service information</h2>
+            <p>
+              Use this form if you’d like service information before requesting
+              a meeting.
+            </p>
             <InquiryForm kind="information" />
           </section>
         </div>

@@ -4,30 +4,30 @@ import s from "../_components/marketing.module.css";
 export default function Page() {
   return (
     <>
-      <PageHead
-        eyebrow="Let’s talk"
-        title="Good things start with a conversation."
-      >
-        Tell me what you’re working on and how I can help.
+      <PageHead eyebrow="Contact" title="Contact Ireland.">
+        Ask about services, onboarding or a transaction you’d like help with.
       </PageHead>
       <div className={s.twoCol}>
         <section className={s.panel}>
-          <h2>Get in touch</h2>
+          <h2>Send an inquiry</h2>
           <InquiryForm />
         </section>
         <section className={s.panel} style={{ alignSelf: "start" }}>
           <p className={s.eyebrow}>Weatherly Transaction Co.</p>
-          <h2>Here for the details.</h2>
+          <h2>Questions about working together?</h2>
           <p>
-            For onboarding questions, a new transaction, or finding the right
-            level of support, send a note using this form.
+            Tell Ireland what you need help with and include any questions about
+            your file or service options.
           </p>
           <div className={s.notice}>
-            Mailbox setup is pending. ireland@ireland.com is a placeholder and
-            is not used to send or receive your request. Form submissions are
-            securely recorded for Ireland to review.
+            Direct email contact is not available yet. Use the form to save your
+            request for Ireland to review. Submitting it does not send an email
+            or confirm a meeting.
           </div>
-          <p>Service area and contact details will be confirmed by Ireland.</p>
+          <p>
+            Ask Ireland to confirm availability for your transaction and service
+            area.
+          </p>
         </section>
       </div>
     </>

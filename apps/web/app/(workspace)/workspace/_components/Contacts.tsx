@@ -50,7 +50,7 @@ export default function Contacts({
       <div className={s.sectionHead}>
         <div>
           <h2>People on this deal</h2>
-          <p>Contact details for clear, thoughtful communication.</p>
+          <p>Client, agent, lender and title company contact details.</p>
         </div>
       </div>
       <div className={s.sectionBody}>

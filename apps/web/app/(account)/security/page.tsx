@@ -35,18 +35,19 @@ export default function Page() {
           <small>TRANSACTION CO.</small>
         </Link>
         <div>
-          <h1>
-            Private files.
-            <br />
-            <em>A little extra protection.</em>
-          </h1>
-          <p>Authenticator verification protects the coordinator workspace.</p>
+          <h1>Set up two-step sign-in.</h1>
+          <p>
+            Coordinators need a password and an authenticator code to access the
+            workspace.
+          </p>
         </div>
       </aside>
       <main className={s.formSide}>
         <div className={s.form}>
           <p className={s.eyebrow}>Account security</p>
-          <h2>{done ? "You’re protected." : "Set up your authenticator."}</h2>
+          <h2>
+            {done ? "Authenticator connected." : "Set up your authenticator."}
+          </h2>
           <p className={s.sub}>
             Use an authenticator app to generate a code when you sign in. Keep
             the setup key and recovery codes private.

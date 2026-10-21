@@ -5,16 +5,16 @@ import s from "../_components/marketing.module.css";
 export default function Page() {
   return (
     <>
-      <PageHead eyebrow="For agents" title="A home for your transactions.">
-        Submit a new intake, follow your files and keep the next step in view.
+      <PageHead eyebrow="For agents" title="Your transaction files.">
+        Submit a transaction and check its tasks, documents and dates.
       </PageHead>
       <div className={s.twoCol}>
         <section className={s.panel}>
-          <p className={s.eyebrow}>Already working together?</p>
-          <h2>Welcome back.</h2>
+          <p className={s.eyebrow}>Current agents</p>
+          <h2>Open your agent portal</h2>
           <p>
-            Your secure portal keeps your transaction details, shared tasks,
-            documents and payments together.
+            Sign in to view your transaction details, shared tasks, documents
+            and payment records.
           </p>
           <div className={s.actions}>
             <Link className={s.button} href="/login">
@@ -26,13 +26,13 @@ export default function Page() {
           </div>
         </section>
         <section className={s.panel}>
-          <p className={s.eyebrow}>New here?</p>
-          <h2>Let’s connect first.</h2>
+          <p className={s.eyebrow}>New agents</p>
+          <h2>Request portal access</h2>
           <p>
-            Portal access follows onboarding and your service agreement. Request
-            information below, or{" "}
+            Ireland will review your onboarding and service agreement before
+            inviting you. Request information below, or{" "}
             <Link href="/onboarding" className={s.textLink}>
-              request a conversation
+              request a meeting
             </Link>
             .
           </p>

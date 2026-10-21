@@ -54,9 +54,9 @@ export function Settings() {
   return (
     <>
       <Heading
-        eyebrow="Make yourself at home"
+        eyebrow="Workspace settings"
         title="Your settings"
-        subtitle="A thoughtful setup keeps everything running smoothly."
+        subtitle="Manage your profile, account security and connected services."
       />
       <section className={s.section}>
         <div className={s.sectionHead}>
@@ -209,7 +209,7 @@ export function Settings() {
       >
         <ShieldCheck size={22} />
         <div>
-          <strong>Private by design.</strong>
+          <strong>File access & permissions</strong>
           <br />
           Private notes, client contact permissions and file access are enforced
           across your workspace and connected tools.
@@ -232,9 +232,9 @@ export function Payments() {
   return (
     <>
       <Heading
-        eyebrow="Clear, considered pricing"
+        eyebrow="Service fees"
         title="Payments & service levels"
-        subtitle="A clear record of the support behind each transaction."
+        subtitle="View service prices and track payments."
       />
       <div className={s.cardGrid}>
         {catalog.loading
@@ -353,9 +353,9 @@ export function Inbox() {
   return (
     <>
       <Heading
-        eyebrow="Good communication, all together"
+        eyebrow="Transaction email"
         title="Your inbox"
-        subtitle="Conversations for the people and properties you’re coordinating."
+        subtitle="Read messages, prepare drafts and review recipients before sending."
       />
       <div className={s.twoCol}>
         <section className={s.section}>
@@ -409,7 +409,7 @@ export function Inbox() {
           ) : (
             <div className={s.empty}>
               <Mail />
-              You’re all caught up.
+              No synced conversations yet.
               <br />
               Synced transaction conversations will appear here.
             </div>
@@ -417,7 +417,7 @@ export function Inbox() {
         </section>
         <section className={s.section}>
           <div className={s.sectionHead}>
-            <h2>{selected ? "Your conversation" : "A calmer inbox"}</h2>
+            <h2>{selected ? "Your conversation" : "Select a conversation"}</h2>
           </div>
           <div className={s.sectionBody}>
             {selected ? (
@@ -485,15 +485,15 @@ export function Review() {
   return (
     <>
       <Heading
-        eyebrow="A second set of eyes"
+        eyebrow="Contract documents"
         title="Document review"
-        subtitle="Source-grounded assistance, with you in control of the final decision."
+        subtitle="Check AI suggestions against the contract before saving dates or other changes."
       />
       <div className={s.twoCol}>
         <section className={s.section}>
           <div className={s.sectionHead}>
             <div>
-              <h2>From contract to clarity</h2>
+              <h2>Review a contract</h2>
               <p>
                 Extract key fields and proposed dates from your transaction
                 documents.

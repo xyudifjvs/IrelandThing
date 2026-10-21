@@ -142,7 +142,7 @@ export default function DotloopSettings() {
                   ...(existing ? { expectedRevision: existing.revision } : {}),
                 });
                 setMessage(
-                  "Loop association saved. Review sync status below; this does not claim that a contract was already imported.",
+                  "Loop linked. Check the sync status below to see whether the contract has been imported.",
                 );
               });
             }}
@@ -257,7 +257,7 @@ export default function DotloopSettings() {
                 void action(async () => {
                   await mutate(`/api/v1/dotloop/links/${l.id}/sync`, {});
                   setMessage(
-                    "Sync request queued. Imported metadata and any manual-upload requirements appear in the transaction status.",
+                    "Sync requested. Check the transaction status for imported details or documents you need to upload.",
                   );
                 })
               }
@@ -268,9 +268,9 @@ export default function DotloopSettings() {
           </div>
         ))}
         <p className={s.fieldHint} style={{ marginTop: 20 }}>
-          Provider document-download capability is verified separately. A linked
-          loop or metadata sync never stands in for an executed contract; upload
-          it manually when the adapter reports that requirement.
+          Linking a Dotloop loop does not upload the signed contract. If
+          document downloads are unavailable, upload the contract directly to
+          this transaction.
         </p>
       </div>
     </section>

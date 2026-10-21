@@ -7,6 +7,7 @@ COPY packages ./packages
 RUN npm ci --include=dev
 FROM postgres:17-bookworm
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /app/package.json /app/package.json
 COPY --from=node-runtime /app/node_modules /app/node_modules
 COPY infra/ops /app/infra/ops
 WORKDIR /app

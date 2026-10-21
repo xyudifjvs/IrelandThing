@@ -1,8 +1,24 @@
 # Local implementation validation
 
-This is a locally implemented release candidate with live synthetic preview data. It is not a production deployment or proof of access to any real provider account. Parent/B00 records the frozen integrated release commit; R13 independently verifies that exact commit and the evidence below.
+This is a locally implemented release candidate with live synthetic preview data. It is not a production deployment or proof of access to any real provider account.
 
-## Build-team evidence
+## Integrated candidate
+
+The final product-code checkpoint is `f3b1338467337b33cd0973ed74eb097b88c6b0ef`. Subsequent release/evidence commits do not change product code.
+
+- Root TypeScript and all **67 tests across 12 files passed** against a separate local PostgreSQL test database. Tests refuse the preview database; temporary files use the platform's temporary directory.
+- [Linux GitHub Actions run 39537685610](https://github.com/xyudifjvs/IrelandThing/actions/runs/39537685610) passed npm installation, Prisma generation, all migrations against a fresh PostgreSQL 17 database, TypeScript, all 67 tests, the Next production build, HTTP acceptance and deployment source safeguards.
+- Root Next/Turbopack production build also passed locally at `00f99f0`, before the later backend-only refund correction and portable test fixtures.
+- Independent billing review at `f3b1338` passes **37/37** assertions, including the mixed Dashboard/local refund regression, incomplete/inconsistent reconciliation evidence, exact remaining balance, uncertain requests and cancellation races. See the final targeted review report under `docs/reviews/implementation/`.
+- Earlier independent exact-checkpoint evidence remains scoped to its recorded commit: core 17/17, documents 20/20, OAuth/MCP 30/30, dates/drafts 6/6 and Dotloop doubles 15/15 at `2859d65`; email AI 18/18, recovery 12/12 and AI routing 4/4 at `f014c1a`; production-owner bootstrap 8/8 at `b8c33dd`. These are targeted probes, not a claim that every historical probe was rerun on the final checkpoint.
+
+The root agent inspected the actual browser preview: public homepage, loaded workspace records, transaction detail sections, payment prices and disabled Stripe actions, plus Full Listing intake selection, saved draft progression and required-address validation. A temporary 390px viewport showed no document-width overflow; this is a bounded responsive check, not complete mobile/browser certification. The normal viewport was restored. Full browser traversal of every intake branch and separate agent/client journeys remain staging acceptance work; server-side role isolation is covered by the test/probe evidence.
+
+The preview stays running at `http://127.0.0.1:3000/workspace` using synthetic local records. Production is planned for **Railway PostgreSQL** and private object storage. No production service or provider account is connected.
+
+Known limitations remain explicit: scanned/image-only documents need readable text; no external OCR bypass exists. Email AI generation persists a processing record but is synchronous, so an interrupted request may require operator review of that record. Refund amounts remain conservatively reserved until complete, consistent provider evidence proves overlap; missing evidence never releases a hold. Three moderate dependency audit entries through Mammoth's CLI-only argparse/sprintf-js path remain tracked in the B01 handover; the application uses Mammoth's library text extraction, not that CLI.
+
+## Earlier build-team evidence
 
 | Check                                              | Result                             | Scope and limitation                                                                                                                                                                                                                                              |
 | -------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

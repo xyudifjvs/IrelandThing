@@ -75,28 +75,92 @@ export async function requestReview(actor: Principal, raw: unknown) {
     return proposal;
   });
 }
-export async function processReview(proposalId: string) {
+async function currentReviewOwner(
+  proposalId: string,
+  requestedById: string,
+  metadata?: {
+    model: string;
+    provider: string;
+    usage: { promptTokens: number; completionTokens: number };
+  },
+): Promise<Principal> {
+  const user = await prisma.user.findUnique({ where: { id: requestedById } });
+  const access = await prisma.auditEvent.findFirst({
+    where: {
+      entityType: "User",
+      entityId: requestedById,
+      action: { in: ["identity.access_revoked", "identity.access_restored"] },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const code =
+    !user || user.role !== "coordinator"
+      ? "REVIEW_ACCESS_REVOKED"
+      : access?.action === "identity.access_revoked"
+        ? "ACCOUNT_REVOKED"
+        : process.env.NODE_ENV === "production" && !user.twoFactorEnabled
+          ? "MFA_REQUIRED"
+          : null;
+  if (code) {
+    await prisma.$transaction(async (tx) => {
+      await tx.aIProposal.updateMany({
+        where: { id: proposalId, status: { in: ["queued", "processing"] } },
+        data: {
+          status: "failed",
+          result: { errorCode: code, requiresReview: true },
+          ...(metadata
+            ? {
+                model: metadata.model,
+                provider: metadata.provider,
+                tokenUsage: metadata.usage,
+              }
+            : {}),
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: requestedById,
+          action: "ai.review_access_denied",
+          entityType: "AIProposal",
+          entityId: proposalId,
+          details: { code },
+        },
+      });
+    });
+    throw new HttpError(
+      403,
+      code,
+      "The requesting coordinator no longer satisfies the access requirements for AI processing",
+    );
+  }
+  return {
+    id: user!.id,
+    email: user!.email,
+    name: user!.name,
+    role: "coordinator",
+    sessionId: "worker",
+  };
+}
+export async function processReview(
+  proposalId: string,
+  deps: { generate?: typeof generateStructured } = {},
+) {
   const proposal = await prisma.aIProposal.findUniqueOrThrow({
     where: { id: proposalId },
   });
   if (!["queued", "processing"].includes(proposal.status)) return;
+  if (proposal.kind !== "contract")
+    throw new HttpError(
+      422,
+      "REVIEW_KIND_MISMATCH",
+      "Only document proposals may use the document extraction worker",
+    );
   const refs = proposal.sourceRefs as {
     documentId: string;
     versionId: string;
     checksum: string;
   }[];
-  const user = await prisma.user.findUnique({
-    where: { id: proposal.requestedById },
-  });
-  if (!user || user.role !== "coordinator")
-    throw new Error("Review access revoked");
-  const actor: Principal = {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    role: "coordinator",
-    sessionId: "worker",
-  };
+  const actor = await currentReviewOwner(proposalId, proposal.requestedById);
   const document = await getDocument(actor, refs[0].documentId);
   const version = document.versions.find((v) => v.id === refs[0].versionId);
   if (!version?.extractedText || version.checksum !== refs[0].checksum)
@@ -105,7 +169,14 @@ export async function processReview(proposalId: string) {
     where: { id: proposalId, status: "queued" },
     data: { status: "processing" },
   });
-  const result = await generateStructured({
+  await currentReviewOwner(proposalId, proposal.requestedById);
+  if (!aiConfigured())
+    throw new HttpError(
+      503,
+      "AI_UNAVAILABLE",
+      "An approved OpenRouter ZDR route is required before processing source data",
+    );
+  const result = await (deps.generate || generateStructured)({
     purpose: "document_extraction",
     instructions:
       "Extract stated transaction facts and explicitly stated deadline dates. Do not calculate a deadline unless the text explicitly states the resulting date. Dates must be YYYY-MM-DD or null. Every fact/date requires a short exact verbatim quote found in the supplied pages and a matching page number if available. If conflicting amendments or ambiguous dates exist, use null, state uncertainty, and warn the reviewer. Return only supported facts. No legal conclusions.",
@@ -116,6 +187,7 @@ export async function processReview(proposalId: string) {
     },
     schema: extractionSchema,
   });
+  await currentReviewOwner(proposalId, proposal.requestedById, result);
   const source = normalize(version.extractedText);
   const warnings = [...result.data.warnings];
   const pages = Array.isArray(version.pages)

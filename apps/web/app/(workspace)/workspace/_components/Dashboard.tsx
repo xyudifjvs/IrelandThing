@@ -17,6 +17,7 @@ import {
   rows,
   address,
   date,
+  parseDate,
   label,
   progress,
   mutate,
@@ -52,15 +53,23 @@ export default function Dashboard({
   );
   const week = new Date(Date.now() + 7 * 86400000);
   const due = openTasks
-    .filter((t) => t.dueDate && new Date(t.dueDate) <= week)
+    .filter((t) => t.dueDate && parseDate(t.dueDate) <= week)
     .sort(
-      (a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime(),
+      (a, b) =>
+        parseDate(a.dueDate!).getTime() - parseDate(b.dueDate!).getTime(),
     );
   const closing = active.filter((m) => {
-    const value = m.closingDate || m.closeAt || m.details?.closingDate;
+    const value =
+      m.closingDate ||
+      m.closeAt ||
+      m.deadlines?.find(
+        (d) => d.label.toLowerCase() === "closing" && d.status === "confirmed",
+      )?.date ||
+      m.details?.closingDate;
     return (
       typeof value === "string" &&
-      new Date(value).getMonth() === new Date().getMonth()
+      parseDate(value).getMonth() === new Date().getMonth() &&
+      parseDate(value).getFullYear() === new Date().getFullYear()
     );
   });
   const filtered = matters.filter((m) =>

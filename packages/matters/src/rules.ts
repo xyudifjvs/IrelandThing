@@ -267,7 +267,7 @@ export async function applyInitialWorkflow(
   );
   await recalculateWorkflow(tx, actor, matterId);
 }
-/** Recomputes only rule-owned, unconfirmed dates. Manual changes and confirmed dates are preserved. */
+/** Recomputes rule-owned dates after anchor changes. Explicit manual overrides are preserved. */
 export async function recalculateWorkflow(
   tx: Prisma.TransactionClient,
   actor: Principal,
@@ -287,10 +287,7 @@ export async function recalculateWorkflow(
       (d) => (d.details as { workflowKey?: string }).workflowKey === step.key,
     );
     if (!deadline) continue;
-    if (
-      (deadline.details as { manualOverride?: boolean }).manualOverride ||
-      deadline.status === "confirmed"
-    ) {
+    if ((deadline.details as { manualOverride?: boolean }).manualOverride) {
       changes.push({
         label: deadline.label,
         date: deadline.date,
@@ -311,7 +308,16 @@ export async function recalculateWorkflow(
             step.rule.skipDates,
           )
         : null;
-    if (deadline.date === date) continue;
+    const previousAnchor = deadline.details as {
+      anchorId?: string;
+      anchorRevision?: number;
+    };
+    if (
+      deadline.date === date &&
+      previousAnchor.anchorId === (anchors[0]?.id || null) &&
+      previousAnchor.anchorRevision === (anchors[0]?.revision || null)
+    )
+      continue;
     const changed = await tx.deadline.updateMany({
       where: { id: deadline.id, revision: deadline.revision },
       data: {

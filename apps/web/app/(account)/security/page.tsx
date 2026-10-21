@@ -1,9 +1,19 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@weatherly/ui";
 import s from "../login/login.module.css";
+import { safeAuthorizationReturn } from "../_components/navigation";
 export default function Page() {
+  const [returnTo, setReturnTo] = useState("/workspace");
+  useEffect(() => {
+    setReturnTo(
+      safeAuthorizationReturn(
+        new URLSearchParams(window.location.search).get("next"),
+        window.location.origin,
+      ) || "/workspace",
+    );
+  }, []);
   const [setup, setSetup] = useState<{
     totpURI: string;
     backupCodes: string[];
@@ -47,7 +57,7 @@ export default function Page() {
             </p>
           )}
           {done ? (
-            <Link className={s.button} href="/workspace">
+            <Link className={s.button} href={returnTo}>
               Continue to workspace
             </Link>
           ) : !setup ? (

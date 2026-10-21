@@ -135,7 +135,16 @@ export async function grantPrincipal(token: string) {
     );
   await trustedClient(grant.clientId);
   const user = await prisma.user.findUnique({ where: { id: grant.userId } });
+  const access = await prisma.auditEvent.findFirst({
+    where: {
+      entityType: "User",
+      entityId: grant.userId,
+      action: { in: ["identity.access_revoked", "identity.access_restored"] },
+    },
+    orderBy: { createdAt: "desc" },
+  });
   if (
+    access?.action === "identity.access_revoked" ||
     !user ||
     user.role !== "coordinator" ||
     (!user.twoFactorEnabled &&

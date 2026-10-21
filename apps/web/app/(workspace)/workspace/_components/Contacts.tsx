@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Plus, Mail, Phone } from "lucide-react";
-import { mutate, type Matter, label } from "./data";
+import { mutate, useData, type Matter, label } from "./data";
 import s from "./workspace.module.css";
 type Contact = {
   id: string;
@@ -208,6 +208,74 @@ export default function Contacts({
             )}
           </form>
         </details>
+      </div>
+    </section>
+  );
+}
+
+export function AgentAssignment({
+  matter: m,
+  refresh,
+}: {
+  matter: Matter;
+  refresh: () => Promise<void>;
+}) {
+  const q =
+    useData<{ id: string; name: string; email: string; role: string }[]>(
+      "/api/v1/users",
+    );
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  return (
+    <section className={s.section}>
+      <div className={s.sectionHead}>
+        <h2>Agent on this file</h2>
+      </div>
+      <div className={s.sectionBody}>
+        <label className={s.field}>
+          Assigned agent
+          <select
+            className={s.select}
+            value={m.agentId || ""}
+            disabled={busy || q.loading}
+            onChange={async (e) => {
+              setBusy(true);
+              setError("");
+              try {
+                await mutate(
+                  `/api/v1/matters/${m.id}`,
+                  { expectedRevision: m.revision, agentId: e.target.value },
+                  "PATCH",
+                );
+                await refresh();
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <option value="" disabled>
+              Choose an existing agent
+            </option>
+            {q.data
+              ?.filter((u) => u.role === "agent")
+              .map((u) => (
+                <option value={u.id} key={u.id}>
+                  {u.name} · {u.email}
+                </option>
+              ))}
+          </select>
+        </label>
+        <p className={s.fieldHint}>
+          Assignment controls agent access and the agent copied on permitted
+          client communications.
+        </p>
+        {(error || q.error) && (
+          <p className={s.error} role="alert">
+            {error || q.error}
+          </p>
+        )}
       </div>
     </section>
   );

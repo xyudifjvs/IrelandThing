@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { queryStoredRecords } from "./records";
 import { z } from "zod";
 import { prisma } from "@weatherly/db";
 import {
@@ -20,6 +21,19 @@ import {
 } from "./access";
 export function createAssistantRouter() {
   const r = Router();
+  r.get(
+    "/records",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await queryStoredRecords(principal(req), {
+          kind: req.query.kind,
+          matterId: req.query.matterId,
+          cursor: req.query.cursor,
+          limit: req.query.limit ? Number(req.query.limit) : 50,
+        }),
+      ),
+    ),
+  );
   r.post(
     "/ask",
     asyncHandler(async (req, res) =>

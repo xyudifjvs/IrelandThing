@@ -98,7 +98,12 @@ export default function InquiryForm({
       {kind === "meeting" && (
         <label className={s.field}>
           Preferred date & time
-          <input type="datetime-local" name="meetingTime" className={s.input} />
+          <input
+            type="datetime-local"
+            name="meetingTime"
+            className={s.input}
+            required
+          />
           <small>
             Your local time zone. Ireland will confirm availability.
           </small>

@@ -4,6 +4,9 @@ import {
 } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { prisma } from "@weatherly/db";
+import { audit } from "@weatherly/matters";
+import { queryStoredRecords, recordKinds } from "./records";
 import { Router } from "express";
 import { asyncHandler, HttpError, sanitizeError } from "@weatherly/platform";
 import { grantPrincipal, mcpEnabled } from "./access";
@@ -56,17 +59,45 @@ export function createMcpRouter() {
         },
       );
       const run = async (
+        tool: string,
+        input: Record<string, unknown>,
         fn: (
           actor: Awaited<ReturnType<typeof grantPrincipal>>["actor"],
         ) => Promise<unknown>,
       ) => {
         try {
-          const { actor } = await grantPrincipal(token);
+          const { actor, grant } = await grantPrincipal(token);
           const data = await fn(actor);
+          await audit(
+            prisma,
+            actor,
+            "assistant.tool_read",
+            "AssistantGrant",
+            grant.id,
+            typeof input.matterId === "string" ? input.matterId : null,
+            {
+              tool,
+              recordId:
+                typeof input.documentId === "string" ? input.documentId : null,
+              outcome: "success",
+            },
+          );
           return {
             content: [{ type: "text" as const, text: JSON.stringify(data) }],
           };
         } catch (error) {
+          try {
+            const { actor, grant } = await grantPrincipal(token);
+            await audit(
+              prisma,
+              actor,
+              "assistant.tool_read",
+              "AssistantGrant",
+              grant.id,
+              null,
+              { tool, outcome: "denied_or_failed" },
+            );
+          } catch {}
           return {
             isError: true,
             content: [
@@ -85,6 +116,24 @@ export function createMcpRouter() {
         openWorldHint: false,
       };
       server.registerTool(
+        "query_records",
+        {
+          description:
+            "Read saved intake drafts/submissions, onboarding inquiries, signed agreements, catalog, communication/workflow templates, AI review history, activity, provider freshness, safe job status, and assistant history. Coordinator-only. Follow nextCursor for complete results; no secrets or token payloads.",
+          inputSchema: {
+            kind: z.enum(recordKinds),
+            matterId: z.string().optional(),
+            cursor: z.string().optional(),
+            limit: z.number().int().min(1).max(100).optional(),
+          },
+          annotations,
+        },
+        (input) =>
+          run("query_records", input, (actor) =>
+            queryStoredRecords(actor, input),
+          ),
+      );
+      server.registerTool(
         "list_matters",
         {
           description:
@@ -96,7 +145,7 @@ export function createMcpRouter() {
           annotations,
         },
         (input) =>
-          run((actor) =>
+          run("list_matters", input, (actor) =>
             listMatters(actor, { q: input.query, stage: input.stage }),
           ),
       );
@@ -108,7 +157,10 @@ export function createMcpRouter() {
           inputSchema: { matterId: z.string() },
           annotations,
         },
-        (input) => run((actor) => readMatterBundle(actor, input.matterId)),
+        (input) =>
+          run("get_matter", input, (actor) =>
+            readMatterBundle(actor, input.matterId),
+          ),
       );
       server.registerTool(
         "list_documents",
@@ -118,7 +170,10 @@ export function createMcpRouter() {
           inputSchema: { matterId: z.string().optional() },
           annotations,
         },
-        (input) => run((actor) => listDocuments(actor, input.matterId)),
+        (input) =>
+          run("list_documents", input, (actor) =>
+            listDocuments(actor, input.matterId),
+          ),
       );
       server.registerTool(
         "read_document",
@@ -128,7 +183,10 @@ export function createMcpRouter() {
           inputSchema: { documentId: z.string() },
           annotations,
         },
-        (input) => run((actor) => getDocument(actor, input.documentId)),
+        (input) =>
+          run("read_document", input, (actor) =>
+            getDocument(actor, input.documentId),
+          ),
       );
       server.registerTool(
         "search_evidence",
@@ -141,7 +199,10 @@ export function createMcpRouter() {
           },
           annotations,
         },
-        (input) => run((actor) => searchEvidence(actor, input)),
+        (input) =>
+          run("search_evidence", input, (actor) =>
+            searchEvidence(actor, input),
+          ),
       );
       server.registerTool(
         "list_payments",
@@ -151,7 +212,10 @@ export function createMcpRouter() {
           inputSchema: { matterId: z.string().optional() },
           annotations,
         },
-        (input) => run((actor) => listPayments(actor, input.matterId)),
+        (input) =>
+          run("list_payments", input, (actor) =>
+            listPayments(actor, input.matterId),
+          ),
       );
       server.registerTool(
         "list_gifts",
@@ -161,7 +225,8 @@ export function createMcpRouter() {
           inputSchema: { matterId: z.string().optional() },
           annotations,
         },
-        (input) => run((actor) => listGifts(actor, input.matterId)),
+        (input) =>
+          run("list_gifts", input, (actor) => listGifts(actor, input.matterId)),
       );
       server.registerResource(
         "matter",

@@ -316,6 +316,10 @@ export function Templates() {
   );
 }
 export function Composer() {
+  const users =
+    useData<{ id: string; name: string; email: string; role: string }[]>(
+      "/api/v1/users",
+    );
   const matters = useData<Matter[]>("/api/v1/matters");
   const templates = useData<Template[]>("/api/v1/communications/templates");
   const integrations = useData<{ provider: string; status: string }[]>(
@@ -370,7 +374,7 @@ export function Composer() {
     setMessage("");
     try {
       const values = {
-        matterId: matter,
+        ...(draft ? {} : { matterId: matter }),
         to: to
           .split(",")
           .map((x) => x.trim())
@@ -422,6 +426,12 @@ export function Composer() {
               value={matter}
               onChange={(e) => {
                 setMatter(e.target.value);
+                setTo("");
+                setCc("");
+                setSubject("");
+                setBody("");
+                setRecipientName("");
+                setTemplate("");
                 setDraft(null);
                 setDirty(true);
                 setAttachments([]);
@@ -538,6 +548,87 @@ export function Composer() {
               ? "Only through the agent. Direct client sending is restricted."
               : "Copy the agent on direct client communication."}
           </p>
+        )}
+        {detail.data && (
+          <div style={{ margin: "18px 0" }}>
+            <p className={s.fieldHint}>People saved on this deal</p>
+            <div className={s.formRow} style={{ flexWrap: "wrap" }}>
+              {users.data
+                ?.filter((u) => u.id === detail.data?.agentId)
+                .map((u) => (
+                  <button
+                    className={s.buttonSmall}
+                    key={u.id}
+                    onClick={() => {
+                      if (
+                        detail.data?.details?.directContact === "through_agent"
+                      )
+                        setTo(u.email);
+                      else
+                        setCc((v) =>
+                          Array.from(
+                            new Set([
+                              ...v
+                                .split(",")
+                                .map((x) => x.trim())
+                                .filter(Boolean),
+                              u.email,
+                            ]),
+                          ).join(", "),
+                        );
+                      setDirty(true);
+                      setConfirmed(false);
+                    }}
+                  >
+                    {detail.data?.details?.directContact === "through_agent"
+                      ? "To agent: "
+                      : "CC agent: "}
+                    {u.name}
+                  </button>
+                ))}
+              {[
+                ...(Array.isArray(detail.data.details?.contacts)
+                  ? detail.data.details.contacts
+                  : []),
+                ...(detail.data.details?.directContact === "through_agent"
+                  ? []
+                  : Array.isArray(detail.data.details?.clients)
+                    ? detail.data.details.clients
+                    : []),
+              ].map((raw, i) => {
+                const contact = raw as {
+                  name?: string;
+                  email?: string;
+                  role?: string;
+                };
+                if (!contact.email) return null;
+                return (
+                  <button
+                    key={i}
+                    className={s.buttonSmall}
+                    onClick={() => {
+                      setTo((v) =>
+                        Array.from(
+                          new Set([
+                            ...v
+                              .split(",")
+                              .map((x) => x.trim())
+                              .filter(Boolean),
+                            contact.email!,
+                          ]),
+                        ).join(", "),
+                      );
+                      setDirty(true);
+                      setConfirmed(false);
+                    }}
+                  >
+                    {contact.name || contact.email}
+                    {contact.role ? " · " + label(contact.role) : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
         <form
           onSubmit={(e) => {
@@ -696,5 +787,137 @@ export function Composer() {
         )}
       </div>
     </section>
+  );
+}
+export function MessageReview({
+  message,
+  onChanged,
+}: {
+  message: Record<string, unknown>;
+  onChanged: () => void;
+}) {
+  const matters = useData<Matter[]>("/api/v1/matters");
+  const threads = useData<
+    { id: string; matterId?: string | null; revision: number }[]
+  >("/api/v1/communications/threads");
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const thread = threads.data?.find((t) => t.id === message.threadId);
+  const [confirmed, setConfirmed] = useState(false);
+  return (
+    <div
+      style={{ marginTop: 25, borderTop: "1px solid #e3d6c1", paddingTop: 20 }}
+    >
+      <p className={s.eyebrow}>Reviewed file association & sharing</p>
+      {error && <p className={s.error}>{error}</p>}
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          setBusy(true);
+          setError("");
+          try {
+            if (!thread)
+              throw new Error(
+                "Refresh this conversation before changing its association.",
+              );
+            await mutate(
+              `/api/v1/communications/threads/${thread.id}`,
+              {
+                expectedRevision: thread.revision,
+                matterId: String(f.get("matterId") || "") || null,
+              },
+              "PATCH",
+            );
+            onChanged();
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label className={s.field}>
+          Associate this conversation with a transaction
+          <select
+            className={s.select}
+            name="matterId"
+            defaultValue={String(message.matterId || "")}
+          >
+            <option value="">Unassigned — coordinator review</option>
+            {matters.data?.map((m) => (
+              <option key={m.id} value={m.id}>
+                {address(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className={s.buttonSmall}
+          style={{ marginTop: 12 }}
+          disabled={busy || !thread}
+        >
+          Save reviewed association
+        </button>
+      </form>
+      <form
+        style={{ marginTop: 22 }}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          setBusy(true);
+          setError("");
+          try {
+            await mutate(
+              `/api/v1/communications/messages/${String(message.id)}`,
+              {
+                expectedRevision: Number(message.revision),
+                visibility: String(f.get("visibility")),
+              },
+              "PATCH",
+            );
+            onChanged();
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label className={s.field}>
+          Share this message with
+          <select
+            className={s.select}
+            name="visibility"
+            defaultValue={String(
+              (message.details as { visibility?: string } | undefined)
+                ?.visibility || "coordinator",
+            )}
+          >
+            <option value="coordinator">Coordinator only</option>
+            <option value="agent">Assigned agent & coordinator</option>
+            <option value="client">
+              Authorized client, agent & coordinator
+            </option>
+          </select>
+        </label>
+        <label className={s.todo}>
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+          />
+          I reviewed this individual message and its contents for the selected
+          audience.
+        </label>
+        <p className={s.fieldHint}>
+          Associating a conversation never shares its entire history. Sharing is
+          reviewed per message.
+        </p>
+        <button className={s.buttonSmall} disabled={busy || !confirmed}>
+          Save message visibility
+        </button>
+      </form>
+    </div>
   );
 }

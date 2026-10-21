@@ -1,10 +1,10 @@
 # Deployment preparation and release
 
-Status: prepared, not deployed. No Railway resource, account connection, paid service or production seed is created by these files. Use the reviewed exact commit, independent release evidence and the owner's launch authorization before deploying.
+Production release status: prepared, not accepted for real-client use. At the user's explicit request, a separate Railway staging environment has been deployed from GitHub; see `../release/railway-staging.md` and `../../infra/railway/staging.json`. Live provider integrations remain disabled and no demo seed is used. These runbook files do not provision resources automatically.
 
 ## Service layout
 
-`infra/railway/services.json` is an explicit review matrix, not an executable Railway configuration schema. It specifies Railway PostgreSQL, a private document bucket, private API/worker services and a public Next.js web service. Dockerfiles live under `infra/docker/`; use the repository root as build context. Each Dockerfile has a matching ignore file excluding secrets, dependencies and local data.
+`infra/railway/services.json` is an explicit production review matrix, not an executable Railway configuration schema. It specifies Railway PostgreSQL, a private document bucket, private API/worker services and a public Next.js web service. The separate `infra/railway/staging.json` records the actual hosted staging resources. Dockerfiles live under `infra/docker/`; use the repository root as build context. Each Dockerfile has a matching ignore file excluding secrets, dependencies and local data.
 
 Railway's current project configuration system is IaC; new services cannot use legacy `railway.json`/`railway.toml`. Translate this matrix into the linked environment's current IaC or settings during the separately approved provisioning step. Review a plan before applying it. [Current Railway IaC documentation](https://docs.railway.com/infrastructure-as-code).
 

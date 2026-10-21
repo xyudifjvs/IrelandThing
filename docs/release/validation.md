@@ -1,10 +1,10 @@
 # Local implementation validation
 
-This is a locally implemented release candidate with live synthetic preview data. It is not a production deployment or proof of access to any real provider account.
+This records the implementation and validation of a release candidate, with synthetic local preview data and a separately deployed hosted staging environment. It is not real-client production acceptance or proof of access to any real provider account. Hosted evidence is recorded in `railway-staging.md`.
 
 ## Integrated candidate
 
-The final product-code checkpoint is `f3b1338467337b33cd0973ed74eb097b88c6b0ef`. Subsequent release/evidence commits do not change product code.
+The original integrated product-code checkpoint was `f3b1338467337b33cd0973ed74eb097b88c6b0ef`. The later `ed5b4aa3eb8c6be65b83d886f827218562efd468` change adds an explicitly named initial owner and exact-email confirmation for the user-authorized temporary account. [Linux CI run 39539767541](https://github.com/xyudifjvs/IrelandThing/actions/runs/39539767541) passes the same 67-test suite, migrations, TypeScript, production build, HTTP acceptance and deployment safeguards at that revision; independent bootstrap review passes 14 checks. Deployment and evidence commits after it do not change application code.
 
 - Root TypeScript and all **67 tests across 12 files passed** against a separate local PostgreSQL test database. Tests refuse the preview database; temporary files use the platform's temporary directory.
 - [Linux GitHub Actions run 39537685610](https://github.com/xyudifjvs/IrelandThing/actions/runs/39537685610) passed npm installation, Prisma generation, all migrations against a fresh PostgreSQL 17 database, TypeScript, all 67 tests, the Next production build, HTTP acceptance and deployment source safeguards.
@@ -14,7 +14,7 @@ The final product-code checkpoint is `f3b1338467337b33cd0973ed74eb097b88c6b0ef`.
 
 The root agent inspected the actual browser preview: public homepage, loaded workspace records, transaction detail sections, payment prices and disabled Stripe actions, plus Full Listing intake selection, saved draft progression and required-address validation. A temporary 390px viewport showed no document-width overflow; this is a bounded responsive check, not complete mobile/browser certification. The normal viewport was restored. Full browser traversal of every intake branch and separate agent/client journeys remain staging acceptance work; server-side role isolation is covered by the test/probe evidence.
 
-The preview stays running at `http://127.0.0.1:3000/workspace` using synthetic local records. Production is planned for **Railway PostgreSQL** and private object storage. No production service or provider account is connected.
+The preview stays running at `http://127.0.0.1:3000/workspace` using synthetic local records. Hosted staging uses **Railway PostgreSQL 17** and private object storage, with a fresh database and production authentication settings. No live provider account is connected; the staging deployment does not approve real-client operations.
 
 Known limitations remain explicit: scanned/image-only documents need readable text; no external OCR bypass exists. Email AI generation persists a processing record but is synchronous, so an interrupted request may require operator review of that record. Refund amounts remain conservatively reserved until complete, consistent provider evidence proves overlap; missing evidence never releases a hold. Three moderate dependency audit entries through Mammoth's CLI-only argparse/sprintf-js path remain tracked in the B01 handover; the application uses Mammoth's library text extraction, not that CLI.
 
@@ -49,4 +49,4 @@ An initial full-suite run pointed at the shared local preview database encounter
 
 ## Final release gates
 
-Recheck the exact integrated candidate after all module changes, migrate a fresh database, run all tests/builds and record independent browser findings. Demonstrate private Railway bucket access and a recovery rehearsal using the approved account. Confirm the real mailbox, Ireland-owned Stripe account, Dotloop permissions, OpenRouter privacy/ZDR route, approved legal language/brokerage rules, fee timing and gift catalog. Preserve truthful unavailable states until those gates are complete. Deployment requires a separate explicit owner decision.
+Recheck the exact integrated candidate after further module changes, migrate a fresh database, run all tests/builds and record independent browser findings. Private Railway bucket access and a synthetic storage roundtrip have passed on staging; a hosted recovery rehearsal remains outstanding. Confirm the real mailbox, Ireland-owned Stripe account, Dotloop permissions, OpenRouter privacy/ZDR route, approved legal language/brokerage rules, fee timing and gift catalog. Preserve truthful unavailable states until those gates are complete. Staging deployment was explicitly authorized; real-client launch acceptance remains separate.

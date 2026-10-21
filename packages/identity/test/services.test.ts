@@ -1,7 +1,9 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
 import express from "express";
 import request from "supertest";
-import { rm } from "node:fs/promises";
+import { rm, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { randomUUID, createHmac, createHash } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@weatherly/db";
@@ -118,13 +120,15 @@ function pdf() {
     `trailer\n<< /Root 1 0 R /Size ${objects.length + 1} >>\nstartxref\n${start}\n%%EOF`;
   return Buffer.from(result);
 }
+let objectDirectory: string | undefined;
 beforeAll(async () => {
   process.env.APP_ENV = "local";
   process.env.BETTER_AUTH_SECRET =
     "synthetic-test-secret-at-least-thirty-two-characters";
   process.env.BETTER_AUTH_URL = "http://localhost:4000";
   process.env.WEB_ORIGIN = "http://localhost:3000";
-  process.env.OBJECT_STORAGE_DIR = `/private/tmp/weatherly-service-tests-${suffix}`;
+  objectDirectory = await mkdtemp(join(tmpdir(), "weatherly-service-tests-"));
+  process.env.OBJECT_STORAGE_DIR = objectDirectory;
   const password = await hashPassword("Synthetic-Test-2026!");
   const roles = ["coordinator", "agent", "agent", "client"];
   for (let i = 0; i < ids.length; i++) {
@@ -180,7 +184,8 @@ afterAll(async () => {
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.$disconnect();
-  await rm(process.env.OBJECT_STORAGE_DIR!, { recursive: true, force: true });
+  if (objectDirectory)
+    await rm(objectDirectory, { recursive: true, force: true });
 });
 describe("real PostgreSQL services and Better Auth", () => {
   it("enforces cross-agent access, explicit client projection, private notes, and revoked grants", async () => {

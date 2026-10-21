@@ -16,4 +16,4 @@ const draft=await request('/api/v1/documents',agent,'POST',form(pdf('Private una
 const invalid=await request('/api/v1/documents',agent,'POST',form(Buffer.from('not a valid document'),'bad.pdf'));check('Spoofed PDF rejected',invalid.status===415);const legacy=await request('/api/v1/documents',agent,'POST',form(Buffer.from('synthetic legacy'),'legacy.doc'));check('Legacy DOC returns actionable conversion',legacy.status===415&&legacy.data.error.code==='CONVERSION_REQUIRED');
 check('Client upload denied',(await request('/api/v1/documents',client,'POST',form(bytes1))).status===403);
 const wrong=await request('/api/v1/documents/'+id+'/download?versionId='+draft.data.versions[0].id,agent);check('Other document version cannot be substituted',wrong.status===404);
-console.log(JSON.stringify({candidate:'639caf4',checks:results.length,failures,results},null,2));
+console.log(JSON.stringify({candidate:'2859d65',checks:results.length,failures,results},null,2));

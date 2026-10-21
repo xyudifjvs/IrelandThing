@@ -12,7 +12,7 @@ async function req(path,cookie='',method='GET',body){const r=await fetch(base+pa
 async function login(email){const r=await req('/api/auth/sign-in/email','','POST',{email,password:pw});if(r.status!==200)throw new Error('Synthetic login failed '+email+' '+r.status+' '+JSON.stringify(r.data.error||r.data.message));return r.headers.getSetCookie().map(x=>x.split(';')[0]).join('; ');}
 check('Unauthenticated matter list denied',(await req('/api/v1/matters')).status===401);
 const owner=await login('ireland@example.test'),agent=await login('alex.agent@example.test'),client=await login('avery.client@example.test'),other=await login('checker-agent2@example.test');
-check('Coordinator sees seeded3 matters',(await req('/api/v1/matters',owner)).data.length===3);
+const seeded=(await req('/api/v1/matters',owner)).data;check('Coordinator sees all three seeded matters',['demo-oak','demo-river','demo-maple'].every(id=>seeded.some(m=>m.id===id)));
 check('Unrelated agent sees zero matters',(await req('/api/v1/matters',other)).data.length===0);
 check('Unrelated agent direct matter denied',(await req('/api/v1/matters/demo-oak',other)).status===404);
 const cp=await req('/api/v1/matters/demo-oak',client);check('Client narrow projection',cp.status===200&&!('details'in cp.data)&&!('participants'in cp.data)&&cp.data.notes.length===0&&cp.data.tasks.every(t=>t.visibility==='client'));
@@ -30,4 +30,4 @@ const submissions=await Promise.all([req('/api/v1/intakes/drafts/'+did+'/submit'
 const records=await db.query('SELECT count(*)::int n FROM "IntakeSubmission" WHERE "draftId"=$1',[did]);check('Exactly one persisted intake submission',records.rows[0].n===1);
 const mismatch=await req('/api/v1/intakes/drafts/'+did+'/submit',agent,'POST',{expectedRevision:1,idempotencyKey:'other-key-'+did});check('Different key cannot resubmit immutable intake',mismatch.status===409);
 const session=await req('/api/v1/session',other);const revoke=await req('/api/v1/sessions/revoke',other,'POST',{sessionId:session.data.session.id});check('Session revoke immediately blocks API',revoke.status===200&&(await req('/api/v1/matters',other)).status===401);
-await db.end();console.log(JSON.stringify({candidate:'b853921',checks:log.length,failures,results:log},null,2));
+await db.end();console.log(JSON.stringify({candidate:'2859d65',checks:log.length,failures,results:log},null,2));

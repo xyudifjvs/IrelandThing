@@ -15,7 +15,8 @@ import {
   Plus,
   LogOut,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import RouteFocus from "./RouteFocus";
 import { api, useData, type Session } from "./data";
 import s from "./workspace.module.css";
 const nav = [
@@ -31,6 +32,19 @@ export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const session = useData<Session>("/api/v1/session");
   const user = session.data?.user;
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  async function signOut() {
+    setSigningOut(true);
+    setSignOutError("");
+    try {
+      await api("/api/auth/sign-out", { method: "POST", body: "{}" });
+      window.location.href = "/login";
+    } catch (e) {
+      setSignOutError((e as Error).message);
+      setSigningOut(false);
+    }
+  }
   const current =
     nav.find((n) => n.href === pathname)?.label ||
     (pathname.includes("settings")
@@ -52,6 +66,13 @@ export default function Shell({ children }: { children: ReactNode }) {
               key={n.href}
               href={n.href}
               title={n.label}
+              aria-label={n.label}
+              aria-current={
+                pathname === n.href ||
+                (n.href !== "/workspace" && pathname.startsWith(n.href))
+                  ? "page"
+                  : undefined
+              }
               className={
                 pathname === n.href ||
                 (n.href != "/workspace" && pathname.startsWith(n.href))
@@ -95,26 +116,42 @@ export default function Shell({ children }: { children: ReactNode }) {
               aria-label="Sign out"
               title="Sign out"
               className={s.buttonSmall}
-              onClick={async () => {
-                await api("/api/auth/sign-out", {
-                  method: "POST",
-                  body: "{}",
-                  headers: { "Content-Type": "application/json" },
-                });
-                window.location.href = "/login";
-              }}
+              disabled={signingOut}
+              onClick={() => void signOut()}
             >
               <LogOut size={12} />
             </button>
           </div>
         </div>
       </aside>
-      <main className={s.main}>
+      <main className={s.main} id="main-content" tabIndex={-1}>
+        <RouteFocus />
         <header className={s.topbar}>
           <div className={s.breadcrumb}>
             Workspace <span>/</span> <span>{current}</span>
           </div>
           <div className={s.topActions}>
+            <details
+              className={s.mobileAccount}
+              key={pathname}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.currentTarget.open = false;
+                  e.currentTarget.querySelector("summary")?.focus();
+                }
+              }}
+            >
+              <summary>Account</summary>
+              <nav aria-label="Account and support">
+                <Link href="/workspace/settings">Settings</Link>
+                <Link href="/account">Your profile</Link>
+                <Link href="/portal">Agent and client portal</Link>
+                <Link href="/contact">Contact and support</Link>
+                <button disabled={signingOut} onClick={() => void signOut()}>
+                  {signingOut ? "Signing out…" : "Sign out"}
+                </button>
+              </nav>
+            </details>
             <span className={s.topDate}>
               {new Date().toLocaleDateString("en-US", {
                 month: "long",
@@ -134,6 +171,14 @@ export default function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <div className={s.content}>
+          {signOutError && (
+            <p className={s.error} role="alert">
+              Could not sign out: {signOutError}{" "}
+              <button className={s.buttonSmall} onClick={() => void signOut()}>
+                Try again
+              </button>
+            </p>
+          )}
           {process.env.NEXT_PUBLIC_APP_ENV === "local" && (
             <div className={s.localPreview}>Local preview · synthetic data</div>
           )}

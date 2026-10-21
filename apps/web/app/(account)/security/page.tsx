@@ -42,7 +42,7 @@ export default function Page() {
           </p>
         </div>
       </aside>
-      <main className={s.formSide}>
+      <div className={s.formSide}>
         <div className={s.form}>
           <p className={s.eyebrow}>Account security</p>
           <h2>
@@ -196,7 +196,7 @@ export default function Page() {
             Return to account
           </Link>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

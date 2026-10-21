@@ -81,7 +81,7 @@ export default function Login() {
           © {new Date().getFullYear()} Weatherly Transaction Co.
         </p>
       </aside>
-      <main className={s.formSide}>
+      <div className={s.formSide}>
         <div className={s.form}>
           <p className={s.eyebrow}>Account sign-in</p>
           <h2>
@@ -200,7 +200,7 @@ export default function Login() {
             <ArrowLeft size={10} /> Back to Weatherly
           </Link>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

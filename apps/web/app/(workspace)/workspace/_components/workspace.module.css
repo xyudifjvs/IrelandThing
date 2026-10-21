@@ -984,3 +984,56 @@
 .tableWrap {
   overflow-x: auto;
 }
+
+.mobileAccount {
+  display: none;
+  position: relative;
+}
+.mobileAccount summary {
+  cursor: pointer;
+  padding: 9px;
+  font-size: 12px;
+}
+.mobileAccount nav {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 80;
+  width: 220px;
+  display: grid;
+  background: #fcfaf6;
+  border: 1px solid #dcd3c5;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px #29241f20;
+  padding: 8px;
+}
+.mobileAccount nav a,
+.mobileAccount nav button {
+  text-align: left;
+  padding: 12px;
+  color: #4c4133;
+  font: inherit;
+  font-size: 13px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .mobileAccount {
+    display: block;
+  }
+  .topbar {
+    position: relative;
+    z-index: 20;
+  }
+}
+.documentCard {
+  border-top: 1px solid #e5ded2;
+  padding: 20px 0;
+}
+.documentActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}

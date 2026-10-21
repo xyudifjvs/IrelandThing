@@ -18,7 +18,7 @@ export default function Page() {
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
   return (
-    <main style={{ maxWidth: 850, margin: "auto", padding: "40px 25px" }}>
+    <div style={{ maxWidth: 850, margin: "auto", padding: "40px 25px" }}>
       <Link
         className={s.backLink}
         href={
@@ -124,6 +124,6 @@ export default function Page() {
           </div>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

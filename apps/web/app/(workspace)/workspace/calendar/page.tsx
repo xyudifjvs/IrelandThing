@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import {
-  useData,
+  useAllMatters,
   address,
   date,
   parseDate,
@@ -22,7 +22,7 @@ type Event = {
   kind: string;
 };
 export default function Page() {
-  const q = useData<Matter[]>("/api/v1/matters");
+  const q = useAllMatters();
   const [current, setCurrent] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
@@ -95,7 +95,14 @@ export default function Page() {
         title="Your calendar"
         subtitle="View contract deadlines and scheduled tasks by month."
       />
-      {q.error && <div className={s.error}>{q.error}</div>}
+      {q.error && (
+        <div className={s.error} role="alert">
+          Calendar could not be loaded completely: {q.error}{" "}
+          <button className={s.buttonSmall} onClick={() => void q.refresh()}>
+            Try again
+          </button>
+        </div>
+      )}
       <section className={s.section}>
         <div className={c.toolbar}>
           <h2>
@@ -137,7 +144,7 @@ export default function Page() {
         </div>
         {q.loading ? (
           <div className={s.loading}>Gathering your milestones…</div>
-        ) : (
+        ) : !q.error ? (
           <>
             <div className={c.weekdays}>
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((v) => (
@@ -172,7 +179,7 @@ export default function Page() {
               )}
             </div>
           </>
-        )}
+        ) : null}
       </section>
       <div className={s.notice}>
         <CalendarDays size={16} /> Proposed dates are marked for review. Open

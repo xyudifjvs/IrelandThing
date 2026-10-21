@@ -23,6 +23,7 @@ import {
 } from "../../../../(workspace)/workspace/_components/data";
 import s from "../../_components/portal.module.css";
 import SharedMessages from "../../_components/SharedMessages";
+import DocumentFiles from "../../../../(workspace)/workspace/_components/DocumentFiles";
 export default function Detail({
   params,
 }: {
@@ -39,20 +40,20 @@ export default function Detail({
   const [answer, setAnswer] = useState("");
   if (q.loading || session.loading)
     return (
-      <main className={s.main}>
+      <div className={s.main}>
         <div className={s.loading}>Opening your file…</div>
-      </main>
+      </div>
     );
   if (!q.data)
     return (
-      <main className={s.main}>
+      <div className={s.main}>
         <div className={s.error}>{q.error || "This file is unavailable."}</div>
         <Link href="/portal">Return to portal</Link>
-      </main>
+      </div>
     );
   const m = q.data;
   return (
-    <main className={s.main}>
+    <div className={s.main}>
       <Link className={s.back} href="/portal">
         <ArrowLeft size={10} /> Your transactions
       </Link>
@@ -120,75 +121,14 @@ export default function Detail({
               <p className={s.hint}>Your shared milestones will appear here.</p>
             )}
           </section>
-          <h2 className={s.sectionHead}>Your documents</h2>
-          <section className={s.card}>
-            {m.documents?.length ? (
-              m.documents.map((d) => (
-                <div className={s.line} key={d.id}>
-                  <FileText />
-                  <div style={{ flex: 1 }}>
-                    <p>{d.name || d.filename}</p>
-                    <small>Shared securely on your file</small>
-                  </div>
-                  <a
-                    href={`/api/v1/documents/${d.id}/download`}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`Download ${d.name || d.filename}`}
-                  >
-                    <Download size={15} />
-                  </a>
-                </div>
-              ))
-            ) : (
-              <p>No documents have been shared yet.</p>
+          <DocumentFiles
+            matterId={id}
+            coordinator={session.data?.user?.role === "coordinator"}
+            actorId={session.data?.user?.id}
+            canUpload={["agent", "coordinator"].includes(
+              session.data?.user?.role || "",
             )}
-            {!client && (
-              <form
-                style={{ marginTop: 20 }}
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  setBusy(true);
-                  setError("");
-                  const form = e.currentTarget;
-                  const f = new FormData(form);
-                  f.set("matterId", id);
-                  f.set("visibility", "agent");
-                  f.set("category", "other");
-                  try {
-                    await api("/api/v1/documents", { method: "POST", body: f });
-                    await q.refresh();
-                    setUploaded("Your document is saved.");
-                    form.reset();
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                <label className={s.hint}>
-                  Share a document with your coordinator
-                  <input
-                    className={s.input}
-                    style={{ marginTop: 9, marginBottom: 12 }}
-                    type="file"
-                    name="file"
-                    accept=".pdf,.docx"
-                    required
-                  />
-                </label>
-                <button className={s.secondary} disabled={busy}>
-                  {busy ? "Uploading…" : "Upload document"}
-                </button>
-                {uploaded && (
-                  <p className={s.hint} role="status">
-                    {uploaded}
-                  </p>
-                )}
-              </form>
-            )}
-          </section>
+          />
         </div>
         <aside>
           <section className={s.card}>
@@ -235,6 +175,6 @@ export default function Detail({
         <LockKeyhole size={10} /> Your account sees only the information shared
         with it.
       </p>
-    </main>
+    </div>
   );
 }

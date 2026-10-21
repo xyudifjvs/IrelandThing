@@ -178,3 +178,56 @@ export async function mutate<T>(path: string, body: unknown, method = "POST") {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+/** Load every authorized page before showing a complete calendar or portal list. */
+export function useAllMatters() {
+  const [data, setData] = useState<Matter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const request = useRef(0);
+  const refresh = useCallback(async () => {
+    const token = ++request.current;
+    setLoading(true);
+    setError("");
+    const all: Matter[] = [];
+    const visited = new Set<string>();
+    const seen = new Set<string>();
+    try {
+      let cursor = "";
+      while (true) {
+        const params = new URLSearchParams({ limit: "200" });
+        if (cursor) params.set("cursor", cursor);
+        const page = await api<Matter[]>(`/api/v1/matters?${params}`);
+        if (token !== request.current) return;
+        for (const matter of page)
+          if (!seen.has(matter.id)) {
+            seen.add(matter.id);
+            all.push(matter);
+          }
+        if (page.length < 200) break;
+        const next = page.at(-1)!.id;
+        if (visited.has(next))
+          throw new Error(
+            "The transaction list could not be completed. Please reload.",
+          );
+        visited.add(next);
+        cursor = next;
+      }
+      if (token === request.current) setData(all);
+    } catch (e) {
+      if (token === request.current) {
+        setData([]);
+        setError((e as Error).message);
+      }
+    } finally {
+      if (token === request.current) setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void refresh();
+    return () => {
+      request.current++;
+    };
+  }, [refresh]);
+  return { data, loading, error, refresh };
+}

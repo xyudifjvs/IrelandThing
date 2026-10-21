@@ -4,11 +4,22 @@ import { usePathname } from "next/navigation";
 import { Sparkles, X, ArrowUp, FileText, Clock3, Plus } from "lucide-react";
 import { api } from "@weatherly/ui";
 type Citation = { sourceId: string; title: string; url: string; quote: string };
+type Coverage = {
+  asOf: string;
+  mattersScanned: number;
+  documentsScanned: number;
+  sourcesIncluded: number;
+  contextCharacters: number;
+  incomplete: boolean;
+  historyMessagesIncluded?: number;
+  historyTruncated?: boolean;
+};
 type Message = {
   role: "user" | "assistant";
   content: string;
   citations?: Citation[];
   uncertainties?: string[];
+  coverage?: Coverage;
 };
 type Conversation = {
   id: string;
@@ -148,6 +159,20 @@ export function AssistantPanel() {
                       </a>
                     </details>
                   ))}
+                  {m.coverage && (
+                    <p className="assistant-caveat">
+                      As of {new Date(m.coverage.asOf).toLocaleString()}.
+                      Checked {m.coverage.mattersScanned} transaction(s) and{" "}
+                      {m.coverage.documentsScanned} document(s); used{" "}
+                      {m.coverage.sourcesIncluded} ranked source excerpts.
+                      {m.coverage.incomplete
+                        ? " Coverage is incomplete; narrow the question or inspect full records."
+                        : " Retrieved excerpts may omit relevant context."}
+                      {m.coverage.historyTruncated
+                        ? " Earlier conversation was omitted."
+                        : ""}
+                    </p>
+                  )}
                   {m.uncertainties?.length ? (
                     <p className="assistant-caveat">
                       {m.uncertainties.join(" ")}
@@ -209,6 +234,7 @@ export function AssistantPanel() {
                   answer: string;
                   citations: Citation[];
                   uncertainties: string[];
+                  coverage: Coverage;
                 }>("/api/v1/assistant/ask", {
                   method: "POST",
                   body: JSON.stringify({
@@ -225,6 +251,7 @@ export function AssistantPanel() {
                     content: response.answer,
                     citations: response.citations,
                     uncertainties: response.uncertainties,
+                    coverage: response.coverage,
                   },
                 ]);
                 setConversationId(response.conversationId);

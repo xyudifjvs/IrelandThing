@@ -36,7 +36,7 @@ const fake: typeof generateStructured = async <T>(
     }),
     model: "synthetic/contract-model",
     provider: "synthetic-provider",
-    usage: { promptTokens: 120, completionTokens: 40 },
+    usage: { promptTokens: 120, completionTokens: 40, costUsd: null },
   };
 };
 async function fixture(twoFactorEnabled = false) {
@@ -219,6 +219,7 @@ describe("document AI worker checks current owner access", () => {
     expect(result.tokenUsage).toEqual({
       promptTokens: 120,
       completionTokens: 40,
+      costUsd: null,
     });
     const email = await prisma.aIProposal.create({
       data: {
@@ -276,6 +277,7 @@ describe("document AI worker checks current owner access", () => {
     expect(result.tokenUsage).toEqual({
       promptTokens: 120,
       completionTokens: 40,
+      costUsd: null,
     });
     expect(
       await prisma.deadline.count({

@@ -8,8 +8,16 @@ import {
 } from "@weatherly/platform";
 import { audit, requireMatter, matterScope } from "@weatherly/matters";
 import { checkoutInput } from "./contracts";
+import { paymentMode, assertPaymentKey, assertPaymentEvent } from "./mode";
 
 export function billingConfigured() {
+  try {
+    paymentMode();
+    if (process.env.STRIPE_SECRET_KEY)
+      assertPaymentKey(process.env.STRIPE_SECRET_KEY);
+  } catch {
+    return false;
+  }
   return Boolean(
     process.env.STRIPE_SECRET_KEY &&
     process.env.STRIPE_WEBHOOK_SECRET &&
@@ -18,6 +26,9 @@ export function billingConfigured() {
   );
 }
 function stripeClient() {
+  paymentMode();
+  if (process.env.STRIPE_SECRET_KEY)
+    assertPaymentKey(process.env.STRIPE_SECRET_KEY);
   if (!billingConfigured())
     throw new HttpError(
       503,
@@ -25,12 +36,7 @@ function stripeClient() {
       "Ireland must configure her own Stripe account before payments can be requested.",
     );
   const key = process.env.STRIPE_SECRET_KEY!;
-  if (process.env.APP_ENV !== "production" && !/^(sk|rk)_test_/.test(key))
-    throw new HttpError(
-      503,
-      "LIVE_KEY_FORBIDDEN",
-      "Development and staging require Ireland’s Stripe sandbox credentials.",
-    );
+  assertPaymentKey(key);
   return new Stripe(key, { maxNetworkRetries: 2, timeout: 20000 });
 }
 export async function verifiedStripe() {
@@ -278,12 +284,7 @@ export async function createCheckout(
 }
 
 export async function applyStripeEvent(event: Stripe.Event) {
-  if (event.livemode !== (process.env.STRIPE_MODE === "live"))
-    throw new HttpError(
-      400,
-      "WRONG_STRIPE_MODE",
-      "Unexpected payment environment.",
-    );
+  assertPaymentEvent(event);
   const checkoutTypes = [
     "checkout.session.completed",
     "checkout.session.async_payment_succeeded",
@@ -433,11 +434,13 @@ export async function applyStripeEvent(event: Stripe.Event) {
   });
 }
 export function verifyStripeWebhook(body: Buffer, signature: string) {
-  return stripeClient().webhooks.constructEvent(
+  const event = stripeClient().webhooks.constructEvent(
     body,
     signature,
     process.env.STRIPE_WEBHOOK_SECRET!,
   );
+  assertPaymentEvent(event);
+  return event;
 }
 export async function listGifts(
   actor: Principal,

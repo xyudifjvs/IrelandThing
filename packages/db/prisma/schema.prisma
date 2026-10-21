@@ -361,6 +361,7 @@ model EmailMessage {
   html              String?
   sentAt            DateTime
   direction         String
+  revision          Int         @default(1)
   details           Json        @default("{}")
   createdAt         DateTime    @default(now())
   thread            EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)

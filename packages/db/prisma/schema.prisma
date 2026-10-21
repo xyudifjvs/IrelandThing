@@ -433,9 +433,47 @@ model AssistantGrant {
   scopes             Json
   approvedClient     Boolean   @default(false)
   complianceEvidence String?
+  clientId           String?
   expiresAt          DateTime
   revokedAt          DateTime?
   createdAt          DateTime  @default(now())
+}
+
+model AssistantClient {
+  id                 String   @id
+  name               String
+  redirectUris       Json
+  approved           Boolean  @default(false)
+  complianceEvidence String
+  approvedById       String
+  createdAt          DateTime @default(now())
+}
+
+model AssistantAuthorization {
+  id            String    @id
+  clientId      String
+  userId        String
+  redirectUri   String
+  codeChallenge String
+  state         String?
+  resource      String
+  codeHash      String?   @unique
+  authorizedAt  DateTime?
+  consumedAt    DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+}
+
+model WorkflowTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  side        String
+  packageCode String
+  definition  Json
+  revision    Int      @default(1)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model WebhookReceipt {

@@ -7,7 +7,7 @@ import {
   principal,
   type Principal,
 } from "@weatherly/platform";
-import { audit, revision } from "@weatherly/matters";
+import { audit, revision, applyInitialWorkflow } from "@weatherly/matters";
 const contact = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -385,23 +385,6 @@ export async function submitIntake(
         add("Review broker compliance file", "compliance");
       if (data.gift.requested)
         add("Confirm gift catalog and payment before ordering", "gift");
-      for (const title of [
-        "Earnest money evidence",
-        "Inspection and remedies",
-        "Title review",
-        "Final walkthrough",
-        "Closing",
-        "Possession",
-      ])
-        add(title, "milestone");
-      if (data.purchaseType === "financed")
-        for (const title of [
-          "Preapproval evidence",
-          "Loan application",
-          "Appraisal",
-          "Financing commitment",
-        ])
-          add(title, "milestone");
       await tx.task.createMany({
         data: tasks.map((task) => ({ ...task, matterId: matter.id })),
       });
@@ -413,6 +396,7 @@ export async function submitIntake(
           details: { source: "intake", reviewRequired: true },
         })),
       });
+      await applyInitialWorkflow(tx, actor, matter.id);
       const submission = await tx.intakeSubmission.create({
         data: {
           draftId: id,
@@ -442,7 +426,10 @@ export async function submitIntake(
         matter.id,
         { draftId: id },
       );
-      return { submission, matter };
+      return {
+        submission,
+        matter: await tx.matter.findUniqueOrThrow({ where: { id: matter.id } }),
+      };
     });
   } catch (error) {
     if (

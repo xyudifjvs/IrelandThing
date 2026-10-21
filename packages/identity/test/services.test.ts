@@ -23,6 +23,9 @@ import {
   addTask,
   createMattersRouter,
   applyReviewedFacts,
+  createWorkflowTemplate,
+  updateWorkflowTemplate,
+  updateDeadline,
 } from "../../matters/src/index";
 import {
   intakePayload,
@@ -44,6 +47,7 @@ const ids = ["owner", "agent", "other", "client"].map(
 const matterIds: string[] = [];
 const draftIds: string[] = [];
 const documentIds: string[] = [];
+const workflowTemplateIds: string[] = [];
 let owner: Principal, agent: Principal, other: Principal, client: Principal;
 function totp(uri: string) {
   const encoded = new URL(uri).searchParams.get("secret")!;
@@ -171,6 +175,9 @@ afterAll(async () => {
   await prisma.matter.deleteMany({ where: { id: { in: matterIds } } });
   await prisma.auditEvent.deleteMany({ where: { actorId: { in: ids } } });
   await prisma.invitation.deleteMany({ where: { invitedById: { in: ids } } });
+  await prisma.workflowTemplate.deleteMany({
+    where: { id: { in: workflowTemplateIds } },
+  });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.$disconnect();
   await rm(process.env.OBJECT_STORAGE_DIR!, { recursive: true, force: true });
@@ -578,5 +585,109 @@ describe("real PostgreSQL services and Better Auth", () => {
       .get("/api/v1/session")
       .set("Cookie", verifiedCookie)
       .expect(401);
+  });
+  it("snapshots future-only workflow versions and recalculates dependent dates while preserving overrides", async () => {
+    const definition = {
+      steps: [
+        {
+          key: "inspection_due",
+          title: "Inspection deadline",
+          kind: "checklist",
+          visibility: "agent",
+          rule: {
+            anchor: "Closing date",
+            offsetDays: -3,
+            businessDays: false,
+            skipDates: [],
+          },
+        },
+      ],
+    };
+    const template = await createWorkflowTemplate(owner, {
+      name: `Synthetic rules ${suffix}`,
+      side: "seller",
+      packageCode: "full_listing",
+      definition,
+    });
+    workflowTemplateIds.push(template.id);
+    const first = await createMatter(owner, {
+      title: `Page-${suffix}-first`,
+      propertyAddress: "Synthetic workflow first",
+      side: "seller",
+      packageCode: "full_listing",
+      agentId: agent.id,
+    });
+    matterIds.push(first.id);
+    expect(
+      (first.details as { workflow: { templateId: string } }).workflow
+        .templateId,
+    ).toBe(template.id);
+    const anchor = await addDeadline(owner, first.id, {
+      label: "Closing date",
+      date: "2026-12-20",
+      status: "confirmed",
+    });
+    let dependent = await prisma.deadline.findFirstOrThrow({
+      where: { matterId: first.id, label: "Inspection deadline" },
+    });
+    expect(dependent.date).toBe("2026-12-17");
+    await updateDeadline(owner, first.id, anchor.id, {
+      expectedRevision: 1,
+      date: "2026-12-25",
+    });
+    dependent = await prisma.deadline.findUniqueOrThrow({
+      where: { id: dependent.id },
+    });
+    expect(dependent.date).toBe("2026-12-22");
+    await updateDeadline(owner, first.id, dependent.id, {
+      expectedRevision: dependent.revision,
+      date: "2026-12-19",
+    });
+    await updateDeadline(owner, first.id, anchor.id, {
+      expectedRevision: 2,
+      date: "2026-12-30",
+    });
+    expect(
+      (await prisma.deadline.findUniqueOrThrow({ where: { id: dependent.id } }))
+        .date,
+    ).toBe("2026-12-19");
+    await updateWorkflowTemplate(owner, template.id, {
+      expectedRevision: 1,
+      definition: {
+        steps: [
+          {
+            ...definition.steps[0],
+            rule: { ...definition.steps[0].rule, offsetDays: -7 },
+          },
+        ],
+      },
+    });
+    const second = await createMatter(owner, {
+      title: `Page-${suffix}-second`,
+      propertyAddress: "Synthetic workflow second",
+      side: "seller",
+      packageCode: "full_listing",
+      agentId: agent.id,
+    });
+    matterIds.push(second.id);
+    expect(
+      (second.details as { workflow: { templateRevision: number } }).workflow
+        .templateRevision,
+    ).toBe(2);
+    expect(
+      (
+        (await prisma.matter.findUniqueOrThrow({ where: { id: first.id } }))
+          .details as { workflow: { templateRevision: number } }
+      ).workflow.templateRevision,
+    ).toBe(1);
+    const page1 = await listMatters(agent, { q: `Page-${suffix}`, limit: 1 });
+    const page2 = await listMatters(agent, {
+      q: `Page-${suffix}`,
+      limit: 1,
+      cursor: page1[0].id,
+    });
+    expect(page1).toHaveLength(1);
+    expect(page2).toHaveLength(1);
+    expect(page1[0].id).not.toBe(page2[0].id);
   });
 });

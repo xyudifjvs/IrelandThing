@@ -61,7 +61,7 @@ const fake: typeof generateStructured = async <T>(
     data: data as T,
     model: "synthetic/email-model",
     provider: "synthetic-approved-provider",
-    usage: { promptTokens: 100, completionTokens: 50 },
+    usage: { promptTokens: 100, costUsd: null, completionTokens: 50 },
   };
 };
 const service = createEmailSuggestionService({ generate: fake });
@@ -208,6 +208,7 @@ describe("review-only email AI with real persistence and an injected gateway", (
     ]);
     expect(proposal.tokenUsage).toEqual({
       promptTokens: 100,
+      costUsd: null,
       completionTokens: 50,
     });
     expect(proposal.result).toMatchObject({

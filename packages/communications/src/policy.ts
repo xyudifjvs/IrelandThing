@@ -20,6 +20,7 @@ export const draftInput = z
     templateId: z.string().optional(),
     templateRevision: z.number().int().positive().optional(),
     replyToMessageId: z.string().optional(),
+    templateValues: z.record(z.string(), z.string().max(2000)).optional(),
   })
   .strict();
 export function asRecord(value: unknown): Record<string, unknown> {
@@ -111,11 +112,21 @@ export const templateKeys = new Set([
   "packageName",
   "recipientName",
   "coordinatorName",
+  "possessionDate",
+  "inspectionDate",
+  "earnestMoneyDate",
+  "hoaDate",
+  "titleDate",
+  "appraisalDate",
+  "loanCommitmentDate",
 ]);
 export function validateMerge(template: string) {
   const matches = [...template.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)];
   for (const m of matches)
-    if (!templateKeys.has(m[1]))
+    if (
+      !templateKeys.has(m[1]) &&
+      !/^(date|deadline|task)_[a-z0-9_]{1,80}$/.test(m[1])
+    )
       throw new HttpError(
         422,
         "UNKNOWN_MERGE_FIELD",

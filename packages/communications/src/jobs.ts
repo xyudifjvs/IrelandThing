@@ -565,6 +565,51 @@ export function createCommunicationJobHandlers(
         "Message must be reviewed again",
       );
     requireResolved(String(snapshot.subject), String(snapshot.body));
+    if (
+      Array.isArray(snapshot.sourceDeadlines) &&
+      snapshot.sourceDeadlines.length
+    ) {
+      const current = await prisma.deadline.findMany({
+        where: { matterId: draft.matterId },
+        select: { id: true, revision: true },
+      });
+      const expected = new Map(
+        snapshot.sourceDeadlines.map((v) => {
+          const d = asRecord(v);
+          return [String(d.id), Number(d.revision)];
+        }),
+      );
+      if (
+        current.length !== expected.size ||
+        current.some((d) => expected.get(d.id) !== d.revision)
+      )
+        throw new HttpError(
+          409,
+          "SOURCE_DEADLINES_CHANGED",
+          "Dates changed after send approval; review a new draft before sending",
+        );
+    }
+    if (Array.isArray(snapshot.sourceTasks) && snapshot.sourceTasks.length) {
+      const current = await prisma.task.findMany({
+        where: { matterId: draft.matterId, dueDate: { not: null } },
+        select: { id: true, revision: true },
+      });
+      const expected = new Map(
+        snapshot.sourceTasks.map((v) => {
+          const t = asRecord(v);
+          return [String(t.id), Number(t.revision)];
+        }),
+      );
+      if (
+        current.length !== expected.size ||
+        current.some((t) => expected.get(t.id) !== t.revision)
+      )
+        throw new HttpError(
+          409,
+          "SOURCE_DATES_CHANGED",
+          "Task dates changed after approval; review a new draft",
+        );
+    }
     const recipients = await recipientPolicy(
       actor,
       draft.matterId,

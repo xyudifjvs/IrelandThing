@@ -4,7 +4,13 @@ import { rm } from "node:fs/promises";
 import { type Credentials } from "google-auth-library";
 import { prisma } from "@weatherly/db";
 import { encryptSecret, HttpError, type Principal } from "@weatherly/platform";
-import { createMatter } from "@weatherly/matters";
+import {
+  createMatter,
+  createWorkflowTemplate,
+  addDeadline,
+  updateDeadline,
+  registerMatterChangeHook,
+} from "@weatherly/matters";
 import { createCommunicationsService } from "../src/service";
 import { createCommunicationJobHandlers } from "../src/jobs";
 import {
@@ -23,6 +29,7 @@ const mail = "synthetic-weatherly@example.org",
   lenderEmail = "synthetic-lender@example.org";
 let owner: Principal, agent: Principal, client: Principal;
 const matterIds: string[] = [];
+const workflowTemplateIds: string[] = [];
 const tokens: Credentials = {
   access_token: "synthetic-access-token",
   refresh_token: "synthetic-refresh-token",
@@ -176,6 +183,7 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => {
+  registerMatterChangeHook(undefined);
   const drafts = await prisma.emailDraft.findMany({
     where: { createdById: ownerId },
   });
@@ -198,6 +206,9 @@ afterAll(async () => {
   });
   await prisma.auditEvent.deleteMany({ where: { actorId: ownerId } });
   await prisma.matter.deleteMany({ where: { id: { in: matterIds } } });
+  await prisma.workflowTemplate.deleteMany({
+    where: { id: { in: workflowTemplateIds } },
+  });
   await prisma.user.deleteMany({
     where: { id: { in: [ownerId, agentId, clientId] } },
   });
@@ -610,5 +621,149 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
       "renewed",
       true,
     );
+  });
+  it("merges confirmed custom milestone dates, refreshes unchanged draft fields, preserves overrides and invalidates queued date snapshots", async () => {
+    const workflow = await createWorkflowTemplate(owner, {
+      name: `Mail workflow ${suffix}`,
+      side: "buyer",
+      packageCode: "complete",
+      definition: {
+        steps: [
+          {
+            key: "custom_review",
+            title: "Custom review",
+            kind: "checklist",
+            visibility: "agent",
+            rule: {
+              anchor: "Closing date",
+              offsetDays: -2,
+              businessDays: false,
+              skipDates: [],
+            },
+          },
+        ],
+      },
+    });
+    workflowTemplateIds.push(workflow.id);
+    const matter = await createMatter(owner, {
+      title: "Custom date mail",
+      propertyAddress: "Custom Synthetic Mail Road",
+      side: "buyer",
+      packageCode: "complete",
+      agentId,
+      details: {
+        directContact: "through_agent",
+        contacts: [{ name: "Lender", role: "lender", email: lenderEmail }],
+      },
+    });
+    matterIds.push(matter.id);
+    registerMatterChangeHook((tx, actor, id) =>
+      service.refreshTemplateDrafts(actor, id, tx),
+    );
+    const anchor = await addDeadline(owner, matter.id, {
+      label: "Closing date",
+      date: "2026-12-20",
+      status: "confirmed",
+    });
+    let custom = await prisma.deadline.findFirstOrThrow({
+      where: { matterId: matter.id, label: "Custom review" },
+    });
+    expect(
+      (await service.availableMergeFields(owner, matter.id)).find(
+        (f) => f.key === "date_custom_review",
+      )?.value,
+    ).toBeNull();
+    await updateDeadline(owner, matter.id, custom.id, {
+      expectedRevision: custom.revision,
+      status: "confirmed",
+    });
+    const template = await service.saveTemplate(owner, {
+      name: `Dynamic ${suffix}`,
+      side: "buyer",
+      phase: "closing",
+      subject: "Closing {{closingDate}}",
+      body: "Review {{date_custom_review}}; follow up {{task_custom_review}}",
+    });
+    const rendered = await service.renderTemplate(owner, template.id, {
+      matterId: matter.id,
+    });
+    expect(rendered.body).toContain("2026-12-18");
+    const draft = await service.createDraft(owner, {
+      matterId: matter.id,
+      to: [lenderEmail],
+      subject: rendered.subject,
+      body: rendered.body,
+      templateId: template.id,
+      templateRevision: template.revision,
+      templateValues: {},
+    });
+    await updateDeadline(owner, matter.id, anchor.id, {
+      expectedRevision: 1,
+      date: "2026-12-25",
+    });
+    let refreshed = await prisma.emailDraft.findUniqueOrThrow({
+      where: { id: draft.id },
+    });
+    expect(refreshed.subject).toBe("Closing 2026-12-25");
+    custom = await prisma.deadline.findUniqueOrThrow({
+      where: { id: custom.id },
+    });
+    await updateDeadline(owner, matter.id, custom.id, {
+      expectedRevision: custom.revision,
+      date: "2026-12-23",
+    });
+    refreshed = await prisma.emailDraft.findUniqueOrThrow({
+      where: { id: draft.id },
+    });
+    expect(refreshed.body).toContain("2026-12-23");
+    await service.updateDraft(owner, draft.id, {
+      expectedRevision: refreshed.revision,
+      body: "Manually edited: preserve this wording",
+    });
+    await updateDeadline(owner, matter.id, anchor.id, {
+      expectedRevision: 2,
+      date: "2026-12-30",
+    });
+    refreshed = await prisma.emailDraft.findUniqueOrThrow({
+      where: { id: draft.id },
+    });
+    expect(refreshed.body).toBe("Manually edited: preserve this wording");
+    expect(refreshed.details).toMatchObject({
+      bodyOverride: true,
+      reviewNeeded: true,
+    });
+    const reset = await service.resetTemplate(owner, draft.id, {
+      expectedRevision: refreshed.revision,
+    });
+    expect(reset.body).toContain("2026-12-23");
+    const approved = await service.queueSend(owner, draft.id, {
+      revision: reset.revision,
+      confirmed: true,
+    });
+    await updateDeadline(owner, matter.id, anchor.id, {
+      expectedRevision: 3,
+      date: "2026-12-31",
+    });
+    expect(
+      (await prisma.emailDraft.findUniqueOrThrow({ where: { id: draft.id } }))
+        .subject,
+    ).toBe("Closing 2026-12-30");
+    await expect(
+      jobs["gmail.send"]({
+        draftId: draft.id,
+        ownerId,
+        sendKey: approved.sendKey!,
+      }),
+    ).rejects.toMatchObject({ code: "SOURCE_DEADLINES_CHANGED" });
+    await addDeadline(owner, matter.id, {
+      label: "Closing date",
+      date: "2027-01-10",
+      status: "confirmed",
+    });
+    expect(
+      (await service.availableMergeFields(owner, matter.id)).find(
+        (f) => f.key === "closingDate",
+      )?.status,
+    ).toBe("ambiguous");
   });
 });

@@ -438,7 +438,11 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     });
     expect(await service.listMessages(client, matterIds[0])).toEqual([]);
     await service.shareMessage(owner, thread.messages[0].id, {
-      expectedRevision: 1,
+      expectedRevision: (
+        await prisma.emailMessage.findUniqueOrThrow({
+          where: { id: thread.messages[0].id },
+        })
+      ).revision,
       visibility: "client",
     });
     expect(
@@ -462,6 +466,72 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
         },
       }),
     ).toBe(1);
+  });
+  it("clears sharing on rematch and derives portal subjects only from visible messages", async () => {
+    const first = matterIds[0];
+    const second = await createMatter(owner, {
+      title: "Other transaction",
+      propertyAddress: "Other Synthetic Road",
+      side: "buyer",
+      packageCode: "essentials",
+      agentId,
+    });
+    matterIds.push(second.id);
+    const thread = await prisma.emailThread.create({
+      data: {
+        ownerId,
+        providerThreadId: `privacy-${suffix}`,
+        matterId: first,
+        subject: "Private first subject",
+        status: "assigned",
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        providerMessageId: `privacy-hidden-${suffix}`,
+        threadId: thread.id,
+        fromEmail: lenderEmail,
+        to: [mail],
+        subject: "Private first subject",
+        text: "Private details",
+        sentAt: new Date(Date.now() - 1000),
+        direction: "inbound",
+        details: { visibility: "coordinator" },
+      },
+    });
+    const shown = await prisma.emailMessage.create({
+      data: {
+        providerMessageId: `privacy-shared-${suffix}`,
+        threadId: thread.id,
+        fromEmail: lenderEmail,
+        to: [mail],
+        subject: "Shared update only",
+        text: "Publicly shared within this matter",
+        sentAt: new Date(),
+        direction: "inbound",
+        details: { visibility: "client" },
+      },
+    });
+    const projected = (await service.listThreads(client, first)).find(
+      (t) => t.id === thread.id,
+    );
+    expect(projected?.subject).toBe("Shared update only");
+    await prisma.matterParticipant.updateMany({
+      where: { matterId: first, userId: clientId },
+      data: { revokedAt: new Date() },
+    });
+    await prisma.matterParticipant.create({
+      data: { matterId: second.id, userId: clientId, role: "client" },
+    });
+    await service.associateThread(owner, thread.id, {
+      expectedRevision: 1,
+      matterId: second.id,
+    });
+    expect(await service.listMessages(client, second.id)).toEqual([]);
+    expect(
+      (await prisma.emailMessage.findUniqueOrThrow({ where: { id: shown.id } }))
+        .details,
+    ).toMatchObject({ visibility: "coordinator" });
   });
   it("versions templates without mutating sent content and requires every merge field", async () => {
     const initial = await service.saveTemplate(owner, {

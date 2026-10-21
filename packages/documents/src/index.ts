@@ -36,7 +36,7 @@ export function createObjectStore(): ObjectStore {
     const client = new S3Client({
       region: process.env.S3_REGION || "auto",
       endpoint: process.env.S3_ENDPOINT,
-      forcePathStyle: true,
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
     });
     const Bucket = process.env.S3_BUCKET;
     return {

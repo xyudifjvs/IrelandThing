@@ -36,6 +36,7 @@ const tokens: Credentials = {
   scope: GMAIL_SCOPES.join(" "),
   expiry_date: Date.now() + 3600000,
 };
+let paginatedHistory = false;
 let sends = 0,
   exchanges = 0,
   failSend = false,
@@ -84,6 +85,21 @@ const provider: GmailProvider = {
           "GMAIL_NOT_FOUND",
           "Synthetic expired history",
         );
+      }
+      if (paginatedHistory) {
+        const page = Number(
+          new URL("https://fake.invalid" + path).searchParams.get(
+            "pageToken",
+          ) || 0,
+        );
+        return {
+          data: {
+            history: [],
+            historyId: "500",
+            ...(page < 20 ? { nextPageToken: String(page + 1) } : {}),
+          } as T,
+          tokens,
+        };
       }
       data = {
         history: [
@@ -459,6 +475,17 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     expect(
       (await service.listMessages(client, matterIds[0])).map((m) => m.id),
     ).toContain(thread.messages[0].id);
+    paginatedHistory = true;
+    const firstHistory = await jobs["gmail.sync"]({ ownerId });
+    expect(firstHistory).toHaveProperty("pages", 20);
+    const continuation = await prisma.integrationConnection.findUniqueOrThrow({
+      where: { provider_ownerId: { provider: "gmail", ownerId } },
+    });
+    expect(continuation.details).toHaveProperty("historyPageToken", "20");
+    const nextHistory = await jobs["gmail.sync"]({ ownerId });
+    expect(nextHistory).toHaveProperty("pages", 1);
+    expect(nextHistory).toHaveProperty("cursor", "500");
+    paginatedHistory = false;
     expireHistory = true;
     const recovery = await jobs["gmail.sync"]({ ownerId });
     expect(recovery).toHaveProperty("resyncRequired", true);

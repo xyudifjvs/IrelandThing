@@ -325,40 +325,84 @@ export class CommunicationsService {
     });
     return { queued: true, jobId: job.id };
   }
-  async listThreads(actor: Principal, matterId?: string) {
+  async threadReadScope(
+    actor: Principal,
+    matterId?: string,
+  ): Promise<Prisma.EmailThreadWhereInput> {
     if (matterId) await requireMatter(actor, matterId);
-    if (actor.role === "coordinator")
-      return prisma.emailThread.findMany({
-        where: matterId ? { matterId } : {},
-        include: { messages: { orderBy: { sentAt: "asc" }, take: 100 } },
-        orderBy: { updatedAt: "desc" },
-        take: 100,
-      });
+    if (actor.role === "coordinator") return matterId ? { matterId } : {};
     const matters = await prisma.matter.findMany({
       where: matterScope(actor),
       select: { id: true },
     });
     const allowed = matters.map((m) => m.id);
-    const visible = actor.role === "client" ? ["client"] : ["agent", "client"];
-    const messageWhere = {
-      OR: visible.map((v) => ({
-        details: { path: ["visibility"], equals: v },
-      })),
+    return { matterId: matterId ? matterId : { in: allowed } };
+  }
+  messageVisibility(actor: Principal): Prisma.EmailMessageWhereInput {
+    return actor.role === "coordinator"
+      ? {}
+      : {
+          OR: (actor.role === "client" ? ["client"] : ["agent", "client"]).map(
+            (visibility) => ({
+              details: { path: ["visibility"], equals: visibility },
+            }),
+          ),
+        };
+  }
+  async listThreads(
+    actor: Principal,
+    matterId?: string,
+    options: { cursor?: string; limit?: number } = {},
+  ) {
+    const limit = z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .default(100)
+      .parse(options.limit);
+    const where: Prisma.EmailThreadWhereInput = {
+      ...(await this.threadReadScope(actor, matterId)),
+      ...(actor.role === "coordinator"
+        ? {}
+        : { messages: { some: this.messageVisibility(actor) } }),
     };
-    const visibleThreads = await prisma.emailThread.findMany({
-      where: {
-        matterId:
-          matterId && allowed.includes(matterId) ? matterId : { in: allowed },
-        messages: { some: messageWhere },
-      },
+    if (
+      options.cursor &&
+      !(await prisma.emailThread.findFirst({
+        where: { AND: [where, { id: options.cursor }] },
+        select: { id: true },
+      }))
+    )
+      throw new HttpError(404, "THREAD_NOT_FOUND", "Thread cursor not found");
+    const pagination = {
+      orderBy: [{ updatedAt: "desc" as const }, { id: "desc" as const }],
+      take: limit,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    };
+    if (actor.role === "coordinator")
+      return prisma.emailThread.findMany({
+        where,
+        ...pagination,
+        include: {
+          messages: {
+            orderBy: [{ sentAt: "desc" }, { id: "desc" }],
+            take: 100,
+          },
+        },
+      });
+    const threads = await prisma.emailThread.findMany({
+      where,
+      ...pagination,
       select: {
         id: true,
         matterId: true,
         subject: true,
         status: true,
+        revision: true,
         updatedAt: true,
         messages: {
-          where: messageWhere,
+          where: this.messageVisibility(actor),
           select: {
             id: true,
             fromEmail: true,
@@ -370,26 +414,87 @@ export class CommunicationsService {
             direction: true,
             revision: true,
           },
-          orderBy: { sentAt: "asc" },
+          orderBy: [{ sentAt: "asc" }, { id: "asc" }],
           take: 100,
         },
       },
-      orderBy: { updatedAt: "desc" },
-      take: 100,
     });
-    return visibleThreads.map((t) => ({
+    return threads.map((t) => ({
       ...t,
       subject: t.messages[0]?.subject || "(Shared message)",
     }));
   }
-  async listMessages(actor: Principal, matterId?: string) {
-    const threads = await this.listThreads(actor, matterId);
-    return threads
-      .flatMap((t) =>
-        t.messages.map((m) => ({ ...m, matterId: t.matterId, threadId: t.id })),
-      )
-      .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime())
-      .slice(0, 200);
+  async listMessages(
+    actor: Principal,
+    matterId?: string,
+    options: { cursor?: string; limit?: number; q?: string } = {},
+  ) {
+    const limit = z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .default(200)
+      .parse(options.limit);
+    const where: Prisma.EmailMessageWhereInput = {
+      AND: [
+        { thread: { is: await this.threadReadScope(actor, matterId) } },
+        this.messageVisibility(actor),
+        options.q
+          ? {
+              OR: [
+                { subject: { contains: options.q, mode: "insensitive" } },
+                { text: { contains: options.q, mode: "insensitive" } },
+              ],
+            }
+          : {},
+      ],
+    };
+    if (
+      options.cursor &&
+      !(await prisma.emailMessage.findFirst({
+        where: { AND: [where, { id: options.cursor }] },
+        select: { id: true },
+      }))
+    )
+      throw new HttpError(404, "MESSAGE_NOT_FOUND", "Message cursor not found");
+    const pagination = {
+      orderBy: [{ sentAt: "desc" as const }, { id: "desc" as const }],
+      take: limit,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    };
+    if (actor.role === "coordinator") {
+      const rows = await prisma.emailMessage.findMany({
+        where,
+        ...pagination,
+        include: { thread: { select: { id: true, matterId: true } } },
+      });
+      return rows.map(({ thread, ...m }) => ({
+        ...m,
+        matterId: thread.matterId,
+      }));
+    }
+    const rows = await prisma.emailMessage.findMany({
+      where,
+      ...pagination,
+      select: {
+        id: true,
+        threadId: true,
+        fromEmail: true,
+        to: true,
+        cc: true,
+        subject: true,
+        text: true,
+        sentAt: true,
+        direction: true,
+        revision: true,
+        thread: { select: { matterId: true } },
+      },
+    });
+    return rows.map(({ thread, ...m }) => ({
+      ...m,
+      matterId: thread.matterId,
+    }));
   }
   async associateThread(actor: Principal, id: string, input: unknown) {
     assertCoordinator(actor);
@@ -505,13 +610,34 @@ export class CommunicationsService {
       return tx.emailMessage.findUniqueOrThrow({ where: { id } });
     });
   }
-  async listDrafts(actor: Principal, matterId?: string) {
+  async listDrafts(
+    actor: Principal,
+    matterId?: string,
+    options: { cursor?: string; limit?: number } = {},
+  ) {
     assertCoordinator(actor);
     if (matterId) await requireMatter(actor, matterId);
+    const limit = z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .default(100)
+      .parse(options.limit);
+    const where: Prisma.EmailDraftWhereInput = matterId ? { matterId } : {};
+    if (
+      options.cursor &&
+      !(await prisma.emailDraft.findFirst({
+        where: { ...where, id: options.cursor },
+        select: { id: true },
+      }))
+    )
+      throw new HttpError(404, "DRAFT_NOT_FOUND", "Draft cursor not found");
     return prisma.emailDraft.findMany({
-      where: matterId ? { matterId } : {},
-      orderBy: { updatedAt: "desc" },
-      take: 100,
+      where,
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: limit,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     });
   }
   async createDraft(actor: Principal, input: unknown) {
@@ -1191,7 +1317,14 @@ export class CommunicationsService {
     return prisma.outboxJob
       .upsert({
         where: { idempotencyKey: key },
-        create: { topic: "system.email", idempotencyKey: key, payload: data },
+        create: {
+          topic: "system.email",
+          idempotencyKey: key,
+          payload: {
+            ...data,
+            expiresAt: new Date(Date.now() + 30 * 60000).toISOString(),
+          },
+        },
         update: {},
       })
       .then(() => undefined);

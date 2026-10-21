@@ -23,10 +23,10 @@ const suffix = randomUUID(),
   ownerId = `mail-owner-${suffix}`,
   agentId = `mail-agent-${suffix}`,
   clientId = `mail-client-${suffix}`;
-const mail = "synthetic-weatherly@example.org",
-  clientEmail = "synthetic-client@example.org",
-  agentEmail = "synthetic-agent@example.org",
-  lenderEmail = "synthetic-lender@example.org";
+const mail = `synthetic-weatherly-${suffix}@example.org`,
+  clientEmail = `synthetic-client-${suffix}@example.org`,
+  agentEmail = `synthetic-agent-${suffix}@example.org`,
+  lenderEmail = `synthetic-lender-${suffix}@example.org`;
 let owner: Principal, agent: Principal, client: Principal;
 const matterIds: string[] = [];
 const workflowTemplateIds: string[] = [];
@@ -613,10 +613,30 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
       },
     });
     expect(rows).toHaveLength(1);
+    expect(rows[0].payload).toHaveProperty("expiresAt");
     expect(await jobs["system.email"](rows[0].payload)).toHaveProperty(
       "providerMessageId",
       "synthetic-resend-id",
     );
+    const accepted = await prisma.outboxJob.findUniqueOrThrow({
+      where: { id: rows[0].id },
+    });
+    expect(accepted.payload).not.toHaveProperty("text");
+    expect(accepted.payload).toMatchObject({
+      redacted: true,
+      providerMessageId: "synthetic-resend-id",
+    });
+    expect(await jobs["system.email"](accepted.payload)).toHaveProperty(
+      "redacted",
+      true,
+    );
+    expect(
+      await jobs["system.email"]({
+        ...input,
+        text: "Synthetic expired link",
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+      }),
+    ).toHaveProperty("expired", true);
     expect(await jobs["gmail.renew"]({ ownerId })).toHaveProperty(
       "renewed",
       true,
@@ -766,5 +786,137 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
         (f) => f.key === "closingDate",
       )?.status,
     ).toBe("ambiguous");
+  });
+  it("pages beyond 200 historical records with authorization applied before limits and denies revoked mailbox workers", async () => {
+    const matter = await createMatter(owner, {
+      title: `Pagination ${suffix}`,
+      propertyAddress: "Historical Synthetic Road",
+      side: "buyer",
+      packageCode: "essentials",
+      agentId,
+    });
+    matterIds.push(matter.id);
+    await prisma.matterParticipant.create({
+      data: { matterId: matter.id, userId: clientId, role: "client" },
+    });
+    const rows = Array.from({ length: 230 }, (_, i) => ({
+      id: `historical-thread-${suffix}-${i}`,
+      ownerId,
+      providerThreadId: `historical-provider-thread-${suffix}-${i}`,
+      matterId: matter.id,
+      subject: i < 210 ? "Shared history" : "Private subject",
+      status: "assigned",
+      updatedAt: new Date(Date.now() + i * 10),
+    }));
+    await prisma.emailThread.createMany({ data: rows });
+    await prisma.emailMessage.createMany({
+      data: rows.map((t, i) => ({
+        id: `historical-message-${suffix}-${i}`,
+        providerMessageId: `historical-provider-message-${suffix}-${i}`,
+        threadId: t.id,
+        fromEmail: lenderEmail,
+        to: [mail],
+        subject: "Historical pagination fixture",
+        text: `Historical evidence ${i}`,
+        sentAt: new Date(Date.now() + i * 10),
+        direction: "inbound",
+        details: { visibility: i < 210 ? "client" : "coordinator" },
+      })),
+    });
+    await prisma.emailDraft.createMany({
+      data: Array.from({ length: 210 }, (_, i) => ({
+        id: `historical-draft-${suffix}-${i}`,
+        matterId: matter.id,
+        createdById: ownerId,
+        to: [lenderEmail],
+        cc: [],
+        subject: `Historical draft ${i}`,
+        body: "Synthetic saved draft",
+        updatedAt: new Date(Date.now() + i * 10),
+      })),
+    });
+    async function collect<T extends { id: string }>(
+      page: (cursor?: string) => Promise<T[]>,
+    ) {
+      const seen = new Set<string>();
+      let cursor: string | undefined;
+      for (let i = 0; i < 100; i++) {
+        const batch = await page(cursor);
+        if (!batch.length) return seen;
+        for (const row of batch) {
+          expect(seen.has(row.id)).toBe(false);
+          seen.add(row.id);
+        }
+        cursor = batch[batch.length - 1].id;
+      }
+      throw new Error("Pagination did not terminate");
+    }
+    expect(
+      (
+        await collect((c) =>
+          service.listThreads(client, matter.id, { cursor: c, limit: 17 }),
+        )
+      ).size,
+    ).toBe(210);
+    expect(
+      (
+        await collect((c) =>
+          service.listMessages(client, matter.id, {
+            cursor: c,
+            limit: 19,
+            q: "Historical pagination fixture",
+          }),
+        )
+      ).size,
+    ).toBe(210);
+    expect(
+      (
+        await collect((c) =>
+          service.listMessages(owner, matter.id, { cursor: c, limit: 31 }),
+        )
+      ).size,
+    ).toBe(230);
+    expect(
+      (
+        await collect((c) =>
+          service.listDrafts(owner, matter.id, { cursor: c, limit: 31 }),
+        )
+      ).size,
+    ).toBe(210);
+    await expect(
+      service.listThreads(client, matter.id, {
+        cursor: rows[229].id,
+        limit: 1,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.listMessages(client, matter.id, {
+        cursor: `historical-message-${suffix}-229`,
+        limit: 1,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.listDrafts(client, matter.id, { limit: 1 }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      service.listMessages(owner, matter.id, { limit: 201 }),
+    ).rejects.toBeDefined();
+    const before = providerCalls.length;
+    await prisma.auditEvent.create({
+      data: {
+        actorId: ownerId,
+        action: "identity.access_revoked",
+        entityType: "User",
+        entityId: ownerId,
+        details: { reason: "Synthetic worker revocation probe" },
+      },
+    });
+    await expect(jobs["gmail.sync"]({ ownerId })).rejects.toMatchObject({
+      code: "ACCOUNT_REVOKED",
+    });
+    await expect(jobs["gmail.renew"]({ ownerId })).rejects.toMatchObject({
+      code: "ACCOUNT_REVOKED",
+    });
+    expect(providerCalls.length).toBe(before);
   });
 });

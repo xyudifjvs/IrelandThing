@@ -11,6 +11,7 @@ import {
   type Matter,
 } from "./data";
 import s from "./workspace.module.css";
+import MatterPicker from "./MatterPicker";
 type Template = {
   id: string;
   name: string;
@@ -327,7 +328,6 @@ export function Composer() {
     useData<{ id: string; name: string; email: string; role: string }[]>(
       "/api/v1/users",
     );
-  const matters = useData<Matter[]>("/api/v1/matters");
   const templates = useData<Template[]>("/api/v1/communications/templates");
   const integrations = useData<{ provider: string; status: string }[]>(
     "/api/v1/integrations",
@@ -488,34 +488,23 @@ export function Composer() {
       </div>
       <div className={s.sectionBody}>
         <div className={s.formGrid}>
-          <label className={s.field}>
-            Transaction
-            <select
-              className={s.select}
-              value={matter}
-              onChange={(e) => {
-                setMatter(e.target.value);
-                setTo("");
-                setCc("");
-                setSubject("");
-                setBody("");
-                setRecipientName("");
-                setTemplate("");
-                setBinding(null);
-                setDraft(null);
-                setDirty(true);
-                setAttachments([]);
-                setConfirmed(false);
-              }}
-            >
-              <option value="">Choose a transaction</option>
-              {matters.data?.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {address(m)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <MatterPicker
+            value={matter}
+            onChange={(value) => {
+              setMatter(value);
+              setTo("");
+              setCc("");
+              setSubject("");
+              setBody("");
+              setRecipientName("");
+              setTemplate("");
+              setBinding(null);
+              setDraft(null);
+              setDirty(true);
+              setAttachments([]);
+              setConfirmed(false);
+            }}
+          />
           <label className={s.field}>
             Existing draft
             <select
@@ -984,7 +973,6 @@ export function MessageReview({
   message: Record<string, unknown>;
   onChanged: () => void;
 }) {
-  const matters = useData<Matter[]>("/api/v1/matters");
   const threads = useData<
     { id: string; matterId?: string | null; revision: number }[]
   >("/api/v1/communications/threads");
@@ -992,6 +980,9 @@ export function MessageReview({
     [error, setError] = useState("");
   const thread = threads.data?.find((t) => t.id === message.threadId);
   const [confirmed, setConfirmed] = useState(false);
+  const [association, setAssociation] = useState(
+    String(message.matterId || ""),
+  );
   return (
     <div
       style={{ marginTop: 25, borderTop: "1px solid #e3d6c1", paddingTop: 20 }}
@@ -1025,21 +1016,13 @@ export function MessageReview({
           }
         }}
       >
-        <label className={s.field}>
-          Associate this conversation with a transaction
-          <select
-            className={s.select}
-            name="matterId"
-            defaultValue={String(message.matterId || "")}
-          >
-            <option value="">Unassigned — coordinator review</option>
-            {matters.data?.map((m) => (
-              <option key={m.id} value={m.id}>
-                {address(m)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <MatterPicker
+          label="Associate this conversation with a transaction"
+          name="matterId"
+          value={association}
+          onChange={setAssociation}
+          emptyLabel="Unassigned — coordinator review"
+        />
         <button
           className={s.buttonSmall}
           style={{ marginTop: 12 }}

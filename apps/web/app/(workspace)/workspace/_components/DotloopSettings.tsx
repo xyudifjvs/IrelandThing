@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { Link2, RefreshCw } from "lucide-react";
-import { useData, mutate, address, date, label, type Matter } from "./data";
+import { useData, mutate, date, label } from "./data";
 import s from "./workspace.module.css";
+import MatterPicker from "./MatterPicker";
 type Link = {
   id: string;
   matterId: string;
@@ -31,12 +32,12 @@ export default function DotloopSettings() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  const [loopPage, setLoopPage] = useState(1);
   const loops = useData<{ id: string | number; name: string }[]>(
     profile
-      ? `/api/v1/dotloop/profiles/${encodeURIComponent(profile)}/loops?page=1`
+      ? `/api/v1/dotloop/profiles/${encodeURIComponent(profile)}/loops?page=${loopPage}`
       : null,
   );
-  const matters = useData<Matter[]>("/api/v1/matters");
   const links = useData<Link[]>(
     matter
       ? `/api/v1/dotloop/links?matterId=${encodeURIComponent(matter)}`
@@ -147,22 +148,7 @@ export default function DotloopSettings() {
             }}
           >
             <div className={s.formGrid}>
-              <label className={s.field}>
-                Transaction
-                <select
-                  className={s.select}
-                  value={matter}
-                  required
-                  onChange={(e) => setMatter(e.target.value)}
-                >
-                  <option value="">Choose a transaction</option>
-                  {matters.data?.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {address(m)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MatterPicker value={matter} required onChange={setMatter} />
               <label className={s.field}>
                 Dotloop profile
                 <select
@@ -172,6 +158,7 @@ export default function DotloopSettings() {
                   onChange={(e) => {
                     setProfile(e.target.value);
                     setLoop("");
+                    setLoopPage(1);
                   }}
                 >
                   <option value="">Choose a profile</option>
@@ -200,6 +187,42 @@ export default function DotloopSettings() {
                     </option>
                   ))}
                 </select>
+                {profile && (
+                  <div className={s.formRow} style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      className={s.buttonSmall}
+                      disabled={busy || loops.loading || loopPage === 1}
+                      onClick={() => {
+                        setLoop("");
+                        setLoopPage((p) => p - 1);
+                      }}
+                    >
+                      Previous loops
+                    </button>
+                    <span className={s.fieldHint}>Page {loopPage}</span>
+                    <button
+                      type="button"
+                      className={s.buttonSmall}
+                      disabled={busy || loops.loading || !loops.data?.length}
+                      onClick={() => {
+                        setLoop("");
+                        setLoopPage((p) => p + 1);
+                      }}
+                    >
+                      Next loops
+                    </button>
+                  </div>
+                )}
+                {profile &&
+                  !loops.loading &&
+                  !loops.error &&
+                  !loops.data?.length && (
+                    <p className={s.fieldHint}>
+                      No loops on this page. Return to the previous page or
+                      choose another profile.
+                    </p>
+                  )}
               </label>
             </div>
             {(profiles.error || loops.error || links.error) && (

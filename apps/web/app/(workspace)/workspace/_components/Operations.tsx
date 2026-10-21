@@ -22,6 +22,7 @@ import {
   type Session,
 } from "./data";
 import s from "./workspace.module.css";
+import MatterPicker from "./MatterPicker";
 import ReviewQueue from "./ReviewQueue";
 import PaymentLink from "./PaymentLink";
 import BillingOperations from "./BillingOperations";
@@ -468,7 +469,6 @@ export function Inbox() {
   );
 }
 export function Review() {
-  const matters = useData<Matter[]>("/api/v1/matters");
   const integrations = useData<Integration[]>("/api/v1/integrations");
   const [selected, setSelected] = useState("");
   const detail = useData<Matter>(
@@ -502,24 +502,14 @@ export function Review() {
             <Sparkles size={19} strokeWidth={1.2} />
           </div>
           <div className={s.sectionBody}>
-            <label className={s.field}>
-              Choose a transaction
-              <select
-                className={s.select}
-                value={selected}
-                onChange={(e) => {
-                  setSelected(e.target.value);
-                  setResult(null);
-                }}
-              >
-                <option value="">Select a transaction</option>
-                {matters.data?.map((m) => (
-                  <option value={m.id} key={m.id}>
-                    {address(m)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <MatterPicker
+              label="Transaction for document review"
+              value={selected}
+              onChange={(value) => {
+                setSelected(value);
+                setResult(null);
+              }}
+            />
             {!ready && (
               <div className={s.notice} style={{ marginTop: 20 }}>
                 Document AI is unavailable until an approved OpenRouter ZDR

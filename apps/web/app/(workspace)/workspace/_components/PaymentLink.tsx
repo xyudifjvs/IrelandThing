@@ -1,10 +1,10 @@
 "use client";
 import { useState } from "react";
 import { CreditCard, ArrowUpRight } from "lucide-react";
-import { useData, mutate, address, type Matter } from "./data";
+import { useData, mutate } from "./data";
 import s from "./workspace.module.css";
+import MatterPicker from "./MatterPicker";
 export default function PaymentLink() {
-  const matters = useData<Matter[]>("/api/v1/matters");
   const integrations = useData<{ provider: string; status: string }[]>(
     "/api/v1/integrations",
   );
@@ -59,27 +59,16 @@ export default function PaymentLink() {
           }
         }}
       >
-        <label className={s.field}>
-          Transaction
-          <select
-            className={s.select}
-            required
-            value={matter}
-            onChange={(e) => {
-              setMatter(e.target.value);
-              setCheckoutKey(crypto.randomUUID());
-              setConfirmed(false);
-              setUrl("");
-            }}
-          >
-            <option value="">Choose a transaction</option>
-            {matters.data?.map((m) => (
-              <option key={m.id} value={m.id}>
-                {address(m)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <MatterPicker
+          value={matter}
+          required
+          onChange={(value) => {
+            setMatter(value);
+            setCheckoutKey(crypto.randomUUID());
+            setConfirmed(false);
+            setUrl("");
+          }}
+        />
         <label className={s.todo}>
           <input
             type="checkbox"

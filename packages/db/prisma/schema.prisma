@@ -330,6 +330,7 @@ model OAuthState {
   userId     String
   expiresAt  DateTime
   consumedAt DateTime?
+  verifier   String?
   createdAt  DateTime  @default(now())
 }
 
@@ -340,6 +341,7 @@ model EmailThread {
   matterId         String?
   subject          String
   status           String         @default("unassigned")
+  details          Json           @default("{}")
   updatedAt        DateTime       @updatedAt
   messages         EmailMessage[]
 
@@ -372,6 +374,7 @@ model EmailDraft {
   cc                Json      @default("[]")
   subject           String
   body              String
+  details           Json      @default("{}")
   attachmentIds     Json      @default("[]")
   status            String    @default("draft")
   revision          Int       @default(1)

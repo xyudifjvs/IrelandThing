@@ -14,16 +14,23 @@ const exec = promisify(execFile),
   require = createRequire(cwd + "/package.json"),
   { Client } = require("pg"),
   suffix = randomUUID().replaceAll("-", ""),
-  name = "checker_bootstrap_" + suffix;
+  name = "checker_bootstrap_" + suffix,
+  raceName = name + "_race";
 const base = new URL("./", checkerDatabaseUrl).href,
   admin = new Client({ connectionString: checkerDatabaseUrl });
 await admin.connect();
+const initialOwnerEmail = (
+  process.env.CHECKER_OWNER_EMAIL || "carson@synthetic.invalid"
+)
+  .trim()
+  .toLowerCase();
 const env = {
   ...process.env,
   DATABASE_URL: base + name,
-  BOOTSTRAP_OWNER_EMAIL: "ireland@synthetic.invalid",
+  BOOTSTRAP_OWNER_EMAIL: `  ${initialOwnerEmail.toUpperCase()}  `,
+  BOOTSTRAP_OWNER_NAME: " Carson ",
   BOOTSTRAP_OWNER_PASSWORD: "Synthetic-Strong-" + randomUUID(),
-  BOOTSTRAP_OWNER_CONFIRMED: "ireland",
+  BOOTSTRAP_OWNER_CONFIRMED: ` ${initialOwnerEmail} `,
 };
 const checks = [];
 const check = (name, pass) => checks.push({ name, pass });
@@ -55,6 +62,20 @@ try {
     "Placeholder mailbox refused",
     !placeholder.ok && placeholder.text.includes("actual approved email"),
   );
+  const legacyWrong = await run({ BOOTSTRAP_OWNER_CONFIRMED: "ireland" });
+  check(
+    "Named temporary owner cannot use legacy Ireland confirmation",
+    !legacyWrong.ok && legacyWrong.text.includes("exact approved owner email"),
+  );
+  const wrongEmail = await run({
+    BOOTSTRAP_OWNER_CONFIRMED: "other@synthetic.invalid",
+  });
+  check(
+    "Named owner rejects mismatched email confirmation",
+    !wrongEmail.ok && wrongEmail.text.includes("exact approved owner email"),
+  );
+  const blankName = await run({ BOOTSTRAP_OWNER_NAME: "   " });
+  check("Explicit blank owner name rejected", !blankName.ok);
   const weak = await run({ BOOTSTRAP_OWNER_PASSWORD: "too-short" });
   check("Short password refused", !weak.ok);
   const unconfirmed = await run({ BOOTSTRAP_OWNER_CONFIRMED: "" });
@@ -68,19 +89,53 @@ try {
     "Invalid bootstrap attempts created no user",
     (await db.query('SELECT count(*)::int n FROM "User"')).rows[0].n === 0,
   );
-  const concurrent = await Promise.all([
-    run(),
-    run({ BOOTSTRAP_OWNER_EMAIL: "other@synthetic.invalid" }),
-  ]);
+  const created = await run();
+  const ownerRows = (
+    await db.query('SELECT id,name,email,role,"twoFactorEnabled" FROM "User"')
+  ).rows;
   check(
-    "Concurrent bootstrap creates exactly one coordinator",
+    "Explicit normalized Carson name/email confirmation creates one owner",
+    created.ok &&
+      ownerRows.length === 1 &&
+      ownerRows[0].name === "Carson" &&
+      ownerRows[0].email === initialOwnerEmail &&
+      ownerRows[0].role === "coordinator",
+  );
+  check(
+    "New owner still requires authenticator enrollment",
+    ownerRows[0]?.twoFactorEnabled === false,
+  );
+  await admin.query('CREATE DATABASE "' + raceName + '"');
+  await exec(
+    process.execPath,
+    ["node_modules/prisma/build/index.js", "migrate", "deploy"],
+    {
+      cwd,
+      env: { ...env, DATABASE_URL: base + raceName },
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  const concurrent = await Promise.all([
+    run({ DATABASE_URL: base + raceName }),
+    run({
+      DATABASE_URL: base + raceName,
+      BOOTSTRAP_OWNER_EMAIL: "other@synthetic.invalid",
+      BOOTSTRAP_OWNER_NAME: "Independent Other",
+      BOOTSTRAP_OWNER_CONFIRMED: "other@synthetic.invalid",
+    }),
+  ]);
+  const raceDb = new Client({ connectionString: base + raceName });
+  await raceDb.connect();
+  check(
+    "Concurrent distinct valid owners create exactly one coordinator",
     concurrent.filter((r) => r.ok).length === 1 &&
       (
-        await db.query('SELECT count(*)::int n FROM "User" WHERE role=$1', [
+        await raceDb.query('SELECT count(*)::int n FROM "User" WHERE role=$1', [
           "coordinator",
         ])
       ).rows[0].n === 1,
   );
+  await raceDb.end();
   const catalog = (
     await db.query(
       'SELECT "priceCents",approved FROM "CatalogItem" ORDER BY "priceCents"',
@@ -98,6 +153,7 @@ try {
       accounts[0].password !== env.BOOTSTRAP_OWNER_PASSWORD &&
       accounts[0].password.length > 32,
   );
+  const credentialBefore = accounts[0]?.password;
   const repeat = await run();
   check(
     "Existing coordinator bootstrap refused without mutation",
@@ -105,11 +161,17 @@ try {
       repeat.text.includes("already exists") &&
       (await db.query('SELECT count(*)::int n FROM "User"')).rows[0].n === 1,
   );
+  check(
+    "Rejected repeat preserves original name and credential",
+    (await db.query('SELECT name FROM "User"')).rows[0].name === "Carson" &&
+      (await db.query('SELECT password FROM "Account"')).rows[0].password ===
+        credentialBefore,
+  );
   await db.end();
   console.log(
     JSON.stringify(
       {
-        candidate: "b8c33dd",
+        candidate: "ed5b4aa",
         checks: checks.length,
         failed: checks.filter((x) => !x.pass).length,
         results: checks,
@@ -120,5 +182,6 @@ try {
   );
 } finally {
   await admin.query('DROP DATABASE IF EXISTS "' + name + '" WITH (FORCE)');
+  await admin.query('DROP DATABASE IF EXISTS "' + raceName + '" WITH (FORCE)');
   await admin.end();
 }

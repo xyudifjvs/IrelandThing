@@ -17,10 +17,21 @@ export * from "./policy";
 export * from "./merge-fields";
 let shared: CommunicationsService | undefined;
 const current = () => shared || (shared = createCommunicationsService());
-export const listMessages = (actor: Principal, matterId?: string) =>
-  current().listMessages(actor, matterId);
-export const listThreads = (actor: Principal, matterId?: string) =>
-  current().listThreads(actor, matterId);
+export const listMessages = (
+  actor: Principal,
+  matterId?: string,
+  options?: { cursor?: string; limit?: number; q?: string },
+) => current().listMessages(actor, matterId, options);
+export const listThreads = (
+  actor: Principal,
+  matterId?: string,
+  options?: { cursor?: string; limit?: number },
+) => current().listThreads(actor, matterId, options);
+export const listDrafts = (
+  actor: Principal,
+  matterId?: string,
+  options?: { cursor?: string; limit?: number },
+) => current().listDrafts(actor, matterId, options);
 export const connectionStatus = (actor: Principal) =>
   current().connectionStatus(actor);
 export const refreshTemplateDrafts = (
@@ -34,6 +45,11 @@ export const sendSystemEmail = (
 export function createCommunicationsRouter(service = current()) {
   const r = Router();
   const matterId = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const pageOptions = (req: import("express").Request) => ({
+    cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+    limit: req.query.limit === undefined ? undefined : Number(req.query.limit),
+    q: typeof req.query.q === "string" ? req.query.q : undefined,
+  });
   r.get(
     "/status",
     asyncHandler(async (req, res) =>
@@ -79,7 +95,11 @@ export function createCommunicationsRouter(service = current()) {
     "/threads",
     asyncHandler(async (req, res) =>
       res.json(
-        await service.listThreads(principal(req), matterId(req.query.matterId)),
+        await service.listThreads(
+          principal(req),
+          matterId(req.query.matterId),
+          pageOptions(req),
+        ),
       ),
     ),
   );
@@ -102,6 +122,7 @@ export function createCommunicationsRouter(service = current()) {
         await service.listMessages(
           principal(req),
           matterId(req.query.matterId),
+          pageOptions(req),
         ),
       ),
     ),
@@ -122,7 +143,11 @@ export function createCommunicationsRouter(service = current()) {
     "/drafts",
     asyncHandler(async (req, res) =>
       res.json(
-        await service.listDrafts(principal(req), matterId(req.query.matterId)),
+        await service.listDrafts(
+          principal(req),
+          matterId(req.query.matterId),
+          pageOptions(req),
+        ),
       ),
     ),
   );

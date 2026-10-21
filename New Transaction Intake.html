@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>New Transaction Intake</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@400;500&display=swap">
+<style>
+:root{--bg:#f3ece0;--card:#faf6ee;--fld:#fffdf9;--line:#dccfba;--tx:#2b241c;--mu:#7b6f60;--acc:#8c6b45;--ink:#fffaf2;--rail:#eadfcc;--err:#a8402f;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 'DM Sans',system-ui,sans-serif}
+.app{display:grid;grid-template-columns:230px 1fr;max-width:1040px;margin:0 auto;min-height:100vh}
+nav{background:var(--rail);color:var(--tx);border-right:1px solid var(--line);padding:28px 22px}
+.brand{font:500 25px 'Cormorant Garamond',Georgia,serif;letter-spacing:.26em;margin-bottom:30px}.brand small{display:block;font:400 8px 'DM Sans';letter-spacing:.34em;color:var(--mu);margin-top:1px}
+nav ol{list-style:none;margin:0;padding:0;counter-reset:n}
+nav li{counter-increment:n;display:flex;gap:11px;align-items:center;padding:9px 0;opacity:.5;font-size:14px}
+nav li::before{content:counter(n);display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:50%;border:1px solid currentColor;font-size:12px}
+nav li.on{opacity:1;font-weight:500}nav li.on::before{background:var(--acc);border-color:var(--acc);color:var(--ink)}
+nav li.ok{opacity:.9;cursor:pointer}nav li.ok::before{content:"✓"}
+main{padding:32px clamp(16px,4vw,40px) 56px}
+h1{font:500 clamp(34px,6vw,50px)/1.1 'Cormorant Garamond',Georgia,serif;margin:0 0 6px}
+.lead{color:var(--mu);margin:0 0 22px}
+.step{display:none}.step.cur{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+.card h3{font:500 24px 'Cormorant Garamond',Georgia,serif;margin:0 0 12px}
+.g{display:grid;gap:14px 16px;grid-template-columns:repeat(6,1fr)}.g>*{grid-column:span 6}
+@media(min-width:720px){.c2{grid-column:span 3}.c3{grid-column:span 2}}
+label.f{display:block;font-weight:500;font-size:14px}
+.req::after{content:" *";color:var(--acc)}
+input[type=text],input[type=email],input[type=tel],input[type=date],select,textarea{width:100%;margin-top:6px;background:var(--fld);color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:inherit}
+textarea{min-height:96px;resize:vertical}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.rg{display:grid;gap:8px;margin-top:8px}
+.ro{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:11px 13px;cursor:pointer;background:var(--fld);font-size:14px}
+.ro:has(input:checked){border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+.ro input{accent-color:var(--acc);margin:3px 0 0;width:16px;height:16px;flex:none}
+.ro b{display:block;font-weight:500}.ro span{color:var(--mu);font-size:13px}
+.two{grid-template-columns:1fr 1fr}@media(max-width:600px){.two{grid-template-columns:1fr}}
+.tabs{display:inline-flex;border:1px solid var(--line);border-radius:99px;padding:3px;background:var(--fld);margin-top:8px}
+.tabs label{padding:7px 26px;border-radius:99px;cursor:pointer;font-weight:500}
+.tabs label:has(input:checked){background:var(--acc);color:var(--ink)}.tabs input{position:absolute;opacity:0}
+.tabs label:has(input:focus-visible){outline:2px solid var(--acc)}
+.note{color:var(--mu);font-size:13px;margin:6px 0 0}
+.who{display:flex;justify-content:space-between;gap:10px;border:1px dashed var(--line);border-radius:10px;padding:10px 14px;font-size:14px;margin-bottom:16px}
+.sp{border-left:2px solid var(--acc);padding-left:16px;margin-top:12px}
+.drop{position:relative;border:1.5px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--mu);background:var(--fld)}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}.drop b{display:block;color:var(--tx);font-weight:500}
+.cl{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}.cl:first-of-type{border:0;padding:0;margin:0}
+.lnk{background:none;border:0;color:var(--acc);font:500 14px 'DM Sans';cursor:pointer;padding:6px 0;margin-top:8px;text-decoration:underline}
+.tiers{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:8px}
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:6px}
+.b{border-radius:99px;padding:12px 30px;font:500 15px 'DM Sans';cursor:pointer;border:1px solid var(--tx);background:none;color:var(--tx)}
+.b.p{background:var(--acc);border-color:var(--acc);color:var(--ink)}
+.err{color:var(--err);font-size:14px;min-height:1.3em;margin:8px 0 0}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 18px;margin:0;font-size:14px}dt{color:var(--mu)}dd{margin:0}
+.tick{font:500 12px 'DM Sans';color:var(--mu)}
+[hidden]{display:none!important}
+@media(max-width:760px){.app{grid-template-columns:1fr}nav{padding:14px 18px}nav ol{display:none}.brand{margin:0}}
+</style></head>
+<body><div class="app">
+<nav><div class="brand">WEATHERLY<small>TRANSACTION CO.</small></div>
+<ol id="rail"></ol></nav>
+<main>
+<div class="tick" id="tick"></div>
+<form id="f" novalidate>
+
+<section class="step" data-t="Start">
+<h1>New transaction</h1><p class="lead">Start with the basics. Everything after this adapts to your answers.</p>
+<div class="who"><span>Submitting as <b>Sample Agent</b> · agent@brokerage.com</span><span class="note" style="margin:0">From your portal profile</span></div>
+<div class="card"><h3>Which service?</h3>
+<div class="rg"><label class="ro"><input type="radio" name="pkg" value="c2c" required checked><b>Contract to Close</b></label>
+<label class="ro"><input type="radio" name="pkg" value="comp"><div><b>Contract to Close + Compliance</b><span>We pull documents from Dotloop and review your file.</span></div></label></div></div>
+<div class="card"><h3>Who do you represent on this deal?</h3>
+<div class="tabs"><label><input type="radio" name="side" value="buyer" required checked>Buyer</label><label><input type="radio" name="side" value="seller">Seller</label></div>
+<p class="note">Representing both sides? Submit one intake for each.</p></div>
+<div class="card"><h3>The deal</h3><div class="g">
+<label class="f"><span class="req">Property address</span><input type="text" name="addr" required></label>
+<div><b style="font-size:14px;font-weight:500">Is this a cash purchase?</b><br><div class="tabs"><label><input type="radio" name="cash" value="yes" required>Yes</label><label><input type="radio" name="cash" value="no" checked>No</label></div></div></div></div>
+<div class="card"><h3>Executed contract</h3>
+<div class="drop"><input type="file" id="cf" accept=".pdf,.doc,.docx" aria-label="Upload executed contract"><b>Upload the executed contract</b>We’ll pull the price, dates and contacts from it.</div>
+<p class="note" id="cfn"></p>
+<label class="ro" data-if="pkg:comp" style="margin-top:10px"><input type="checkbox" name="inloop" value="1"><div><b>N/A — it’s already uploaded in Dotloop</b><span>Available with the compliance package.</span></div></label>
+</div>
+</section>
+
+<section class="step" data-t="Clients">
+<h1><span data-if="side:buyer">Buyer</span><span data-if="side:seller">Seller</span> contact info</h1><p class="lead">Who should we reach out to?</p>
+<div class="card"><div id="cls"></div><button type="button" class="lnk" id="addc">+ Add another <span data-if="side:buyer">buyer</span><span data-if="side:seller">seller</span></button></div>
+<div class="card"><label class="f">May we contact your client directly?<select name="direct"><option>Yes, copy me on everything</option><option>No, only through me</option></select></label></div>
+</section>
+
+<section class="step" data-t="Title &amp; lender">
+<h1>Title &amp; lender</h1><p class="lead">Tell us what you have. We’ll chase the rest.</p>
+<div class="card"><h3>Title company</h3>
+<div class="rg"><label class="ro"><input type="radio" name="ti" value="have" required><b>I have the details</b></label>
+<label class="ro" data-if="side:buyer"><input type="radio" name="ti" value="la"><b>Not sure — please reach out to the listing agent</b></label>
+<label class="ro" data-if="side:seller"><input type="radio" name="ti" value="mls"><b>It’s listed in the MLS</b></label></div>
+<div class="sp" data-if="ti:have"><div class="g"><label class="f c3"><span class="req">Company name</span><input type="text" name="tn" required></label><label class="f c3">Phone<input type="tel" name="tp"></label><label class="f c3">Email<input type="email" name="te"></label></div></div></div>
+<div class="card" data-if="cash:no"><h3>Lender</h3>
+<div><div class="rg">
+<label class="ro"><input type="radio" name="le" value="have" required><b>I have the details</b></label>
+<label class="ro" data-if="pkg:comp"><input type="radio" name="le" value="loop"><b>See pre-approval in Dotloop</b></label>
+<label class="ro" data-if="side:seller"><input type="radio" name="le" value="ba"><b>Not sure — please reach out to the buyer’s agent</b></label></div>
+<div class="sp" data-if="le:have"><div class="g"><label class="f c3"><span class="req">Lender / loan officer</span><input type="text" name="ln" required></label><label class="f c3">Phone<input type="tel" name="lp"></label><label class="f c3">Email<input type="email" name="lm"></label></div></div></div></div>
+</section>
+
+<section class="step" data-t="HOA &amp; docs">
+<h1>HOA &amp; documents</h1><p class="lead">Where do things stand? “I” means you; “you” means your Weatherly coordinator.</p>
+<div class="card"><h3>HOA documents</h3><div class="rg">
+<label class="ro"><input type="radio" name="hoa" value="No HOA" required><b>No HOA / not applicable</b></label>
+<div data-if="side:buyer" class="rg" style="margin:0">
+<label class="ro"><input type="radio" name="hoa" value="Received and sent to buyer"><b>I received it and already sent it to the buyer</b></label>
+<label class="ro"><input type="radio" name="hoa" value="In MLS/Dotloop — send to buyer"><b>It’s in MLS or Dotloop — please send it to the buyer</b></label>
+<label class="ro"><input type="radio" name="hoa" value="Not received — reach out to listing agent"><b>I haven’t received it — please reach out to the listing agent</b></label>
+<label class="ro"><input type="radio" name="hoa" value="Have from listing agent — will email, send to buyer"><b>I got it from the listing agent — I’ll email it to you; please send it to the buyer</b></label></div>
+<div data-if="side:seller" class="rg" style="margin:0">
+<label class="ro"><input type="radio" name="hoa" value="Sent to buyer’s agent"><b>I already sent it to the buyer’s agent</b></label>
+<label class="ro"><input type="radio" name="hoa" value="In MLS/Dotloop — send to buyer’s agent"><b>It’s in MLS or Dotloop — please send it to the buyer’s agent</b></label>
+<label class="ro"><input type="radio" name="hoa" value="Not received — seller will email, forward to buyer’s agent"><b>I haven’t received it — the seller will email it to you; please forward it to the buyer’s agent</b></label></div>
+</div></div>
+<div class="card" data-if="side:seller"><h3>Reissue discount (prior title policy)</h3><div class="rg">
+<label class="ro"><input type="radio" name="re" value="N/A" required><b>N/A</b></label>
+<label class="ro"><input type="radio" name="re" value="In Dotloop — send to title"><b>It’s in Dotloop — please send it to title</b></label>
+<label class="ro"><input type="radio" name="re" value="Reach out to sellers for prior policy"><b>Please reach out to the sellers for their previous policy</b></label>
+<label class="ro"><input type="radio" name="re" value="Received from sellers — will email, send to title"><b>I got it from the sellers — I’ll email you a copy to send to title</b></label></div></div>
+<div class="card" data-if="pkg:comp"><h3>Compliance</h3><div class="g">
+<label class="f c2"><span class="req">Broker of record</span><input type="text" name="bor" required></label>
+<label class="f c2"><span class="req">Broker email</span><input type="email" name="bore" required></label>
+<div class="c2"><b style="font-size:14px;font-weight:500">Built before 1978?</b><div class="rg two"><label class="ro"><input type="radio" name="p78" value="Yes" required>Yes</label><label class="ro"><input type="radio" name="p78" value="No">No</label></div></div>
+<label class="f c2" style="align-self:end"><input type="checkbox" name="brchk" value="1"> Brokerage has its own checklist</label></div></div>
+</section>
+
+<section class="step" data-t="Notes &amp; gift">
+<h1>Notes &amp; closing gift</h1><p class="lead">Anything else we should know?</p>
+<div class="card"><label class="f">Additional information<textarea name="notes" placeholder="Unusual terms, deadlines, client preferences…"></textarea></label></div>
+<div class="card"><h3>Add a closing gift?</h3><div class="tabs"><label><input type="radio" name="gift" value="yes">Yes</label><label><input type="radio" name="gift" value="no" checked>No</label></div>
+<div data-if="gift:yes"><div class="tiers" id="tiers"></div>
+<div data-if="tier:classic,signature,luxury"><div class="rg two" id="gopts"></div>
+<label class="f" style="margin-top:14px">Personalization<textarea name="pers" placeholder="Client last name, special message, etc."></textarea></label>
+<p class="note">Gift total: <b id="gt">—</b> · Payment required before ordering.</p></div></div></div>
+</section>
+
+<section class="step" data-t="Review">
+<h1>Review &amp; submit</h1><p class="lead">Check the details, then send it to your coordinator.</p>
+<div class="card"><dl id="sum"></dl></div>
+</section>
+
+<div class="err" id="err" role="alert"></div>
+<div class="nav"><button type="button" class="b" id="bk">Back</button><button type="button" class="b p" id="nx">Continue</button></div>
+</form>
+<div id="done" hidden class="card"><h1>Transaction submitted</h1><p class="lead">Your coordinator will confirm by email. This is a prototype, so nothing was sent.</p></div>
+</main></div>
+<script>
+var TIERS={classic:{n:"Classic",p:"",g:["Gift Option 1","Gift Option 2"]},signature:{n:"Signature",p:"",g:["Gift Option 1","Gift Option 2"]},luxury:{n:"Luxury",p:"",g:["Gift Option 1","Gift Option 2"]}};
+var REQUIRE=false; /* set to true to enforce required fields */
+var f=document.getElementById('f'),steps=[].slice.call(f.querySelectorAll('.step')),cur=0,maxv=0,nc=0;
+function st(){var s={};new FormData(f).forEach(function(v,k){if(typeof v==='string'&&!(k in s))s[k]=v});return s}
+function esc(x){return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function rl(n){var c=f.querySelector('input[name="'+n+'"]:checked:not(:disabled)');return c?c.closest('label').textContent.trim():''}
+function cond(){var s=st();[].slice.call(f.querySelectorAll('[data-if]')).forEach(function(el){
+ var p=el.dataset.if.split(':'),ok=p[1].split(',').indexOf(s[p[0]]||'')>-1,a=el.parentElement&&el.parentElement.closest('[data-if]');
+ if(a&&a.hidden)ok=false;el.hidden=!ok;el.querySelectorAll('input,select,textarea').forEach(function(i){i.disabled=!ok})})}
+function addC(){var i=nc++,d=document.createElement('div');d.className='cl';
+ d.innerHTML='<div class="g"><label class="f c2"><span class="req">Name</span><input type="text" name="cn'+i+'" required></label><label class="f c2"><span class="req">Email</span><input type="email" name="ce'+i+'" required></label><label class="f c2"><span class="req">Phone</span><input type="tel" name="cp'+i+'" required></label><label class="f c2">Relationship<select name="cr'+i+'"><option>Primary client</option><option>Spouse / partner</option><option>Co-buyer or co-seller</option><option>Family member</option><option>Other</option></select></label></div>';
+ document.getElementById('cls').appendChild(d)}
+function pre(){var t=document.getElementById('tiers');if(!t.children.length)t.innerHTML=Object.keys(TIERS).map(function(k){return '<label class="ro"><input type="radio" name="tier" value="'+k+'"><div><b>'+TIERS[k].n+'</b><span>'+TIERS[k].p+'</span></div></label>'}).join('');
+ var s=st(),g=document.getElementById('gopts');if(TIERS[s.tier]&&g.dataset.t!==s.tier){g.dataset.t=s.tier;g.innerHTML=TIERS[s.tier].g.map(function(n,i){return '<label class="ro"><input type="radio" name="gopt" value="'+n+'"'+(i?'':' required')+'><b>'+n+'</b></label>'}).join('')}
+ document.getElementById('gt').textContent=TIERS[s.tier]&&TIERS[s.tier].p?TIERS[s.tier].p:'—'}
+function review(){var s=st(),cl=[].slice.call(document.querySelectorAll('.cl')).map(function(c){var v=c.querySelectorAll('input,select');return esc(v[0].value)+' · '+esc(v[1].value)+' · '+esc(v[2].value)+' ('+esc(v[3].value)+')'}).join('<br>');
+ var fl=document.getElementById('cf').files[0],r=[['Service',rl('pkg')],['Representing',rl('side')],['Property',s.addr],['Purchase type',s.cash==='yes'?'Cash':'Financed'],['Contract',fl?fl.name:(s.inloop?'N/A — in Dotloop':'—')],['Clients',cl,1],['Title',s.ti==='have'?[s.tn,s.tp,s.te].filter(Boolean).join(' · '):rl('ti')],['Lender',s.cash==='yes'?'N/A (cash)':(s.le==='have'?[s.ln,s.lp,s.lm].filter(Boolean).join(' · '):rl('le'))],['HOA',rl('hoa')]];
+ if(s.side==='seller')r.push(['Reissue discount',rl('re')]);if(s.pkg==='comp')r.push(['Compliance',[s.bor,s.bore,'Pre-1978: '+s.p78].join(' · ')]);
+ r.push(['Client contact',s.direct],['Notes',s.notes||'—'],['Closing gift',s.gift==='yes'&&TIERS[s.tier]?TIERS[s.tier].n+' · '+(s.gopt||''):'None']);
+ document.getElementById('sum').innerHTML=r.map(function(x){return '<dt>'+x[0]+'</dt><dd>'+(x[2]?x[1]:esc(x[1]))+'</dd>'}).join('')}
+function go(n){cur=n;maxv=Math.max(maxv,n);steps.forEach(function(e,i){e.classList.toggle('cur',i===n)});
+ document.getElementById('rail').innerHTML=steps.map(function(e,i){return '<li class="'+(i===n?'on':i<n||i<=maxv?'ok':'')+'" data-i="'+i+'">'+e.dataset.t+'</li>'}).join('');
+ document.getElementById('tick').textContent='Step '+(n+1)+' of '+steps.length+' · '+steps[n].dataset.t.replace(/&amp;/g,'&');
+ document.getElementById('bk').style.visibility=n?'visible':'hidden';var x=document.getElementById('nx');x.textContent=n===steps.length-1?'Submit transaction':'Continue';
+ document.getElementById('err').textContent='';if(n===steps.length-1)review();window.scrollTo(0,0)}
+function bad(i){if(!REQUIRE)return null;var e=steps[i].querySelector(':invalid:not(:disabled)');if(e)return e;
+ if(i===0){var s=st();if(!document.getElementById('cf').files.length&&!s.inloop)return document.getElementById('cf')}return null}
+function fail(e,i){if(i!==cur)go(i);document.getElementById('err').textContent=e.id==='cf'?'Upload the executed contract to continue.':'Please complete the required fields to continue.';e.scrollIntoView({block:'center'});if(e.id!=='cf')e.focus({preventScroll:true})}
+document.getElementById('nx').onclick=function(){if(cur<steps.length-1){var e=bad(cur);if(e)return fail(e,cur);go(cur+1)}else{for(var i=0;i<steps.length-1;i++){var e2=bad(i);if(e2)return fail(e2,i)}f.hidden=true;document.getElementById('done').hidden=false;document.getElementById('rail').innerHTML='';window.scrollTo(0,0)}};
+document.getElementById('bk').onclick=function(){go(cur-1)};
+document.getElementById('rail').onclick=function(e){var i=e.target.dataset.i;if(i!==undefined&&+i<=maxv)go(+i)};
+document.getElementById('addc').onclick=addC;
+document.getElementById('cf').onchange=function(e){document.getElementById('cfn').textContent=e.target.files[0]?e.target.files[0].name:''};
+f.addEventListener('change',function(){cond();pre();cond()});
+f.addEventListener('submit',function(e){e.preventDefault()});
+addC();cond();pre();cond();go(0);
+</script></body></html>

@@ -19,6 +19,21 @@ import {
 } from "@weatherly/billing";
 import { createAIRouter, aiConfigured } from "@weatherly/ai";
 import {
+  createAssistantRouter,
+  createMcpRouter,
+  WeatherlyOAuth,
+  resourceUrl,
+  registerAssistantMessages,
+} from "@weatherly/assistant";
+import {
+  createCommunicationsRouter,
+  listMessages,
+  connectionStatus,
+  sendSystemEmail,
+} from "@weatherly/communications";
+import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { createWorkflowsRouter } from "../../../packages/matters/src/rules";
+import {
   createAuth,
   authHandler,
   sessionMiddleware,
@@ -53,7 +68,8 @@ app.get("/health", async (_req, res) => {
     res.status(503).json({ status: "unavailable", database: "unavailable" });
   }
 });
-const auth = createAuth();
+const auth = createAuth({ sendSystemEmail });
+registerAssistantMessages(listMessages);
 app.all("/api/auth/*splat", authHandler(auth));
 app.post(
   "/api/webhooks/stripe",
@@ -61,6 +77,25 @@ app.post(
   stripeWebhook,
 );
 app.use(express.json({ limit: "2mb" }));
+app.get("/authorize", sessionMiddleware(auth), (req, res, next) => {
+  if (!req.principal) {
+    res.redirect(
+      `${process.env.WEB_ORIGIN}/login?next=${encodeURIComponent(req.originalUrl)}`,
+    );
+    return;
+  }
+  next();
+});
+app.use(
+  mcpAuthRouter({
+    provider: new WeatherlyOAuth(),
+    issuerUrl: new URL(process.env.WEB_ORIGIN || "http://127.0.0.1:3000"),
+    resourceServerUrl: resourceUrl(),
+    scopesSupported: ["weatherly:read"],
+    resourceName: "Weatherly transaction records",
+  }),
+);
+app.use("/api/mcp", createMcpRouter());
 app.use("/api/v1", (req, res, next) => {
   if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     const origin = req.get("origin");
@@ -88,6 +123,9 @@ app.use("/api/v1/intake", createIntakeRouter());
 app.use("/api/v1/onboarding", createOnboardingRouter());
 app.use("/api/v1/billing", createBillingRouter());
 app.use("/api/v1/ai", createAIRouter());
+app.use("/api/v1/assistant", createAssistantRouter());
+app.use("/api/v1/communications", createCommunicationsRouter());
+app.use("/api/v1/workflows", createWorkflowsRouter());
 app.get(
   "/api/v1/integrations",
   asyncHandler(async (req, res) => {
@@ -165,7 +203,7 @@ app.use(
 const port = Number(process.env.PORT || 4000);
 const server = app.listen(
   port,
-  process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1",
+  process.env.NODE_ENV === "production" ? "::" : "127.0.0.1",
   () => console.log(`Weatherly API: http://127.0.0.1:${port}`),
 );
 process.on("SIGTERM", () =>

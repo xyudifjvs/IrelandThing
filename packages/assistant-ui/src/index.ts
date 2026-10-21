@@ -1,1 +1,1 @@
-export {};
+export { AssistantPanel } from "./AssistantPanel";

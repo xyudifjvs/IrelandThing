@@ -33,7 +33,7 @@ function stripeClient() {
     );
   return new Stripe(key, { maxNetworkRetries: 2, timeout: 20000 });
 }
-async function verifiedStripe() {
+export async function verifiedStripe() {
   const stripe = stripeClient();
   const account = await stripe.accounts.retrieve(null);
   if (account.id !== process.env.STRIPE_ACCOUNT_ID)
@@ -73,14 +73,92 @@ export async function listPayments(
     ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
   });
 }
-export async function createCheckout(actor: Principal, raw: unknown) {
+export async function createCheckout(
+  actor: Principal,
+  raw: unknown,
+  provider = verifiedStripe,
+) {
   // Fee timing is intentionally explicit: only Ireland initiates a request.
   assertCoordinator(actor);
   const input = checkoutInput.parse(raw);
-  const stripe = await verifiedStripe();
+  const stripe = await provider();
   const order = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`service-payment:${input.matterId}`}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${input.kind}-payment:${input.matterId}`}))`;
     const matter = await requireMatter(actor, input.matterId, false, tx);
+    if (input.kind === "gift") {
+      if (!input.giftOrderId)
+        throw new HttpError(
+          422,
+          "GIFT_REQUIRED",
+          "Choose a saved gift request.",
+        );
+      await tx.$queryRaw`SELECT id FROM "GiftOrder" WHERE id=${input.giftOrderId} FOR UPDATE`;
+      const gift = await tx.giftOrder.findUnique({
+        where: { id: input.giftOrderId },
+      });
+      if (!gift || gift.matterId !== matter.id)
+        throw new HttpError(404, "NOT_FOUND", "Gift request not found.");
+      if (gift.paymentOrderId)
+        return tx.paymentOrder.findUniqueOrThrow({
+          where: { id: gift.paymentOrderId },
+        });
+      const quote = (gift.selection as Record<string, Prisma.JsonValue>)
+        .approvedQuote as
+        | {
+            description?: string;
+            amountCents?: number;
+            currency?: string;
+            policy?: string;
+          }
+        | undefined;
+      if (
+        gift.status !== "quoted" ||
+        !quote?.description ||
+        !Number.isSafeInteger(quote.amountCents) ||
+        !quote.policy ||
+        quote.currency !== "USD"
+      )
+        throw new HttpError(
+          409,
+          "GIFT_UNAPPROVED",
+          "Ireland must approve the actual gift, total and fulfillment policy first.",
+        );
+      const result = await tx.paymentOrder.create({
+        data: {
+          matterId: matter.id,
+          createdById: actor.id,
+          idempotencyKey: `gift:${gift.id}:${input.idempotencyKey}`,
+          kind: "gift",
+          amountCents: quote.amountCents!,
+          currency: "USD",
+          status: "creating",
+          snapshot: {
+            ...quote,
+            name: quote.description,
+            giftOrderId: gift.id,
+            giftRevision: gift.revision,
+          },
+        },
+      });
+      await tx.giftOrder.update({
+        where: { id: gift.id },
+        data: {
+          paymentOrderId: result.id,
+          status: "awaiting_payment",
+          revision: { increment: 1 },
+        },
+      });
+      await audit(
+        tx,
+        actor,
+        "gift.payment_requested",
+        "PaymentOrder",
+        result.id,
+        matter.id,
+        { giftOrderId: gift.id, amountCents: result.amountCents },
+      );
+      return result;
+    }
     const catalog = await tx.catalogItem.findUnique({
       where: { code: matter.packageCode },
     });
@@ -272,6 +350,11 @@ export async function applyStripeEvent(event: Stripe.Event) {
           },
         },
       });
+      if (status === "paid")
+        await tx.giftOrder.updateMany({
+          where: { paymentOrderId: order.id, status: "awaiting_payment" },
+          data: { status: "paid", revision: { increment: 1 } },
+        });
     } else {
       const object = event.data.object as Stripe.Charge | Stripe.Dispute;
       const intent =

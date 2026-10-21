@@ -2,7 +2,8 @@ import { z } from "zod";
 export const checkoutInput = z
   .object({
     matterId: z.string().min(1),
-    kind: z.literal("service"),
+    kind: z.enum(["service", "gift"]),
+    giftOrderId: z.string().optional(),
     idempotencyKey: z.string().min(8).max(120),
     catalogRevision: z.number().int().positive().optional(),
   })

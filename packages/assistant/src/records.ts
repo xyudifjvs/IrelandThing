@@ -2,7 +2,7 @@ import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
 import { requireMatter, matterScope, audit } from "@weatherly/matters";
 import { assertCoordinator, type Principal } from "@weatherly/platform";
-import { listMatters } from "@weatherly/matters";
+import { listMatters, getMatter } from "@weatherly/matters";
 import { listDocuments } from "@weatherly/documents";
 import { listPayments, listGifts } from "@weatherly/billing";
 import {
@@ -69,10 +69,14 @@ export async function queryStoredRecords(actor: Principal, raw: unknown) {
       });
       break;
     case "matters":
-      items = await listMatters(actor, {
-        cursor: input.cursor,
-        limit: input.limit + 1,
-      });
+      items = input.matterId
+        ? input.cursor
+          ? []
+          : [await getMatter(actor, input.matterId)]
+        : await listMatters(actor, {
+            cursor: input.cursor,
+            limit: input.limit + 1,
+          });
       break;
     case "documents":
       items = await listDocuments(actor, input.matterId, {

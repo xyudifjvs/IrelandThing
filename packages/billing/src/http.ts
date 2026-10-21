@@ -8,8 +8,44 @@ import {
   verifyStripeWebhook,
   applyStripeEvent,
 } from "./service";
+import {
+  quoteGift,
+  fulfillGift,
+  refundPayment,
+  reconcilePayment,
+} from "./operations";
 export function createBillingRouter() {
   const router = Router();
+  router.post(
+    "/gifts/:id/quote",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await quoteGift(principal(req), String(req.params.id), req.body),
+      ),
+    ),
+  );
+  router.post(
+    "/gifts/:id/fulfill",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await fulfillGift(principal(req), String(req.params.id), req.body),
+      ),
+    ),
+  );
+  router.post(
+    "/payments/:id/refund",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await refundPayment(principal(req), String(req.params.id), req.body),
+      ),
+    ),
+  );
+  router.post(
+    "/payments/:id/reconcile",
+    asyncHandler(async (req, res) =>
+      res.json(await reconcilePayment(principal(req), String(req.params.id))),
+    ),
+  );
   router.get(
     "/catalog",
     asyncHandler(async (req, res) => {

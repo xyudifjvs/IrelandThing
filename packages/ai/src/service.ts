@@ -166,6 +166,7 @@ export async function processReview(proposalId: string) {
 export async function listReviews(actor: Principal) {
   assertCoordinator(actor);
   return prisma.aIProposal.findMany({
+    where: { kind: "contract" },
     orderBy: { createdAt: "desc" },
     take: 100,
   });
@@ -202,6 +203,12 @@ export async function approveReview(
   return prisma.$transaction(async (tx) => {
     const proposal = await tx.aIProposal.findUnique({ where: { id } });
     if (!proposal) throw new HttpError(404, "NOT_FOUND", "Review not found.");
+    if (proposal.kind !== "contract")
+      throw new HttpError(
+        422,
+        "REVIEW_KIND_MISMATCH",
+        "Only document reviews can apply contract facts.",
+      );
     if (proposal.status !== "pending")
       throw new HttpError(
         409,

@@ -344,7 +344,10 @@ export function createCommunicationJobHandlers(
     let imported = 0;
     try {
       if (cursor) {
-        let pageToken: string | undefined;
+        let pageToken: string | undefined =
+          typeof details.historyPageToken === "string"
+            ? details.historyPageToken
+            : undefined;
         do {
           const response: GmailHistory = await service.request<GmailHistory>(
             ownerId,
@@ -389,13 +392,18 @@ export function createCommunicationJobHandlers(
           pageToken = response.nextPageToken;
           pages++;
           if (!pageToken) cursor = response.historyId;
+          details = {
+            ...details,
+            historyPageToken: pageToken || null,
+            historyStart: pageToken ? connection.cursor : null,
+            importStatus: pageToken ? "history_importing" : "complete",
+            syncLeaseUntil: new Date(Date.now() + 600000).toISOString(),
+          };
+          await prisma.integrationConnection.update({
+            where: { id: connection.id },
+            data: { details: details as Prisma.InputJsonValue },
+          });
         } while (pageToken && pages < 20);
-        if (pageToken)
-          throw new HttpError(
-            503,
-            "SYNC_PAGE_LIMIT",
-            "Mailbox update batch is large; retry will resume safely from the saved cursor",
-          );
       } else {
         const query = process.env.GMAIL_IMPORT_QUERY;
         if (!query)
@@ -480,6 +488,8 @@ export function createCommunicationJobHandlers(
               ...details,
               initialPageToken: null,
               initialHistoryId: null,
+              historyPageToken: null,
+              historyStart: null,
               importStatus: "full_resync_required",
               lastError: "History cursor expired; full import will resume",
             },

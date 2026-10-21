@@ -121,6 +121,9 @@ function assertEvidence(
       );
   }
 }
+/** Email inference is synchronous. Caught failures are recorded; abrupt process termination can
+ * leave a processing record. It has no queued retry and applies no operational changes.
+ * A coordinator must inspect the source and explicitly request a new suggestion. */
 export function createEmailSuggestionService(
   deps: { generate?: typeof generateStructured } = {},
 ) {

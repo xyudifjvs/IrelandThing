@@ -153,6 +153,12 @@ async function authorizedDocument(actor: Principal, id: string, write = false) {
       "FORBIDDEN",
       "Only the coordinator or uploader may add a version",
     );
+  if (write && actor.role !== "coordinator" && doc.visibility === "client")
+    throw new HttpError(
+      403,
+      "SHARED_VERSION_REQUIRES_REVIEW",
+      "Ireland must review new versions of a client-shared document. Upload a separate document for review.",
+    );
   return doc;
 }
 function validateDocxArchive(bytes: Buffer) {

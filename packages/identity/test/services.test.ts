@@ -442,6 +442,56 @@ describe("real PostgreSQL services and Better Auth", () => {
       (await prisma.matter.findUniqueOrThrow({ where: { id: m.id } })).revision,
     ).toBe(3);
   });
+  it("prevents an uploader from publishing a new client-shared version without coordinator review", async () => {
+    const matter = await createMatter(owner, {
+      title: "Synthetic shared version",
+      propertyAddress: "Synthetic Sharing Lane",
+      side: "buyer",
+      packageCode: "essentials",
+      agentId: agent.id,
+    });
+    matterIds.push(matter.id);
+    const bytes = pdf();
+    const store = createObjectStore();
+    const doc = await uploadDocument(
+      agent,
+      { matterId: matter.id, visibility: "agent" },
+      { originalname: "shared.pdf", buffer: bytes, size: bytes.length },
+      store,
+    );
+    documentIds.push(doc.id);
+    await prisma.document.update({
+      where: { id: doc.id },
+      data: { visibility: "client", revision: { increment: 1 } },
+    });
+    const before = await prisma.documentVersion.count({
+      where: { documentId: doc.id },
+    });
+    await expect(
+      uploadDocument(
+        agent,
+        { visibility: "agent" },
+        { originalname: "shared.pdf", buffer: bytes, size: bytes.length },
+        store,
+        doc.id,
+      ),
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "SHARED_VERSION_REQUIRES_REVIEW",
+    });
+    expect(
+      await prisma.documentVersion.count({ where: { documentId: doc.id } }),
+    ).toBe(before);
+    const reviewed = await uploadDocument(
+      owner,
+      { visibility: "client" },
+      { originalname: "shared.pdf", buffer: bytes, size: bytes.length },
+      store,
+      doc.id,
+    );
+    expect(reviewed.versions[0].version).toBe(2);
+    expect(reviewed.visibility).toBe("client");
+  });
   it("requires signed agreement evidence or audited coordinator exception and consumes invitations once", async () => {
     const app = express();
     app.use(express.json());

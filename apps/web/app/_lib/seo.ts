@@ -54,6 +54,7 @@ export function sitePolicy(env: Partial<NodeJS.ProcessEnv> = process.env) {
         !url.hash &&
         /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(url.hostname) &&
         !/(^|\.)(localhost|local|internal|test|example)$/.test(url.hostname) &&
+        !/(^|\.)example\.(com|org|net)$/.test(url.hostname) &&
         !url.hostname.endsWith(".up.railway.app")
       )
         origin = url.origin;

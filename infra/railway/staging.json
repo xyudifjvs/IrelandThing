@@ -6,11 +6,18 @@
   "repository": "xyudifjvs/IrelandThing",
   "branch": "build/B00-foundation",
   "pinnedCommit": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
-  "deploymentStatus": "rolling-out-pinned-commit",
+  "deploymentStatus": "healthy",
+  "verifiedAt": "2026-10-21T04:16:22Z",
   "servingCommitByService": {
     "api": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
     "worker": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
-    "web": "a47f4ef7f5539706678be19cbe42a7ddc859840f"
+    "web": "ed5b4aa3eb8c6be65b83d886f827218562efd468"
+  },
+  "healthyDeploymentByService": {
+    "postgres": "e6048d57-9dd2-4f72-85ec-2ab74b532c92",
+    "api": "0db276e1-99a5-4042-af21-b8233735e2db",
+    "worker": "477df8a8-1103-4ef5-bb70-6a3722674d5b",
+    "web": "c90251c8-ae34-4e95-ab82-6ff9d37600dd"
   },
   "automaticDeployOnPush": false,
   "publicOrigin": "https://web-staging-be4e.up.railway.app",

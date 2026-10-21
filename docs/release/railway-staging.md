@@ -6,7 +6,7 @@ Deployed at the user's explicit request on October 20, 2026 (America/New_York). 
 - Railway project: https://railway.com/project/5b58af24-8d43-4226-8901-a5dd63c5dfbb
 - GitHub repository: `xyudifjvs/IrelandThing`, branch `build/B00-foundation`.
 - Resource identifiers and pinned source revision: `infra/railway/staging.json`.
-- Current rollout: the API and worker serve `ed5b4aa` successfully; web still serves `a47f4ef` while its `ed5b4aa` rebuild finishes. The manifest distinguishes each serving revision from the pending target.
+- Completed rollout verified at October 21, 2026 00:16 EDT: API, worker and web all serve the pinned `ed5b4aa` revision successfully. PostgreSQL and all three application services have one running replica, no crashed replicas, no reported issues and no pending work. The manifest records each healthy deployment ID.
 - Only web has a public domain. API, worker and PostgreSQL have no public domains or TCP proxies. Documents use a private Railway bucket.
 - PostgreSQL 17 uses a persistent volume. API, worker, web and database use one replica each in `sfo`; the document bucket is in `iad`.
 - The three application services build their repository Dockerfiles from the pinned GitHub commit. No local image or `.next` output is uploaded, and branch pushes do not automatically change the pinned release.
@@ -16,6 +16,8 @@ Deployed at the user's explicit request on October 20, 2026 (America/New_York). 
 All four services reached Railway `SUCCESS`, one running replica each, no crashed replicas and no pending staged changes. The API's predeploy step applied all eight migrations successfully over private PostgreSQL networking. The worker started successfully and its heartbeat health check passed. The fresh web build passed TypeScript and generated 28 static pages; its `/health` check verifies the private API/database path.
 
 Public HTTPS `/health` returns 200. Unauthenticated matter, session and assistant-record requests return 401. MCP POST returns 503 `MCP_UNAVAILABLE` while the feature is disabled. The browser shows the real hosted home, portal entry and sign-in pages; the local demo login is absent.
+
+The final source rollout passed Railway health checks for all services; public health and unauthenticated session/matter/assistant denials were rechecked successfully. GitHub quality gates also passed at `ed5b4aa` ([run 39539767541](https://github.com/xyudifjvs/IrelandThing/actions/runs/39539767541)) and the documentation checkpoint `e5d3d9e` ([run 39542762330](https://github.com/xyudifjvs/IrelandThing/actions/runs/39542762330)).
 
 A private SSH diagnostic confirmed production runtime/authentication mode, the exact public origin, absent live-provider keys and authenticated private bucket access (HeadBucket 200). A synthetic object was written, read back exactly and removed successfully. The new database initially contained zero users and zero matters. No local sample data, email accounts or payment accounts were copied.
 

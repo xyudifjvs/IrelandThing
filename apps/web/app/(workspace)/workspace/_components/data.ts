@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@weatherly/ui';
 export { api };
-export type Task = { id: string; title: string; status: string; dueAt?: string | null; dueDate?: string | null; matterId?: string; private?: boolean; description?: string; revision?: number; visibility?: string; };
+export type Task = { id: string; title: string; status: string; dueAt?: string | null; dueDate?: string | null; matterId?: string; private?: boolean; description?: string; revision?: number; visibility?: string; kind?: string; };
 export type Person = { id: string; name: string; email?: string; role?: string };
 export type Document = { id: string; name?: string; filename?: string; status?: string; createdAt?: string; };
 export type Matter = { id: string; title?: string; name?: string; address?: string; propertyAddress?: string; status?: string; stage?: string; side?: string; serviceLevel?: string; packageCode?: string; revision?: number; details?: Record<string, unknown>; closingDate?: string | null; closeAt?: string | null; purchasePrice?: number; cash?: boolean; tasks?: Task[]; participants?: Person[]; documents?: Document[]; notes?: { id: string; content?: string; text?: string; body?: string; createdAt: string }[]; createdAt?: string; clientContactAllowed?: boolean; deadlines?: {id: string; label: string; date: string; status: string; revision?: number; sourceDocumentId?: string}[]; };

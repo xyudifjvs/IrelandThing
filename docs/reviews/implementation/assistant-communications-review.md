@@ -18,13 +18,14 @@ Parent reports a pending API/worker integration fix. Recheck the exact subsequen
 
 ## Completed independent runtime checks
 
-At `bfd1791`, actual OAuth/MCP HTTP checks pass **21/21** through the Next proxy:
+At `bfd1791`, actual OAuth/MCP HTTP checks pass **26/26** through the Next proxy:
 
 - Deployment allowlist registration admits the configured synthetic deployment and denies an unapproved deployment.
 - Discovery works through rewrites; authorization requires a real session; consent requires the same authorized session.
 - Unregistered redirects are rejected; missing PKCE produces a safe error redirect to the registered callback; incorrect verifier is rejected; a correct verifier succeeds; the authorization code is single use.
 - Actual MCP initialize, tools discovery and get_matter work against the durable domain records; write tools are unavailable.
 - Unexpected Origin and invalid bearer are denied. Revoking the grant immediately denies subsequent bearer use.
+- Administrative records support bounded cursor pagination without repeating the prior page. The approved catalog is queryable; job status omits payload/lease-owner fields. Actual get_matter calls produce durable grant-attributed access receipts.
 
 At `bfd1791`, actual communications API plus direct synthetic fixture setup pass **15/15**:
 
@@ -38,6 +39,6 @@ At `a17e310`, independent real PostgreSQL workflow checks pass both assertions: 
 
 ## Remaining acceptance limits
 
-These are bounded evidence, not a complete implementation or production approval. Supplemental MCP pagination, safe projections and durable access-receipt assertions are prepared but their latest execution was blocked by the local authentication rate limit429; no result is claimed for that extension yet. Full source-to-screen visual coverage, current browser interactions, recovery delivery/restore, worker crash/retry, live account settings, external provider behavior and infrastructure acceptance remain separate work. Generic consumer MCP clients remain inadmissible unless their downstream AI deployment independently satisfies the OpenRouter ZDR policy.
+These are bounded evidence, not a complete implementation or production approval. The supplemental MCP run succeeded after an initial local authentication rate limit429 cooldown. Full source-to-screen visual coverage, current browser interactions, recovery delivery/restore, worker crash/retry, live account settings, external provider behavior and infrastructure acceptance remain separate work. Generic consumer MCP clients remain inadmissible unless their downstream AI deployment independently satisfies the OpenRouter ZDR policy.
 
 Probe scripts are retained as review evidence under `probes/`; they use only synthetic local accounts and database fixtures. They are not application tests or production certification. Some earlier probe output labels contain their original checkpoint; the exact executed revisions are recorded in this report and companion reports.

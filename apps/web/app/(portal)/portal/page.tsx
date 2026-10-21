@@ -78,7 +78,11 @@ export default function Portal() {
                   {progress(m)}% of shared checklist complete
                 </small>
                 <small className={s.hint}>
-                  {m.tasks?.filter((t) => t.status === "complete").length || 0}{" "}
+                  {m.tasks?.filter((t) =>
+                    ["completed", "signed", "not_applicable"].includes(
+                      t.status,
+                    ),
+                  ).length || 0}{" "}
                   steps complete
                 </small>
               </div>

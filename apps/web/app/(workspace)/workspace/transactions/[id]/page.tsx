@@ -22,6 +22,7 @@ import {
   type Matter,
 } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
+import Contacts from "../../_components/Contacts";
 export default function Detail({
   params,
 }: {
@@ -170,7 +171,11 @@ export default function Detail({
                           <input
                             aria-label={`Mark ${t.title} complete`}
                             type="checkbox"
-                            checked={t.status === "complete"}
+                            checked={[
+                              "completed",
+                              "signed",
+                              "not_applicable",
+                            ].includes(t.status)}
                             disabled={!!busy}
                             onChange={(e) =>
                               void act(t.id, () =>
@@ -179,8 +184,8 @@ export default function Detail({
                                   {
                                     expectedRevision: t.revision,
                                     status: e.target.checked
-                                      ? "complete"
-                                      : "needed",
+                                      ? "completed"
+                                      : "pending",
                                   },
                                   "PATCH",
                                 ),
@@ -193,7 +198,38 @@ export default function Detail({
                               {label(t.visibility)} · {date(t.dueDate)}
                             </small>
                           </label>
-                          <span className={s.pill}>{label(t.status)}</span>
+                          <select
+                            className={s.select}
+                            style={{ maxWidth: 150 }}
+                            aria-label={`Status for ${t.title}`}
+                            value={t.status}
+                            disabled={!!busy}
+                            onChange={(e) =>
+                              void act(t.id, () =>
+                                mutate(
+                                  `/api/v1/matters/${id}/tasks/${t.id}`,
+                                  {
+                                    expectedRevision: t.revision,
+                                    status: e.target.value,
+                                  },
+                                  "PATCH",
+                                ),
+                              )
+                            }
+                          >
+                            {[
+                              "pending",
+                              "received",
+                              "proposed",
+                              "completed",
+                              "signed",
+                              "not_applicable",
+                            ].map((value) => (
+                              <option key={value} value={value}>
+                                {label(value)}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       ))
                   ) : (
@@ -246,48 +282,65 @@ export default function Detail({
                 <div className={s.sectionBody}>
                   {m.deadlines?.length ? (
                     m.deadlines.map((d) => (
-                      <div className={s.taskLine} key={d.id}>
-                        <div style={{ flex: 1 }}>
-                          {d.label}
-                          <p className={s.fieldHint}>
-                            {label(d.status)}
-                            {d.sourceDocumentId
-                              ? " · Source document linked"
-                              : ""}
-                          </p>
-                        </div>
-                        <strong
-                          style={{ fontFamily: "Georgia", fontWeight: 400 }}
-                        >
-                          {date(d.date)}
-                        </strong>
-                        {d.status === "proposed" && (
-                          <button
-                            className={s.buttonSmall}
-                            disabled={!!busy}
-                            onClick={() =>
-                              void act(d.id, () =>
-                                mutate(
-                                  `/api/v1/matters/${id}/deadlines/${d.id}`,
-                                  {
-                                    expectedRevision: d.revision,
-                                    status: "confirmed",
-                                  },
-                                  "PATCH",
-                                ),
-                              )
-                            }
-                          >
-                            Confirm
-                          </button>
-                        )}
-                      </div>
+                      <DeadlineEditor
+                        key={`${d.id}:${d.revision}`}
+                        matterId={id}
+                        deadline={d}
+                        busy={!!busy}
+                        act={act}
+                      />
                     ))
                   ) : (
-                    <div className={s.empty}>
-                      Confirmed contract deadlines will appear here.
-                    </div>
+                    <p className={s.empty}>
+                      Add a contract deadline to begin the timeline.
+                    </p>
                   )}
+                  <details style={{ marginTop: 20 }}>
+                    <summary
+                      style={{
+                        fontSize: 11,
+                        cursor: "pointer",
+                        color: "#8c7251",
+                      }}
+                    >
+                      Add a deadline
+                    </summary>
+                    <form
+                      className={s.formGrid}
+                      style={{ marginTop: 18 }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget;
+                        const f = new FormData(form);
+                        void act("deadline-add", async () => {
+                          await mutate(`/api/v1/matters/${id}/deadlines`, {
+                            label: String(f.get("label")),
+                            date: f.get("date") ? String(f.get("date")) : null,
+                            status: f.get("date") ? "confirmed" : "unknown",
+                            details: { source: "coordinator" },
+                          });
+                          form.reset();
+                        });
+                      }}
+                    >
+                      <label className={s.field}>
+                        Milestone
+                        <input
+                          className={s.input}
+                          name="label"
+                          required
+                          placeholder="e.g. Inspection response"
+                        />
+                      </label>
+                      <label className={s.field}>
+                        Confirmed contract date
+                        <input className={s.input} name="date" type="date" />
+                      </label>
+                      <button className={s.buttonSmall} disabled={!!busy}>
+                        Add deadline
+                      </button>
+                    </form>
+                  </details>
                 </div>
               </section>
             </>
@@ -408,7 +461,38 @@ export default function Detail({
                   .map((t) => (
                     <div className={s.taskLine} key={t.id}>
                       <span style={{ flex: 1 }}>{t.title}</span>
-                      <span className={s.pill}>{label(t.status)}</span>
+                      <select
+                        className={s.select}
+                        style={{ maxWidth: 150 }}
+                        aria-label={`Status for ${t.title}`}
+                        value={t.status}
+                        disabled={!!busy}
+                        onChange={(e) =>
+                          void act(t.id, () =>
+                            mutate(
+                              `/api/v1/matters/${id}/tasks/${t.id}`,
+                              {
+                                expectedRevision: t.revision,
+                                status: e.target.value,
+                              },
+                              "PATCH",
+                            ),
+                          )
+                        }
+                      >
+                        {[
+                          "pending",
+                          "received",
+                          "proposed",
+                          "completed",
+                          "signed",
+                          "not_applicable",
+                        ].map((value) => (
+                          <option key={value} value={value}>
+                            {label(value)}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   ))}
                 <div className={s.notice}>
@@ -444,7 +528,11 @@ export default function Detail({
                       <input
                         aria-label={`Complete ${t.title}`}
                         type="checkbox"
-                        checked={t.status === "complete"}
+                        checked={[
+                          "completed",
+                          "signed",
+                          "not_applicable",
+                        ].includes(t.status)}
                         disabled={!!busy}
                         onChange={(e) =>
                           void act(t.id, () =>
@@ -453,8 +541,8 @@ export default function Detail({
                               {
                                 expectedRevision: t.revision,
                                 status: e.target.checked
-                                  ? "complete"
-                                  : "needed",
+                                  ? "completed"
+                                  : "pending",
                               },
                               "PATCH",
                             ),
@@ -506,11 +594,12 @@ export default function Detail({
           )}
         </div>
         <aside>
+          <Contacts matter={m} refresh={q.refresh} />
           <section className={s.section}>
             <div className={s.sectionHead}>
               <div>
-                <h2>People on this deal</h2>
-                <p>One file. Everyone in the loop.</p>
+                <h2>Portal access</h2>
+                <p>Access for existing agent and client accounts.</p>
               </div>
               <Users size={17} strokeWidth={1.3} />
             </div>
@@ -542,7 +631,7 @@ export default function Detail({
                 <summary
                   style={{ cursor: "pointer", fontSize: 11, color: "#8b7151" }}
                 >
-                  Add a person
+                  Grant portal access
                 </summary>
                 <form
                   onSubmit={(e) => {
@@ -610,5 +699,88 @@ export default function Detail({
         </aside>
       </div>
     </>
+  );
+}
+
+function DeadlineEditor({
+  matterId,
+  deadline: d,
+  busy,
+  act,
+}: {
+  matterId: string;
+  deadline: NonNullable<Matter["deadlines"]>[number];
+  busy: boolean;
+  act: (key: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const [value, setValue] = useState(d.date?.slice(0, 10) || "");
+  const [status, setStatus] = useState(d.status);
+  return (
+    <form
+      className={s.taskLine}
+      style={{ alignItems: "flex-start", flexWrap: "wrap" }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void act(d.id, () =>
+          mutate(
+            `/api/v1/matters/${matterId}/deadlines/${d.id}`,
+            {
+              expectedRevision: d.revision,
+              date: value || null,
+              status: value ? status : "unknown",
+            },
+            "PATCH",
+          ),
+        );
+      }}
+    >
+      <div style={{ flex: "1 1 150px" }}>
+        <strong style={{ fontWeight: 500, fontSize: 12 }}>{d.label}</strong>
+        <p className={s.fieldHint}>
+          {label(d.status)}
+          {d.sourceDocumentId && (
+            <>
+              {" "}
+              ·{" "}
+              <a
+                href={`/api/v1/documents/${d.sourceDocumentId}/download`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Review source
+              </a>
+            </>
+          )}
+        </p>
+      </div>
+      <label className={s.field} style={{ maxWidth: 160 }}>
+        Contract date
+        <input
+          className={s.input}
+          type="date"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </label>
+      <label className={s.field} style={{ maxWidth: 135 }}>
+        Review status
+        <select
+          className={s.select}
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          {["unknown", "proposed", "confirmed", "rejected"].map((v) => (
+            <option key={v}>{v}</option>
+          ))}
+        </select>
+      </label>
+      <button
+        className={s.buttonSmall}
+        style={{ marginTop: 23 }}
+        disabled={busy}
+      >
+        Save date
+      </button>
+    </form>
   );
 }

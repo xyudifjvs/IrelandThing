@@ -1,0 +1,1 @@
+export { recordIntakeGift } from "./service";

@@ -61,7 +61,7 @@ export type Matter = {
   deadlines?: {
     id: string;
     label: string;
-    date: string;
+    date: string | null;
     status: string;
     revision?: number;
     sourceDocumentId?: string;
@@ -138,9 +138,7 @@ export function progress(m: Matter) {
   return tasks.length
     ? Math.round(
         (tasks.filter((t) =>
-          ["DONE", "COMPLETED", "complete", "done", "completed"].includes(
-            t.status,
-          ),
+          ["completed", "signed", "not_applicable"].includes(t.status),
         ).length /
           tasks.length) *
           100,

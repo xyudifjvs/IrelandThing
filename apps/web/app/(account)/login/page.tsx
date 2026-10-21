@@ -5,21 +5,54 @@ import { ArrowRight, ArrowLeft, LockKeyhole } from "lucide-react";
 import { api } from "@weatherly/ui";
 import s from "./login.module.css";
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [email, setEmail] = useState(""),
+    [password, setPassword] = useState(""),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [challenge, setChallenge] = useState(false),
+    [code, setCode] = useState(""),
+    [backup, setBackup] = useState(false);
+  async function enter() {
+    const session = await api<{ user: { role: string }; mfaRequired: boolean }>(
+      "/api/v1/session",
+    );
+    window.location.href =
+      session.mfaRequired && process.env.NEXT_PUBLIC_APP_ENV !== "local"
+        ? "/security"
+        : session.user.role === "coordinator"
+          ? "/workspace"
+          : "/portal";
+  }
   async function signIn(mail = email, secret = password) {
     setBusy(true);
     setError("");
     try {
-      await api("/api/auth/sign-in/email", {
-        method: "POST",
-        body: JSON.stringify({ email: mail, password: secret }),
-      });
-      const session = await api<{ user: { role: string } }>("/api/v1/session");
-      window.location.href =
-        session.user.role === "coordinator" ? "/workspace" : "/portal";
+      const result = await api<{ twoFactorRedirect?: boolean }>(
+        "/api/auth/sign-in/email",
+        {
+          method: "POST",
+          body: JSON.stringify({ email: mail, password: secret }),
+        },
+      );
+      if (result.twoFactorRedirect) {
+        setChallenge(true);
+        setPassword("");
+      } else await enter();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function verify() {
+    setBusy(true);
+    setError("");
+    try {
+      await api(
+        `/api/auth/two-factor/${backup ? "verify-backup-code" : "verify-totp"}`,
+        { method: "POST", body: JSON.stringify({ code, trustDevice: false }) },
+      );
+      await enter();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -51,48 +84,86 @@ export default function Login() {
       <main className={s.formSide}>
         <div className={s.form}>
           <p className={s.eyebrow}>Your secure workspace</p>
-          <h2>Welcome back.</h2>
-          <p className={s.sub}>The next step is right where you left it.</p>
+          <h2>
+            {challenge ? "One more thoughtful safeguard." : "Welcome back."}
+          </h2>
+          <p className={s.sub}>
+            {challenge
+              ? "Verify your account before opening your private files."
+              : "The next step is right where you left it."}
+          </p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              void signIn();
+              void (challenge ? verify() : signIn());
             }}
           >
-            <label className={s.field}>
-              Email address
-              <input
-                type="email"
-                className={s.input}
-                value={email}
-                autoComplete="username"
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </label>
-            <label className={s.field}>
-              Password
-              <input
-                type="password"
-                className={s.input}
-                value={password}
-                autoComplete="current-password"
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-              />
-            </label>
+            {challenge ? (
+              <label className={s.field}>
+                {backup ? "Backup code" : "Authenticator code"}
+                <input
+                  className={s.input}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  autoComplete="one-time-code"
+                  inputMode={backup ? "text" : "numeric"}
+                  required
+                  autoFocus
+                />
+              </label>
+            ) : (
+              <>
+                <label className={s.field}>
+                  Email address
+                  <input
+                    type="email"
+                    className={s.input}
+                    value={email}
+                    autoComplete="username"
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </label>
+                <label className={s.field}>
+                  Password
+                  <input
+                    type="password"
+                    className={s.input}
+                    value={password}
+                    autoComplete="current-password"
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                  />
+                </label>
+              </>
+            )}
             {error && (
               <p className={s.error} role="alert">
                 {error}
               </p>
             )}
             <button type="submit" className={s.button} disabled={busy}>
-              {busy ? "Opening your workspace…" : "Sign in"}
+              {busy
+                ? "Opening your workspace…"
+                : challenge
+                  ? "Verify & continue"
+                  : "Sign in"}
               <ArrowRight size={13} />
             </button>
           </form>
-          {process.env.NEXT_PUBLIC_APP_ENV === "local" && (
+          {challenge && (
+            <button
+              className={s.demo}
+              onClick={() => {
+                setBackup(!backup);
+                setCode("");
+              }}
+            >
+              {backup ? "Use authenticator code" : "Use a backup code"}
+            </button>
+          )}
+          {!challenge && process.env.NEXT_PUBLIC_APP_ENV === "local" && (
             <>
               <button
                 className={s.demo}
@@ -110,6 +181,12 @@ export default function Login() {
             </>
           )}
           <p className={s.help}>
+            {!challenge && (
+              <>
+                <Link href="/forgot-password">Forgot your password?</Link>
+                <br />
+              </>
+            )}
             New to Weatherly?{" "}
             <Link href="/onboarding">Let’s get acquainted.</Link>
             <br />

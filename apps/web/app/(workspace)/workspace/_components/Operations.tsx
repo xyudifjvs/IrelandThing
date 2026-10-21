@@ -22,6 +22,9 @@ import {
   type Session,
 } from "./data";
 import s from "./workspace.module.css";
+import ReviewQueue from "./ReviewQueue";
+import PaymentLink from "./PaymentLink";
+import { Composer, Templates, GmailConnection } from "./CommunicationTools";
 type Integration = {
   provider: string;
   status: string;
@@ -109,6 +112,14 @@ export function Settings() {
           </button>
         </form>
       </section>
+      <div className={s.notice}>
+        <strong>Account security</strong>
+        <p>
+          Authenticator verification protects coordinator access.{" "}
+          <Link href="/security">Set up your authenticator</Link> ·{" "}
+          <Link href="/forgot-password">Password recovery</Link>
+        </p>
+      </div>
       <section>
         <div className={s.sectionHead} style={{ paddingLeft: 0 }}>
           <div>
@@ -178,6 +189,8 @@ export function Settings() {
           </div>
         )}
       </section>
+      <GmailConnection />
+      <Templates />
       <div
         className={s.notice}
         style={{ marginTop: 24, display: "flex", gap: 13 }}
@@ -249,6 +262,7 @@ export function Payments() {
             ))}
       </div>
       {catalog.error && <p className={s.error}>{catalog.error}</p>}
+      <PaymentLink />
       <section className={s.section} style={{ marginTop: 28 }}>
         <div className={s.sectionHead}>
           <div>
@@ -425,6 +439,7 @@ export function Inbox() {
           </div>
         </section>
       </div>
+      <Composer />
     </>
   );
 }
@@ -537,9 +552,6 @@ export function Review() {
                   result.id || result.jobId || "Pending worker processing",
                 )}
                 .
-                <pre style={{ whiteSpace: "pre-wrap", fontSize: 11 }}>
-                  {JSON.stringify(result, null, 2)}
-                </pre>
               </div>
             )}
           </div>
@@ -566,6 +578,7 @@ export function Review() {
           </div>
         </section>
       </div>
+      <ReviewQueue matterId={selected || undefined} />
     </>
   );
 }

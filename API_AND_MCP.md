@@ -33,6 +33,10 @@ The tools are `query_records`, `list_matters`, `get_matter`, `list_documents`, `
 
 The server cannot control an arbitrary external client's later inference or copied records. Admission is therefore restricted to verified deployments; an ordinary assistant with unknown routing must remain unapproved. The application's own AI gateway is separately gated by `OPENROUTER_ZDR_APPROVED`, `OPENROUTER_ACCOUNT_PRIVACY_VERIFIED`, explicit model/provider configuration and disabled plugins/fallbacks.
 
+## Calendly scheduling records
+
+Public `GET /api/v1/onboarding/scheduling` exposes the approved booking URL and configuration flags. Coordinator-only `GET /api/v1/onboarding/bookings` and `/bookings/:id` expose signed-provider booking/cancellation/reschedule records. Authenticated API/MCP `query_records` accepts `kind: "scheduling_bookings"` for coordinators with normal cursor pagination; agent/client access is denied. Browser scheduling notifications never write bookings. The raw-body signed endpoint is `POST /api/webhooks/calendly`; see [account activation and agreement-email setup](docs/runbooks/calendly.md). Existing inquiry and agreement APIs are preserved.
+
 ## Live client checklists
 
 Authorized coordinators and matter agents manage the client link at `GET/POST/DELETE /api/v1/matters/:id/checklist-share`. Generated bearer links grant read access only to `GET /api/public/checklist`; the secret is supplied in Authorization and never sent as a URL parameter. The PostgreSQL checklist is canonical, with explicit order and current client visibility. Matter reads and MCP `get_matter` carry the same authorized task state. API/MCP `query_records` accepts `checklist_shares`, returning authorized status/expiry/revocation metadata without URLs, token hashes or issuer details; clients are denied. See [sharing and Docker preview](docs/runbooks/checklist-sharing.md).

@@ -53,7 +53,7 @@ import {
 import { createDotloopRouter, dotloopConfigured } from "@weatherly/dotloop";
 import { createDocumentsRouter } from "@weatherly/documents";
 import { createIntakeRouter } from "@weatherly/intake";
-import { createOnboardingRouter } from "@weatherly/onboarding";
+import { createOnboardingRouter, calendlyWebhook } from "@weatherly/onboarding";
 const app = express();
 configureNetworkBoundary(app);
 app.disable("x-powered-by");
@@ -85,6 +85,12 @@ app.post(
   "/api/webhooks/stripe",
   express.raw({ type: "application/json", limit: "1mb" }),
   stripeWebhook,
+);
+// Calendly authenticates the exact bytes. Keep this ahead of JSON parsing and sessions.
+app.post(
+  "/api/webhooks/calendly",
+  express.raw({ type: "application/json", limit: "1mb" }),
+  calendlyWebhook,
 );
 app.use(express.json({ limit: "2mb" }));
 // The bearer token arrives in Authorization, never in a logged URL. Set privacy

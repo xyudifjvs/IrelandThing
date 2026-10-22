@@ -23,6 +23,7 @@ export const recordKinds = [
   "intake_drafts",
   "intake_submissions",
   "inquiries",
+  "scheduling_bookings",
   "agreements",
   "catalog",
   "communication_templates",
@@ -147,6 +148,13 @@ export async function queryStoredRecords(actor: Principal, raw: unknown) {
     case "inquiries":
       assertCoordinator(actor);
       items = await prisma.inquiry.findMany({
+        ...pagination,
+        orderBy: { id: "asc" },
+      });
+      break;
+    case "scheduling_bookings":
+      assertCoordinator(actor);
+      items = await prisma.schedulingBooking.findMany({
         ...pagination,
         orderBy: { id: "asc" },
       });

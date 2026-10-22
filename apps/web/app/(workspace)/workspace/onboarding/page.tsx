@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useData, mutate, api, label, date } from "../_components/data";
+import CalendlyBookings from "../_components/CalendlyBookings";
 import MatterPicker from "../_components/MatterPicker";
 import { Heading } from "../_components/Operations";
 import s from "../_components/workspace.module.css";
@@ -71,6 +72,7 @@ export default function Page() {
           {message}
         </div>
       )}
+      <CalendlyBookings />
       <section className={s.section}>
         <div className={s.sectionHead}>
           <div>
@@ -162,7 +164,11 @@ export default function Page() {
         <section className={s.section}>
           <div className={s.sectionHead}>
             <div>
-              <h2>Signed service agreements</h2>
+              <h2>Signed service agreement evidence</h2>
+              <p>
+                Record an agreement signed outside this portal. This upload
+                records evidence; it does not collect an electronic signature.
+              </p>
               <p>Record approved evidence before arranging agent access.</p>
             </div>
           </div>

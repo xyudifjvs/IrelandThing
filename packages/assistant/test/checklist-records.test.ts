@@ -21,7 +21,7 @@ afterAll(async () => {
 describe("checklist sharing API/MCP record projection", () => {
   it("returns current safe metadata to authorized agents and no bearer material", async () => {
     for (const user of [owner, agent, client])
-      await prisma.user.create({ data: { id: user.id, name: user.name, email: user.email, role: user.role } });
+      await prisma.user.create({ data: { id: user.id, name: user.name, email: user.email, role: user.role, twoFactorEnabled: user.role === "coordinator" } });
     const matter = await createMatter(owner, {
       title: "Synthetic shared checklist", propertyAddress: "Synthetic Checklist Lane",
       side: "buyer", packageCode: "essentials", agentId: agent.id,

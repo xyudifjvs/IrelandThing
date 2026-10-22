@@ -28,3 +28,7 @@ The tools are `query_records`, `list_matters`, `get_matter`, `list_documents`, `
 4. Revoke its grant from settings or remove the manifest entry when access/compliance changes. Every request checks current admission, expiry, revocation and owner access.
 
 The server cannot control an arbitrary external client's later inference or copied records. Admission is therefore restricted to verified deployments; an ordinary assistant with unknown routing must remain unapproved. The application's own AI gateway is separately gated by `OPENROUTER_ZDR_APPROVED`, `OPENROUTER_ACCOUNT_PRIVACY_VERIFIED`, explicit model/provider configuration and disabled plugins/fallbacks.
+
+## Live client checklists
+
+Authorized coordinators and matter agents manage the client link at `GET/POST/DELETE /api/v1/matters/:id/checklist-share`. Generated bearer links grant read access only to `GET /api/public/checklist`; the secret is supplied in Authorization and never sent as a URL parameter. The PostgreSQL checklist is canonical, with explicit order and current client visibility. Matter reads and MCP `get_matter` carry the same authorized task state. API/MCP `query_records` accepts `checklist_shares`, returning authorized status/expiry/revocation metadata without URLs, token hashes or issuer details; clients are denied. See [sharing and Docker preview](docs/runbooks/checklist-sharing.md).

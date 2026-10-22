@@ -7,6 +7,7 @@ const config: NextConfig = {
       ? [
           "/workspace/:path*",
           "/portal/:path*",
+          "/checklist/:path*",
           "/api/:path*",
           "/login",
           "/account",
@@ -38,6 +39,14 @@ const config: NextConfig = {
         source,
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       })),
+      {
+        source: "/checklist/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+      },
     ];
   },
   transpilePackages: ["@weatherly/ui", "@weatherly/assistant-ui"],

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
 import { requireMatter, matterScope, audit } from "@weatherly/matters";
 import { assertCoordinator, type Principal } from "@weatherly/platform";
-import { listMatters, getMatter } from "@weatherly/matters";
+import { listMatters, getMatter, getChecklistShare } from "@weatherly/matters";
 import { listDocuments } from "@weatherly/documents";
 import { listPayments, listGifts } from "@weatherly/billing";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@weatherly/communications";
 export const recordKinds = [
   "matters",
+  "checklist_shares",
   "documents",
   "payments",
   "gifts",
@@ -50,6 +51,26 @@ export async function queryStoredRecords(actor: Principal, raw: unknown) {
   };
   let items: unknown[];
   switch (input.kind) {
+    case "checklist_shares": {
+      if (actor.role !== "coordinator" && actor.role !== "agent")
+        assertCoordinator(actor);
+      const shares = await prisma.checklistShare.findMany({
+        where: {
+          matter: matterScope(actor),
+          ...(input.matterId ? { matterId: input.matterId } : {}),
+        },
+        select: { id: true, matterId: true, revokedAt: true },
+        ...pagination,
+        orderBy: { id: "asc" },
+      });
+      items = await Promise.all(
+        shares.map(async (row) => ({
+          ...row,
+          ...(await getChecklistShare(actor, row.matterId)),
+        })),
+      );
+      break;
+    }
     case "messages":
       items = await listMessages(actor, input.matterId, {
         cursor: input.cursor,

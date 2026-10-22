@@ -1,0 +1,81 @@
+# Isolated, synthetic-only local preview. Host exposure stays on loopback.
+# Initialize secrets and the empty database using infra/ops/checklist-local.mjs.
+name: weatherly-checklist-local
+x-runtime: &runtime
+  APP_ENV: local
+  NODE_ENV: development
+  LOCAL_DOCKER: "true"
+  DATABASE_URL: postgresql://weatherly:weatherly_synthetic_only@postgres:5432/weatherly_checklist_local
+  WEB_ORIGIN: http://127.0.0.1:3300
+  BETTER_AUTH_URL: http://127.0.0.1:3300
+  BETTER_AUTH_SECRET: ${CHECKLIST_AUTH_SECRET:?Run node infra/ops/checklist-local.mjs first}
+  CREDENTIAL_ENCRYPTION_KEY: ${CHECKLIST_ENCRYPTION_KEY:?Run node infra/ops/checklist-local.mjs first}
+  OBJECT_STORAGE_DIR: /app/.local/objects
+  MCP_ENABLED: "false"
+  OPENROUTER_ZDR_APPROVED: "false"
+  OPENROUTER_ACCOUNT_PRIVACY_VERIFIED: "false"
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: weatherly
+      POSTGRES_PASSWORD: weatherly_synthetic_only
+      POSTGRES_DB: weatherly_checklist_local
+    volumes:
+      - checklist-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weatherly -d weatherly_checklist_local"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  api:
+    image: weatherly-checklist-api:local
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      <<: *runtime
+      PORT: "4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - checklist-objects:/app/.local/objects
+  worker:
+    image: weatherly-checklist-worker:local
+    build:
+      context: ..
+      dockerfile: infra/docker/worker.Dockerfile
+    environment:
+      <<: *runtime
+      PORT: "5000"
+      WORKER_PORT: "5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - checklist-objects:/app/.local/objects
+  web:
+    image: weatherly-checklist-web:local
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+      args:
+        API_INTERNAL_URL: http://api:4000
+        NEXT_PUBLIC_APP_ENV: local
+        DEPLOYMENT_ENV: local
+        PUBLIC_SITE_URL: http://127.0.0.1:3300
+        SITE_INDEXING_ENABLED: "false"
+    environment:
+      API_INTERNAL_URL: http://api:4000
+      NEXT_PUBLIC_APP_ENV: local
+      DEPLOYMENT_ENV: local
+      SITE_INDEXING_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3300:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  checklist-postgres:
+  checklist-objects:

@@ -219,7 +219,7 @@ export async function applyInitialWorkflow(
     where: { id: matterId },
     data: { details: { ...details, workflow: snapshot } },
   });
-  for (const step of definition.steps) {
+  for (const [position, step] of definition.steps.entries()) {
     const broker = details.broker as { pre1978?: boolean } | undefined;
     const applicable =
       (!step.when?.financing || step.when.financing === details.purchaseType) &&
@@ -231,6 +231,7 @@ export async function applyInitialWorkflow(
         title: step.title,
         kind: step.kind,
         visibility: step.visibility,
+        position,
         status: applicable ? "pending" : "not_applicable",
         details: {
           workflowKey: step.key,

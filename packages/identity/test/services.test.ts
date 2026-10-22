@@ -409,7 +409,7 @@ describe("real PostgreSQL services and Better Auth", () => {
     );
     documentIds.push(doc.id);
     const accepted = await applyReviewedFacts(owner, m.id, {
-      expectedRevision: 1,
+      expectedRevision: (await getMatter(owner, m.id)).revision,
       deadlines: [
         {
           label: "Closing",
@@ -427,7 +427,7 @@ describe("real PostgreSQL services and Better Auth", () => {
     expect(manual.body.details.manualOverride).toBe(true);
     await expect(
       applyReviewedFacts(owner, m.id, {
-        expectedRevision: 3,
+        expectedRevision: accepted.revision + 1,
         deadlines: [
           {
             label: "Closing",
@@ -440,7 +440,7 @@ describe("real PostgreSQL services and Better Auth", () => {
     ).rejects.toMatchObject({ code: "MANUAL_OVERRIDE" });
     expect(
       (await prisma.matter.findUniqueOrThrow({ where: { id: m.id } })).revision,
-    ).toBe(3);
+    ).toBe(accepted.revision + 1);
   });
   it("prevents an uploader from publishing a new client-shared version without coordinator review", async () => {
     const matter = await createMatter(owner, {

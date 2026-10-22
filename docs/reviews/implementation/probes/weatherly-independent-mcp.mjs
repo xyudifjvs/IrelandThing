@@ -1,0 +1,431 @@
+import "./_review-safety.mjs";
+import {
+  checkoutRoot,
+  checkerDatabaseUrl,
+  apiBase,
+  webBase,
+} from "./_review-safety.mjs";
+import { createRequire } from "node:module";
+const require = createRequire(
+  new URL("../../../../package.json", import.meta.url),
+);
+const { Client } = require("pg");
+const db = new Client({ connectionString: checkerDatabaseUrl });
+await db.connect();
+const suffix = randomUUID();
+const fixtureThread = "checker-history-" + suffix;
+await db.query(
+  'INSERT INTO "EmailThread"(id,"ownerId","providerThreadId","matterId",subject,"updatedAt") VALUES($1,$2,$1,$3,$4,now())',
+  [fixtureThread, "owner-local", "demo-oak", "Synthetic history"],
+);
+await db.query(
+  `INSERT INTO "EmailMessage"(id,"providerMessageId","threadId","fromEmail",subject,text,"sentAt",direction,details) SELECT $1||n,$1||n,$2,$3,$4,$5,now()-n*interval '1 minute',$6,$7::jsonb FROM generate_series(1,230)n`,
+  [
+    fixtureThread + "-message-",
+    fixtureThread,
+    "lender@example.test",
+    "Synthetic history",
+    "Synthetic pagination evidence",
+    "inbound",
+    JSON.stringify({ visibility: "client" }),
+  ],
+);
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+const base = webBase,
+  proof =
+    "Independent synthetic deployment uses OpenRouter enforced ZDR and no external plugins.";
+let failed = 0;
+const checks = [];
+function check(name, ok, extra = {}) {
+  checks.push({ name, pass: ok, ...extra });
+  if (!ok) failed++;
+}
+async function req(
+  path,
+  {
+    cookie = "",
+    method = "GET",
+    body,
+    form,
+    token,
+    origin = base,
+    headers = {},
+  } = {},
+) {
+  const response = await fetch(base + path, {
+    method,
+    redirect: "manual",
+    headers: {
+      ...(origin ? { Origin: origin } : {}),
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...(token ? { Authorization: "Bearer " + token } : {}),
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+      ...headers,
+    },
+    body: body
+      ? JSON.stringify(body)
+      : form
+        ? new URLSearchParams(form)
+        : undefined,
+  });
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text.slice(0, 300) };
+  }
+  return { status: response.status, data, headers: response.headers };
+}
+const login = await req("/api/auth/sign-in/email", {
+  method: "POST",
+  body: { email: "ireland@example.test", password: "Weatherly-Local-2026!" },
+});
+if (login.status !== 200)
+  throw new Error("Synthetic login failed " + login.status);
+const cookie = login.headers
+  .getSetCookie()
+  .map((v) => v.split(";")[0])
+  .join("; ");
+const reg = await req("/api/v1/assistant/clients", {
+  method: "POST",
+  cookie,
+  body: {
+    id: "checker-approved-client",
+    name: "Synthetic policy-approved client",
+    complianceEvidence: proof,
+  },
+});
+check("Server-manifest approved client registration", reg.status === 201, {
+  status: reg.status,
+});
+const unapproved = await req("/api/v1/assistant/clients", {
+  method: "POST",
+  cookie,
+  body: {
+    id: "unapproved-checker-client",
+    name: "Unapproved",
+    complianceEvidence: proof,
+  },
+});
+check("Unapproved deployment rejected", unapproved.status === 403);
+const metadata = await req("/.well-known/oauth-authorization-server");
+const resource = await req("/.well-known/oauth-protected-resource/api/mcp");
+check(
+  "Discovery works through Next rewrite",
+  metadata.status === 200 &&
+    resource.status === 200 &&
+    resource.data.resource === base + "/api/mcp",
+);
+const verifier = randomBytes(48).toString("base64url"),
+  challenge = createHash("sha256").update(verifier).digest("base64url");
+const params = {
+  response_type: "code",
+  client_id: "checker-approved-client",
+  redirect_uri: "http://127.0.0.1:4310/callback",
+  code_challenge: challenge,
+  code_challenge_method: "S256",
+  scope: "weatherly:read",
+  state: "synthetic-review-state",
+  resource: base + "/api/mcp",
+};
+const authpath = (p) => "/authorize?" + new URLSearchParams(p);
+const unauth = await req(authpath(params));
+check(
+  "Authorization requires actual user session",
+  unauth.status === 302 &&
+    unauth.headers.get("location").startsWith(base + "/login"),
+);
+const badRedirect = await req(
+  authpath({ ...params, redirect_uri: "https://attacker.example/callback" }),
+  { cookie },
+);
+check(
+  "Unregistered redirect rejected",
+  badRedirect.status === 400 && !badRedirect.headers.get("location"),
+);
+const noPkce = { ...params };
+delete noPkce.code_challenge;
+delete noPkce.code_challenge_method;
+const missingPkce = await req(authpath(noPkce), { cookie });
+check(
+  "PKCE required",
+  missingPkce.status === 400 ||
+    (missingPkce.status === 302 &&
+      missingPkce.headers.get("location")?.startsWith(params.redirect_uri) &&
+      new URL(missingPkce.headers.get("location")).searchParams.has("error")),
+  {
+    status: missingPkce.status,
+    error: missingPkce.headers.get("location")
+      ? new URL(missingPkce.headers.get("location")).searchParams.get("error")
+      : null,
+  },
+);
+const auth = await req(authpath(params), { cookie });
+check(
+  "Session-bound authorization creates consent request",
+  auth.status === 302 &&
+    auth.headers
+      .get("location")
+      ?.startsWith(base + "/authorize-assistant?request="),
+  { status: auth.status },
+);
+if (auth.status !== 302) throw new Error(JSON.stringify(auth.data));
+const requestId = new URL(auth.headers.get("location")).searchParams.get(
+  "request",
+);
+const detail = await req("/api/v1/assistant/consent/" + requestId, { cookie });
+check(
+  "Consent identifies approved client/read scope",
+  detail.status === 200 && detail.data.scope === "weatherly:read",
+);
+const noSession = await req("/api/v1/assistant/consent/" + requestId);
+check("Consent data denied without session", noSession.status === 401);
+const approved = await req("/api/v1/assistant/consent/" + requestId, {
+  cookie,
+  method: "POST",
+  body: { approved: true },
+});
+check(
+  "Explicit consent emits callback-bound code",
+  approved.status === 200 &&
+    new URL(approved.data.redirectUrl).origin === "http://127.0.0.1:4310",
+);
+const code = new URL(approved.data.redirectUrl).searchParams.get("code");
+const exchange = {
+  grant_type: "authorization_code",
+  client_id: params.client_id,
+  code,
+  redirect_uri: params.redirect_uri,
+  code_verifier: verifier,
+  resource: params.resource,
+};
+const wrong = await req("/token", {
+  method: "POST",
+  form: { ...exchange, code_verifier: "x".repeat(64) },
+  origin: null,
+});
+check("Wrong PKCE verifier rejected", wrong.status === 400);
+const tokenResponse = await req("/token", {
+  method: "POST",
+  form: exchange,
+  origin: null,
+});
+check(
+  "Correct PKCE exchange succeeds with read-only token",
+  tokenResponse.status === 200 && tokenResponse.data.scope === "weatherly:read",
+  { status: tokenResponse.status },
+);
+if (tokenResponse.status !== 200)
+  throw new Error(JSON.stringify(tokenResponse.data));
+const token = tokenResponse.data.access_token;
+check(
+  "Authorization code single use",
+  (await req("/token", { method: "POST", form: exchange, origin: null }))
+    .status === 400,
+);
+const h = {
+  Accept: "application/json, text/event-stream",
+  "MCP-Protocol-Version": "2025-06-18",
+};
+let id = 1;
+const rpc = (method, params = {}) =>
+  req("/api/mcp", {
+    method: "POST",
+    token,
+    origin: null,
+    headers: h,
+    body: { jsonrpc: "2.0", id: id++, method, params },
+  });
+const init = await rpc("initialize", {
+  protocolVersion: "2025-06-18",
+  capabilities: {},
+  clientInfo: { name: "Independent checker", version: "1" },
+});
+check(
+  "Actual MCP initializes",
+  init.status === 200 && init.data.result?.serverInfo?.name === "weatherly",
+  { status: init.status },
+);
+const listed = await rpc("tools/list");
+const tools = listed.data.result?.tools || [];
+check(
+  "Read tools discoverable",
+  listed.status === 200 &&
+    tools.some((t) => t.name === "get_matter") &&
+    tools.some((t) => t.name === "query_records"),
+);
+const read = await rpc("tools/call", {
+  name: "get_matter",
+  arguments: { matterId: "demo-oak" },
+});
+const text = read.data.result?.content?.[0]?.text;
+check(
+  "MCP reads same persisted matter",
+  read.status === 200 && text && JSON.parse(text).matter?.id === "demo-oak",
+  { returnedError: text ? JSON.parse(text).error : read.data.error },
+);
+const records1 = await rpc("tools/call", {
+  name: "query_records",
+  arguments: { kind: "activity", limit: 1 },
+});
+const rp = JSON.parse(records1.data.result.content[0].text);
+check(
+  "Durable records use bounded cursor pagination",
+  rp.items?.length === 1 &&
+    rp.hasMore === true &&
+    typeof rp.nextCursor === "string",
+);
+const records2 = await rpc("tools/call", {
+  name: "query_records",
+  arguments: { kind: "activity", limit: 1, cursor: rp.nextCursor },
+});
+const rp2 = JSON.parse(records2.data.result.content[0].text);
+check(
+  "Next cursor advances without duplicate record",
+  rp2.items?.length === 1 && rp2.items[0].id !== rp.items[0].id,
+);
+const catalog = await rpc("tools/call", {
+  name: "query_records",
+  arguments: { kind: "catalog", limit: 100 },
+});
+const cat = JSON.parse(catalog.data.result.content[0].text);
+check(
+  "Approved service catalog available through same MCP records",
+  cat.items?.length >= 3,
+);
+const hiddenJobs = await rpc("tools/call", {
+  name: "query_records",
+  arguments: { kind: "job_status", limit: 100 },
+});
+const jobs = JSON.parse(hiddenJobs.data.result.content[0].text);
+check(
+  "Job projections exclude payload and lease owner",
+  Array.isArray(jobs.items) &&
+    jobs.items.every((x) => !("payload" in x) && !("leaseOwner" in x)),
+);
+let cursor,
+  allMessages = [],
+  pages = 0;
+do {
+  const r = await rpc("tools/call", {
+    name: "query_records",
+    arguments: {
+      kind: "messages",
+      matterId: "demo-oak",
+      limit: 100,
+      ...(cursor ? { cursor } : {}),
+    },
+  });
+  const page = JSON.parse(r.data.result.content[0].text);
+  allMessages.push(...(page.items || []));
+  cursor = page.nextCursor;
+  pages++;
+  if (pages > 20) throw Error("Cursor did not terminate");
+} while (cursor);
+check(
+  "Primary message records page beyond legacy200 cap",
+  allMessages.filter((m) => m.id.startsWith(fixtureThread)).length === 230 &&
+    new Set(allMessages.map((m) => m.id)).size === allMessages.length,
+  { pages, count: allMessages.length },
+);
+const primary = await rpc("tools/call", {
+  name: "query_records",
+  arguments: { kind: "matters", limit: 1 },
+});
+const primaryPage = JSON.parse(primary.data.result.content[0].text);
+check(
+  "Primary matter records expose next cursor",
+  primaryPage.items?.length === 1 &&
+    primaryPage.hasMore &&
+    typeof primaryPage.nextCursor === "string",
+);
+const resourceRead = await rpc("resources/read", {
+  uri: "weatherly://matters/demo-oak",
+});
+check(
+  "Actual MCP resource reads same durable matter",
+  JSON.parse(resourceRead.data.result?.contents?.[0]?.text || "{}").matter
+    ?.id === "demo-oak",
+);
+const write = await rpc("tools/call", {
+  name: "update_matter",
+  arguments: { matterId: "demo-oak", title: "forbidden" },
+});
+check(
+  "Write tool unavailable",
+  Boolean(write.data.error) || Boolean(write.data.result?.isError),
+);
+check(
+  "Unexpected browser origin denied",
+  (
+    await req("/api/mcp", {
+      method: "POST",
+      token,
+      origin: "https://attacker.example",
+      headers: h,
+      body: { jsonrpc: "2.0", id: id++, method: "tools/list" },
+    })
+  ).status === 403,
+);
+check(
+  "Invalid bearer denied",
+  (
+    await req("/api/mcp", {
+      method: "POST",
+      token: "synthetic-invalid-token",
+      origin: null,
+      headers: h,
+      body: { jsonrpc: "2.0", id: id++, method: "tools/list" },
+    })
+  ).status === 401,
+);
+const auditRecords = await rpc("tools/call", {
+  name: "query_records",
+  arguments: { kind: "activity", limit: 100 },
+});
+const ar = JSON.parse(auditRecords.data.result.content[0].text);
+check(
+  "MCP tools produce durable grant-attributed access receipts",
+  ar.items.some(
+    (e) =>
+      e.action === "assistant.tool_read" &&
+      e.entityType === "AssistantGrant" &&
+      e.details?.tool === "get_matter" &&
+      e.details?.outcome === "success",
+  ),
+);
+const grants = await req("/api/v1/assistant/grants", { cookie });
+const grant = grants.data
+  .filter((g) => g.clientId === params.client_id && !g.revokedAt)
+  .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+const receiptRows = await db.query(
+  'SELECT action,details FROM "AuditEvent" WHERE "entityId"=$1',
+  [grant.id],
+);
+check(
+  "Current grant has both tool and resource durable receipts",
+  receiptRows.rows.some(
+    (x) =>
+      x.action === "assistant.tool_read" && x.details.tool === "get_matter",
+  ) && receiptRows.rows.some((x) => x.action === "assistant.resource_read"),
+);
+const revoke = await req("/api/v1/assistant/grants/" + grant.id, {
+  cookie,
+  method: "DELETE",
+});
+check("Grant revoke succeeds", revoke.status === 200);
+check(
+  "Revoked bearer immediately denied",
+  (await rpc("tools/list")).status === 401,
+);
+console.log(
+  JSON.stringify(
+    { candidate: "2859d65", checks: checks.length, failed, results: checks },
+    null,
+    2,
+  ),
+);
+
+await db.end();

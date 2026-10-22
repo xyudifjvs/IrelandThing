@@ -1,0 +1,671 @@
+import { Router } from "express";
+import multer from "multer";
+import { z } from "zod";
+import { randomUUID, createHash } from "node:crypto";
+import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
+import path from "node:path";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import mammoth from "mammoth";
+import { PDFParse } from "pdf-parse";
+import { prisma, Prisma } from "@weatherly/db";
+import {
+  HttpError,
+  asyncHandler,
+  principal,
+  type Principal,
+} from "@weatherly/platform";
+import {
+  requireMatter,
+  matterScope,
+  audit,
+  revision,
+} from "@weatherly/matters";
+const maxBytes = 20 * 1024 * 1024;
+export interface ObjectStore {
+  put(key: string, body: Buffer, contentType: string): Promise<void>;
+  get(key: string): Promise<Buffer>;
+  remove(key: string): Promise<void>;
+}
+export function createObjectStore(): ObjectStore {
+  if (process.env.S3_BUCKET) {
+    const client = new S3Client({
+      region: process.env.S3_REGION || "auto",
+      endpoint: process.env.S3_ENDPOINT,
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+    });
+    const Bucket = process.env.S3_BUCKET;
+    return {
+      async put(Key, Body, ContentType) {
+        await client.send(
+          new PutObjectCommand({ Bucket, Key, Body, ContentType }),
+        );
+      },
+      async get(Key) {
+        const r = await client.send(new GetObjectCommand({ Bucket, Key }));
+        if (!r.Body) throw new Error("Object missing");
+        return Buffer.from(await r.Body.transformToByteArray());
+      },
+      async remove(Key) {
+        await client.send(new DeleteObjectCommand({ Bucket, Key }));
+      },
+    };
+  }
+  if (process.env.NODE_ENV === "production")
+    throw new Error("Private S3 storage is required in production");
+  const root = path.resolve(process.env.OBJECT_STORAGE_DIR || ".local/objects");
+  const resolve = (key: string) => {
+    if (!/^[a-zA-Z0-9/_-]+$/.test(key)) throw new Error("Invalid storage key");
+    const p = path.resolve(root, key);
+    if (!p.startsWith(root + path.sep)) throw new Error("Invalid storage key");
+    return p;
+  };
+  return {
+    async put(key, body) {
+      const p = resolve(key);
+      await mkdir(path.dirname(p), { recursive: true, mode: 0o700 });
+      await writeFile(p, body, { mode: 0o600, flag: "wx" });
+    },
+    get: (key) => readFile(resolve(key)),
+    async remove(key) {
+      await unlink(resolve(key)).catch((e: NodeJS.ErrnoException) => {
+        if (e.code !== "ENOENT") throw e;
+      });
+    },
+  };
+}
+const visibility = z.enum(["coordinator", "agent", "client"]);
+export async function listDocuments(
+  actor: Principal,
+  matterId?: string,
+  options: { cursor?: string; limit?: number; q?: string } = {},
+) {
+  const limit = z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .default(200)
+    .parse(options.limit);
+  if (options.cursor) await authorizedDocument(actor, options.cursor);
+  if (matterId) await requireMatter(actor, matterId);
+  return prisma.document.findMany({
+    where: {
+      ...(matterId ? { matterId } : {}),
+      ...(options.q
+        ? { name: { contains: options.q, mode: "insensitive" } }
+        : {}),
+      ...(actor.role === "coordinator"
+        ? {}
+        : {
+            OR: [
+              {
+                matter: { is: matterScope(actor) },
+                visibility:
+                  actor.role === "client"
+                    ? "client"
+                    : { in: ["agent", "client"] },
+              },
+              { matterId: null, createdById: actor.id },
+            ],
+          }),
+    },
+    include: {
+      versions: {
+        select: {
+          id: true,
+          version: true,
+          size: true,
+          checksum: true,
+          processingStatus: true,
+          error: true,
+          createdAt: true,
+        },
+        orderBy: { version: "desc" },
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    take: limit,
+  });
+}
+async function authorizedDocument(actor: Principal, id: string, write = false) {
+  const doc = await prisma.document.findUnique({ where: { id } });
+  if (!doc)
+    throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+  if (doc.matterId) {
+    await requireMatter(actor, doc.matterId);
+    if (
+      actor.role !== "coordinator" &&
+      (doc.visibility === "coordinator" ||
+        (actor.role === "client" && doc.visibility !== "client"))
+    )
+      throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+  } else if (actor.role !== "coordinator" && doc.createdById !== actor.id)
+    throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+  if (write && actor.role !== "coordinator" && doc.createdById !== actor.id)
+    throw new HttpError(
+      403,
+      "FORBIDDEN",
+      "Only the coordinator or uploader may add a version",
+    );
+  if (write && actor.role !== "coordinator" && doc.visibility === "client")
+    throw new HttpError(
+      403,
+      "SHARED_VERSION_REQUIRES_REVIEW",
+      "Ireland must review new versions of a client-shared document. Upload a separate document for review.",
+    );
+  return doc;
+}
+function validateDocxArchive(bytes: Buffer) {
+  if (bytes.length < 22)
+    throw new HttpError(415, "INVALID_DOCX", "The Word archive is invalid");
+  let offset = bytes.length - 22;
+  while (
+    offset >= Math.max(0, bytes.length - 65558) &&
+    bytes.readUInt32LE(offset) !== 0x06054b50
+  )
+    offset--;
+  if (offset < Math.max(0, bytes.length - 65558))
+    throw new HttpError(415, "INVALID_DOCX", "The Word archive is invalid");
+  const entries = bytes.readUInt16LE(offset + 10);
+  let cursor = bytes.readUInt32LE(offset + 16),
+    total = 0;
+  if (entries > 2000)
+    throw new HttpError(
+      413,
+      "ARCHIVE_TOO_LARGE",
+      "Word document has too many embedded files",
+    );
+  for (let i = 0; i < entries; i++) {
+    if (cursor + 46 > bytes.length || bytes.readUInt32LE(cursor) !== 0x02014b50)
+      throw new HttpError(415, "INVALID_DOCX", "The Word archive is invalid");
+    const compressed = bytes.readUInt32LE(cursor + 20),
+      uncompressed = bytes.readUInt32LE(cursor + 24);
+    total += uncompressed;
+    if (
+      total > 60 * 1024 * 1024 ||
+      uncompressed / Math.max(1, compressed) > 1000
+    )
+      throw new HttpError(
+        413,
+        "ARCHIVE_TOO_LARGE",
+        "Word document expands beyond the safe processing limit",
+      );
+    cursor +=
+      46 +
+      bytes.readUInt16LE(cursor + 28) +
+      bytes.readUInt16LE(cursor + 30) +
+      bytes.readUInt16LE(cursor + 32);
+  }
+}
+function fileType(name: string, bytes: Buffer, emailAttachment = false) {
+  const ext = path.extname(name).toLowerCase();
+  if (emailAttachment) {
+    if (
+      ext === ".png" &&
+      bytes
+        .subarray(0, 8)
+        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    )
+      return "image/png";
+    if (
+      [".jpg", ".jpeg"].includes(ext) &&
+      bytes[0] === 255 &&
+      bytes[1] === 216 &&
+      bytes[2] === 255
+    )
+      return "image/jpeg";
+    if ([".txt", ".csv"].includes(ext) && !bytes.includes(0))
+      return ext === ".csv" ? "text/csv" : "text/plain";
+  }
+  if (ext === ".pdf" && bytes.subarray(0, 5).toString() === "%PDF-")
+    return "application/pdf";
+  if (ext === ".docx" && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    validateDocxArchive(bytes);
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  if (ext === ".doc")
+    throw new HttpError(
+      415,
+      "CONVERSION_REQUIRED",
+      "Save legacy .doc as .docx or PDF and upload again",
+    );
+  throw new HttpError(
+    415,
+    "UNSUPPORTED_FILE",
+    "Upload a valid PDF or DOCX file",
+  );
+}
+export async function extractDocument(bytes: Buffer, mime: string) {
+  if (mime.startsWith("text/")) {
+    const text = bytes.toString("utf8");
+    return {
+      text,
+      pages: [{ page: 1, text, anchorType: "document" }],
+      status: "complete",
+      error: null,
+    };
+  }
+  if (mime.startsWith("image/"))
+    return {
+      text: "",
+      pages: [],
+      status: "needs_ocr",
+      error:
+        "Image original saved; OCR must use the approved OpenRouter gateway",
+    };
+  if (mime === "application/pdf") {
+    const parser = new PDFParse({ data: bytes });
+    try {
+      const info = await parser.getInfo();
+      if (info.total > 250)
+        throw new HttpError(
+          413,
+          "TOO_MANY_PAGES",
+          "Split PDF files longer than 250 pages",
+        );
+      const result = await parser.getText();
+      return {
+        text: result.text,
+        pages: result.pages.map((p) => ({ page: p.num, text: p.text })),
+        status: result.text.trim() ? "complete" : "needs_ocr",
+        error: result.text.trim()
+          ? null
+          : "This scanned PDF has no extractable text; AI/OCR review must use the approved OpenRouter gateway",
+      };
+    } finally {
+      await parser.destroy();
+    }
+  }
+  const result = await mammoth.extractRawText({ buffer: bytes });
+  return {
+    text: result.value,
+    pages: [
+      {
+        page: 1,
+        text: result.value,
+        anchorType: "document",
+        pagination: "DOCX has no stable physical page numbers",
+      },
+    ],
+    status: result.value.trim() ? "complete" : "empty",
+    error: result.value.trim() ? null : "No text found in this Word document",
+  };
+}
+export async function uploadDocument(
+  actor: Principal,
+  params: unknown,
+  file: { originalname: string; buffer: Buffer; size: number },
+  store: ObjectStore,
+  documentId?: string,
+) {
+  if (actor.role === "client")
+    throw new HttpError(403, "FORBIDDEN", "Clients cannot upload documents");
+  const data = z
+    .object({
+      matterId: z.string().optional(),
+      visibility: visibility.default("agent"),
+      category: z.string().max(100).default("contract"),
+    })
+    .strict()
+    .parse(params);
+  if (file.size > maxBytes || !file.size)
+    throw new HttpError(
+      413,
+      "INVALID_FILE_SIZE",
+      "Choose a file between 1 byte and 20 MB",
+    );
+  let previous: Awaited<ReturnType<typeof authorizedDocument>> | undefined;
+  if (documentId) previous = await authorizedDocument(actor, documentId, true);
+  if (data.matterId) await requireMatter(actor, data.matterId);
+  if (previous && data.matterId && previous.matterId !== data.matterId)
+    throw new HttpError(
+      422,
+      "MATTER_MISMATCH",
+      "A document version cannot move to another matter",
+    );
+  if (actor.role !== "coordinator" && data.visibility !== "agent")
+    throw new HttpError(
+      403,
+      "FORBIDDEN",
+      "The coordinator approves sharing permissions",
+    );
+  const mimeType = fileType(
+    file.originalname,
+    file.buffer,
+    data.category === "email_attachment",
+  );
+  if (previous && previous.mimeType !== mimeType)
+    throw new HttpError(
+      415,
+      "VERSION_TYPE_MISMATCH",
+      "A new version must use the same file format; create a separate document for another format",
+    );
+  const key = `documents/${randomUUID()}/${randomUUID()}`;
+  await store.put(key, file.buffer, mimeType);
+  let extraction;
+  try {
+    extraction = await extractDocument(file.buffer, mimeType);
+  } catch {
+    extraction = {
+      text: "",
+      pages: [],
+      status: "failed",
+      error: "Unable to parse this file. Upload a readable PDF or DOCX.",
+    };
+  }
+  try {
+    return await prisma.$transaction(async (tx) => {
+      let doc = previous;
+      if (doc) {
+        const changed = await tx.document.updateMany({
+          where: { id: doc.id, revision: doc.revision },
+          data: { revision: { increment: 1 } },
+        });
+        if (!changed.count)
+          throw new HttpError(
+            409,
+            "REVISION_CONFLICT",
+            "Another version was uploaded; retry",
+          );
+        doc = await tx.document.findUniqueOrThrow({ where: { id: doc.id } });
+      } else {
+        doc = await tx.document.create({
+          data: {
+            matterId: data.matterId || null,
+            name:
+              path
+                .basename(file.originalname)
+                .replace(/[\r\n\u0000-\u001f]/g, "")
+                .slice(0, 250) || "document",
+            mimeType,
+            category: data.category,
+            visibility: data.visibility,
+            createdById: actor.id,
+          },
+        });
+      }
+      const last = await tx.documentVersion.findFirst({
+        where: { documentId: doc.id },
+        orderBy: { version: "desc" },
+      });
+      const version = await tx.documentVersion.create({
+        data: {
+          documentId: doc.id,
+          version: (last?.version || 0) + 1,
+          objectKey: key,
+          checksum: createHash("sha256").update(file.buffer).digest("hex"),
+          size: file.size,
+          extractedText: extraction.text,
+          pages: extraction.pages as Prisma.InputJsonValue,
+          processingStatus: extraction.status,
+          error: extraction.error,
+        },
+      });
+      await audit(
+        tx,
+        actor,
+        "document.uploaded",
+        "Document",
+        doc.id,
+        doc.matterId,
+        { version: version.version, checksum: version.checksum },
+      );
+      const { objectKey: _, ...safeVersion } = version;
+      return { ...doc, versions: [safeVersion] };
+    });
+  } catch (error) {
+    await store.remove(key);
+    throw error;
+  }
+}
+export async function getDocument(actor: Principal, id: string) {
+  const doc = await authorizedDocument(actor, id);
+  const versions = await prisma.documentVersion.findMany({
+    where: { documentId: id },
+    orderBy: { version: "desc" },
+  });
+  return {
+    ...doc,
+    versions: versions.map(({ objectKey: _, ...version }) => version),
+  };
+}
+export function createDocumentsRouter(store = createObjectStore()) {
+  const r = Router();
+  r.use(
+    asyncHandler(async (req, _res, next) => {
+      principal(req);
+      next();
+    }),
+  );
+  const uploader = asyncHandler(async (req, _res, next) => {
+    if (principal(req).role === "client")
+      throw new HttpError(403, "FORBIDDEN", "Clients cannot upload documents");
+    next();
+  });
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: maxBytes, files: 1, fields: 5, fieldSize: 1000 },
+  });
+  r.get(
+    "/",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await listDocuments(
+          principal(req),
+          typeof req.query.matterId === "string"
+            ? req.query.matterId
+            : undefined,
+          {
+            cursor:
+              typeof req.query.cursor === "string"
+                ? req.query.cursor
+                : undefined,
+            limit:
+              req.query.limit === undefined
+                ? undefined
+                : Number(req.query.limit),
+            q: typeof req.query.q === "string" ? req.query.q : undefined,
+          },
+        ),
+      ),
+    ),
+  );
+  r.post(
+    "/",
+    uploader,
+    upload.single("file"),
+    asyncHandler(async (req, res) => {
+      if (!req.file) throw new HttpError(422, "FILE_REQUIRED", "Choose a file");
+      res
+        .status(201)
+        .json(await uploadDocument(principal(req), req.body, req.file, store));
+    }),
+  );
+  r.get(
+    "/:id",
+    asyncHandler(async (req, res) =>
+      res.json(await getDocument(principal(req), String(req.params.id))),
+    ),
+  );
+  r.post(
+    "/:id/versions",
+    uploader,
+    upload.single("file"),
+    asyncHandler(async (req, res) => {
+      if (!req.file) throw new HttpError(422, "FILE_REQUIRED", "Choose a file");
+      res
+        .status(201)
+        .json(
+          await uploadDocument(
+            principal(req),
+            req.body,
+            req.file,
+            store,
+            String(req.params.id),
+          ),
+        );
+    }),
+  );
+  r.get(
+    "/:id/download",
+    asyncHandler(async (req, res) => {
+      const actor = principal(req);
+      const doc = await authorizedDocument(actor, String(req.params.id));
+      const version = await prisma.documentVersion.findFirst({
+        where: {
+          documentId: doc.id,
+          ...(typeof req.query.versionId === "string"
+            ? { id: req.query.versionId }
+            : {}),
+        },
+        orderBy: { version: "desc" },
+      });
+      if (!version)
+        throw new HttpError(404, "VERSION_NOT_FOUND", "Version not found");
+      const bytes = await store.get(version.objectKey);
+      if (createHash("sha256").update(bytes).digest("hex") !== version.checksum)
+        throw new HttpError(
+          500,
+          "CHECKSUM_MISMATCH",
+          "Stored file failed integrity validation",
+        );
+      res.setHeader("Content-Type", doc.mimeType);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename*=UTF-8''${encodeURIComponent(doc.name)}`,
+      );
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.send(bytes);
+    }),
+  );
+  r.patch(
+    "/:id",
+    asyncHandler(async (req, res) => {
+      const actor = principal(req);
+      if (actor.role !== "coordinator")
+        throw new HttpError(
+          403,
+          "FORBIDDEN",
+          "Only the coordinator can share files",
+        );
+      const id = String(req.params.id);
+      const { expectedRevision, ...data } = z
+        .object({
+          expectedRevision: revision,
+          visibility: visibility.optional(),
+          category: z.string().max(100).optional(),
+        })
+        .strict()
+        .parse(req.body);
+      await authorizedDocument(actor, id, true);
+      res.json(
+        await prisma.$transaction(async (tx) => {
+          const changed = await tx.document.updateMany({
+            where: { id, revision: expectedRevision },
+            data: { ...data, revision: { increment: 1 } },
+          });
+          if (!changed.count)
+            throw new HttpError(
+              409,
+              "REVISION_CONFLICT",
+              "Document changed; refresh",
+            );
+          await audit(
+            tx,
+            actor,
+            "document.permissions_updated",
+            "Document",
+            id,
+            null,
+            data,
+          );
+          return tx.document.findUniqueOrThrow({ where: { id } });
+        }),
+      );
+    }),
+  );
+  return r;
+}
+
+export async function assignDocumentToMatter(
+  actor: Principal,
+  documentId: string,
+  matterId: string,
+  transaction?: Prisma.TransactionClient,
+) {
+  if (actor.role !== "coordinator")
+    throw new HttpError(
+      403,
+      "FORBIDDEN",
+      "Only the coordinator can associate imported evidence",
+    );
+  const apply = async (tx: Prisma.TransactionClient) => {
+    await requireMatter(actor, matterId, true, tx);
+    const doc = await tx.document.findUnique({ where: { id: documentId } });
+    if (!doc)
+      throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+    if (doc.matterId && doc.matterId !== matterId)
+      throw new HttpError(
+        409,
+        "DOCUMENT_ALREADY_ASSIGNED",
+        "Evidence is associated with another matter",
+      );
+    if (!doc.matterId) {
+      const changed = await tx.document.updateMany({
+        where: { id: documentId, matterId: null, revision: doc.revision },
+        data: { matterId, revision: { increment: 1 } },
+      });
+      if (!changed.count)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "Evidence changed while associating",
+        );
+      await audit(
+        tx,
+        actor,
+        "document.associated",
+        "Document",
+        documentId,
+        matterId,
+      );
+    }
+    return tx.document.findUniqueOrThrow({ where: { id: documentId } });
+  };
+  return transaction ? apply(transaction) : prisma.$transaction(apply);
+}
+
+/** Authorized byte access for trusted server adapters; storage keys never cross the API boundary. */
+export async function readDocumentVersion(
+  actor: Principal,
+  documentId: string,
+  versionId: string,
+  store = createObjectStore(),
+) {
+  const doc = await authorizedDocument(actor, documentId);
+  const version = await prisma.documentVersion.findFirst({
+    where: { id: versionId, documentId },
+  });
+  if (!version)
+    throw new HttpError(404, "VERSION_NOT_FOUND", "Version not found");
+  const bytes = await store.get(version.objectKey);
+  if (createHash("sha256").update(bytes).digest("hex") !== version.checksum)
+    throw new HttpError(
+      500,
+      "CHECKSUM_MISMATCH",
+      "Stored evidence failed integrity validation",
+    );
+  return {
+    name: doc.name,
+    mimeType: doc.mimeType,
+    checksum: version.checksum,
+    bytes,
+  };
+}

@@ -1,0 +1,190 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  CalendarDays,
+  FolderOpen,
+  Inbox,
+  Settings2,
+  CreditCard,
+  Sparkles,
+  ArrowUpRight,
+  Bell,
+  HelpCircle,
+  Plus,
+  LogOut,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
+import RouteFocus from "./RouteFocus";
+import { api, useData, type Session } from "./data";
+import s from "./workspace.module.css";
+const nav = [
+  { href: "/workspace", label: "Overview", icon: LayoutDashboard },
+  { href: "/workspace/transactions", label: "Transactions", icon: FolderOpen },
+  { href: "/workspace/inbox", label: "Inbox", icon: Inbox },
+  { href: "/workspace/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/workspace/onboarding", label: "Onboarding", icon: HelpCircle },
+  { href: "/workspace/review", label: "AI review", icon: Sparkles },
+  { href: "/workspace/payments", label: "Payments", icon: CreditCard },
+];
+export default function Shell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const session = useData<Session>("/api/v1/session");
+  const user = session.data?.user;
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  async function signOut() {
+    setSigningOut(true);
+    setSignOutError("");
+    try {
+      await api("/api/auth/sign-out", { method: "POST", body: "{}" });
+      window.location.href = "/login";
+    } catch (e) {
+      setSignOutError((e as Error).message);
+      setSigningOut(false);
+    }
+  }
+  const current =
+    nav.find((n) => n.href === pathname)?.label ||
+    (pathname.includes("settings")
+      ? "Settings"
+      : pathname.includes("new")
+        ? "New transaction"
+        : "Transaction workspace");
+  return (
+    <div className={s.shell}>
+      <aside className={s.sidebar}>
+        <Link href="/" className={s.brand} aria-label="Weatherly home">
+          <div className={s.brandTop}>WEATHERLY</div>
+          <div className={s.brandSub}>TRANSACTION CO.</div>
+        </Link>
+        <nav className={s.nav} aria-label="Workspace">
+          <div className={s.navLabel}>Your workspace</div>
+          {nav.map((n) => (
+            <Link
+              key={n.href}
+              href={n.href}
+              title={n.label}
+              aria-label={n.label}
+              aria-current={
+                pathname === n.href ||
+                (n.href !== "/workspace" && pathname.startsWith(n.href))
+                  ? "page"
+                  : undefined
+              }
+              className={
+                pathname === n.href ||
+                (n.href != "/workspace" && pathname.startsWith(n.href))
+                  ? s.active
+                  : ""
+              }
+            >
+              <n.icon />
+              {n.label}
+            </Link>
+          ))}
+          <div className={s.navLabel}>Quick actions</div>
+          <Link href="/workspace/new" title="New transaction">
+            <Plus />
+            New transaction
+          </Link>
+        </nav>
+        <div className={s.bottom}>
+          <Link
+            href="/workspace/settings"
+            className={pathname.includes("settings") ? s.active : ""}
+          >
+            <Settings2 />
+            Settings
+          </Link>
+          <Link href="/portal">
+            <ArrowUpRight />
+            Agent & client portal
+          </Link>
+          <Link href="/contact">
+            <HelpCircle />
+            Contact & support
+          </Link>
+          <div className={s.user}>
+            <div className={s.avatar}>{(user?.name || "W").slice(0, 1)}</div>
+            <div>
+              <strong>{user?.name || "Your workspace"}</strong>
+              <small>{user?.role || "Secure access"}</small>
+            </div>
+            <button
+              aria-label="Sign out"
+              title="Sign out"
+              className={s.buttonSmall}
+              disabled={signingOut}
+              onClick={() => void signOut()}
+            >
+              <LogOut size={12} />
+            </button>
+          </div>
+        </div>
+      </aside>
+      <main className={s.main} id="main-content" tabIndex={-1}>
+        <RouteFocus />
+        <header className={s.topbar}>
+          <div className={s.breadcrumb}>
+            Workspace <span>/</span> <span>{current}</span>
+          </div>
+          <div className={s.topActions}>
+            <details
+              className={s.mobileAccount}
+              key={pathname}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.currentTarget.open = false;
+                  e.currentTarget.querySelector("summary")?.focus();
+                }
+              }}
+            >
+              <summary>Account</summary>
+              <nav aria-label="Account and support">
+                <Link href="/workspace/settings">Settings</Link>
+                <Link href="/account">Your profile</Link>
+                <Link href="/portal">Agent and client portal</Link>
+                <Link href="/contact">Contact and support</Link>
+                <button disabled={signingOut} onClick={() => void signOut()}>
+                  {signingOut ? "Signing out…" : "Sign out"}
+                </button>
+              </nav>
+            </details>
+            <span className={s.topDate}>
+              {new Date().toLocaleDateString("en-US", {
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+            <Link href="/workspace/inbox" aria-label="Open inbox">
+              <Bell />
+            </Link>
+            <span
+              className={s.avatar}
+              style={{ width: 28, height: 28, fontSize: 12 }}
+            >
+              {(user?.name || "W").slice(0, 1)}
+            </span>
+          </div>
+        </header>
+        <div className={s.content}>
+          {signOutError && (
+            <p className={s.error} role="alert">
+              Could not sign out: {signOutError}{" "}
+              <button className={s.buttonSmall} onClick={() => void signOut()}>
+                Try again
+              </button>
+            </p>
+          )}
+          {process.env.NEXT_PUBLIC_APP_ENV === "local" && (
+            <div className={s.localPreview}>Local preview · synthetic data</div>
+          )}
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}

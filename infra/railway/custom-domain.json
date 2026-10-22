@@ -1,0 +1,37 @@
+{
+  "domain": "weatherlytc.com",
+  "canonicalOrigin": "https://www.weatherlytc.com",
+  "dnsProvider": "Squarespace",
+  "status": "waiting_for_owner_dns_access",
+  "projectId": "5b58af24-8d43-4226-8901-a5dd63c5dfbb",
+  "environmentId": "4870a88d-5253-4ac1-918a-7874af0870b0",
+  "serviceId": "e1ea2c79-fc46-43c2-ac6e-6e1e495028e4",
+  "railwayDomainId": "d16dc661-04dd-43af-b86e-5ecc764377bf",
+  "targetPort": 3000,
+  "verified": false,
+  "certificateStatus": "CERTIFICATE_STATUS_TYPE_VALIDATING_OWNERSHIP",
+  "dnsChangesApplied": false,
+  "applicationOriginChangesApplied": false,
+  "requiredRecords": [
+    {
+      "type": "CNAME",
+      "host": "www",
+      "value": "yu5cb8hd.up.railway.app",
+      "purpose": "website_routing"
+    },
+    {
+      "type": "TXT",
+      "host": "_railway-verify.www",
+      "value": "railway-verify=8b4cbc9d5f7636b3946931954876ed747b495106f7c7f0f62988e2235b74bc00",
+      "purpose": "public_domain_ownership_verification"
+    }
+  ],
+  "rootForwarding": {
+    "from": "weatherlytc.com",
+    "to": "https://www.weatherlytc.com",
+    "status": "planned",
+    "https": true,
+    "maintainPaths": true
+  },
+  "runbook": "docs/runbooks/custom-domain.md"
+}

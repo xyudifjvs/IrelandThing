@@ -1,0 +1,50 @@
+{
+  "projectId": "5b58af24-8d43-4226-8901-a5dd63c5dfbb",
+  "projectName": "Weatherly",
+  "environmentId": "4870a88d-5253-4ac1-918a-7874af0870b0",
+  "environmentName": "staging",
+  "repository": "xyudifjvs/IrelandThing",
+  "branch": "build/B00-foundation",
+  "pinnedCommitByService": {
+    "api": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
+    "worker": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
+    "web": "c5a3e38da3a5823c0ca52b66b818d85e29f4c708"
+  },
+  "deploymentStatus": "healthy",
+  "verifiedAt": "2026-10-21T15:01:51Z",
+  "pendingRelease": {
+    "service": "web",
+    "commit": "c5a3e38da3a5823c0ca52b66b818d85e29f4c708",
+    "status": "blocked_by_provider",
+    "reason": "Railway has temporarily paused new deploys during a platform incident. The source pin is saved, but no new deployment was created.",
+    "providerStatusUrl": "https://status.railway.com/"
+  },
+  "servingCommitByService": {
+    "api": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
+    "worker": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
+    "web": "ed5b4aa3eb8c6be65b83d886f827218562efd468"
+  },
+  "healthyDeploymentByService": {
+    "postgres": "e6048d57-9dd2-4f72-85ec-2ab74b532c92",
+    "api": "0db276e1-99a5-4042-af21-b8233735e2db",
+    "worker": "477df8a8-1103-4ef5-bb70-6a3722674d5b",
+    "web": "c90251c8-ae34-4e95-ab82-6ff9d37600dd"
+  },
+  "automaticDeployOnPush": false,
+  "publicOrigin": "https://web-staging-be4e.up.railway.app",
+  "services": {
+    "postgres": "23a7b3dd-883a-4740-bf31-c89d4d0c61a3",
+    "api": "36b6d0e1-54ea-49e2-a9a6-d05b2c0c5340",
+    "worker": "70f6c615-b375-45d6-a3a0-37e3867df0ff",
+    "web": "e1ea2c79-fc46-43c2-ac6e-6e1e495028e4"
+  },
+  "documentBucketId": "47f4da00-881b-40a5-952b-1fcf1ad06c9f",
+  "postgresVolumeId": "861bf734-a651-410d-8741-742892383556",
+  "postgresImage": "ghcr.io/railwayapp-templates/postgres-ssl:17",
+  "computeRegion": "sfo",
+  "bucketRegion": "iad",
+  "publicServices": ["web"],
+  "runtimeMode": "production",
+  "liveProvidersEnabled": false,
+  "ownerBootstrapCompleted": true
+}

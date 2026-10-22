@@ -1,0 +1,53 @@
+name: Weatherly quality gates
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: weatherly
+          POSTGRES_PASSWORD: synthetic_ci_only
+          POSTGRES_DB: weatherly_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U weatherly -d weatherly_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://weatherly:synthetic_ci_only@127.0.0.1:5432/weatherly_test
+      APP_ENV: test
+      NEXT_PUBLIC_APP_ENV: production
+      WEB_ORIGIN: http://127.0.0.1:3000
+      API_INTERNAL_URL: http://127.0.0.1:4000
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      BETTER_AUTH_SECRET: synthetic-ci-auth-secret-only-32-characters
+      CREDENTIAL_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      OBJECT_STORAGE_DIR: /tmp/weatherly-ci-objects
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:deploy
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          PG_TOOLS_CONTAINER: ${{ job.services.postgres.id }}
+      - run: npm run build
+      - name: Acceptance contract and deployment safeguards
+        run: node --import tsx tests/acceptance/contract-smoke.ts
+      - name: Prevent production seed in release image
+        run: node infra/ops/check-deployment.mjs
+# No Railway token, provider credential, push-image or deployment action belongs in this workflow.

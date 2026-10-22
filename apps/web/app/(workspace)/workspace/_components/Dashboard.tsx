@@ -1,0 +1,555 @@
+"use client";
+import Link from "next/link";
+import { useState } from "react";
+import {
+  ArrowUpRight,
+  ArrowRight,
+  Plus,
+  BriefcaseBusiness,
+  CalendarDays,
+  CircleCheck,
+  Clock3,
+  LockKeyhole,
+} from "lucide-react";
+import {
+  useData,
+  rows,
+  address,
+  date,
+  parseDate,
+  label,
+  progress,
+  mutate,
+  api,
+  type Matter,
+  type Session,
+  type Task,
+} from "./data";
+import s from "./workspace.module.css";
+export default function Dashboard({
+  transactions = false,
+}: {
+  transactions?: boolean;
+}) {
+  const [submittedSearch, setSubmittedSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
+  const pageLimit = 50;
+  const params = new URLSearchParams({ limit: String(pageLimit) });
+  if (submittedSearch) params.set("q", submittedSearch);
+  if (stageFilter) params.set("stage", stageFilter);
+  const query = useData<Matter[]>(
+    transactions ? `/api/v1/matters?${params}` : "/api/v1/matters",
+  );
+  const session = useData<Session>("/api/v1/session");
+  const [search, setSearch] = useState("");
+  const [todo, setTodo] = useState("");
+  const [todoMatter, setTodoMatter] = useState("");
+  const [older, setOlder] = useState<Matter[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const matters = [...rows(query.data), ...older],
+    active = matters.filter(
+      (m) => !["closed", "terminated", "archived"].includes(m.stage || ""),
+    );
+  const allTasks = matters.flatMap((m) =>
+    (m.tasks || []).map((t) => ({
+      ...t,
+      matterId: m.id,
+      matterAddress: address(m),
+    })),
+  );
+  const openTasks = allTasks.filter(
+    (t) => !["completed", "signed", "not_applicable"].includes(t.status),
+  );
+  const week = new Date(Date.now() + 7 * 86400000);
+  const due = openTasks
+    .filter((t) => t.dueDate && parseDate(t.dueDate) <= week)
+    .sort(
+      (a, b) =>
+        parseDate(a.dueDate!).getTime() - parseDate(b.dueDate!).getTime(),
+    );
+  const closing = active.filter((m) => {
+    const value =
+      m.closingDate ||
+      m.closeAt ||
+      m.deadlines?.find(
+        (d) => d.label.toLowerCase() === "closing" && d.status === "confirmed",
+      )?.date ||
+      m.details?.closingDate;
+    return (
+      typeof value === "string" &&
+      parseDate(value).getMonth() === new Date().getMonth() &&
+      parseDate(value).getFullYear() === new Date().getFullYear()
+    );
+  });
+  const filtered = matters;
+  async function loadMore() {
+    const last = matters.at(-1);
+    if (!last) return;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const nextParams = new URLSearchParams(params);
+      nextParams.set("cursor", last.id);
+      const next = await api<Matter[]>(`/api/v1/matters?${nextParams}`);
+      setOlder((current) => [
+        ...current,
+        ...next.filter(
+          (m) => !matters.some((existing) => existing.id === m.id),
+        ),
+      ]);
+      setHasMore(next.length === pageLimit);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+  async function addTodo(e: React.FormEvent) {
+    e.preventDefault();
+    const target = active.find((m) => m.id === todoMatter) || active[0];
+    if (!todo.trim() || !target) return;
+    setSaving(true);
+    setError("");
+    try {
+      await mutate(`/api/v1/matters/${target.id}/tasks`, {
+        title: todo,
+        visibility: "coordinator",
+        kind: "personal",
+      });
+      setTodo("");
+      await query.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <>
+      <div className={s.heading}>
+        <div>
+          <p className={s.eyebrow}>Coordinator workspace</p>
+          <h1>
+            {transactions
+              ? "Your transactions"
+              : `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, ${session.data?.user?.name?.split(" ")[0] || "there"}`}
+          </h1>
+          <p className={s.subtitle}>
+            {transactions
+              ? "Search transactions and check their status."
+              : `${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Here’s where things stand.`}
+          </p>
+        </div>
+        <Link className={s.button} href="/workspace/new">
+          <Plus />
+          New transaction
+        </Link>
+      </div>
+      {query.error && (
+        <div className={s.error} role="alert">
+          {query.error}{" "}
+          <button
+            className={s.buttonSmall}
+            onClick={() => void query.refresh()}
+          >
+            Try again
+          </button>{" "}
+          <Link href="/login">Sign in</Link>
+        </div>
+      )}
+      {!transactions && (
+        <p className={s.fieldHint}>
+          Overview of the most recent 200 transactions. Use All transactions to
+          search and load earlier records.
+        </p>
+      )}
+      <div className={s.stats}>
+        {[
+          {
+            label: "Active transactions",
+            value: active.length,
+            hint: "Open transaction files",
+            icon: BriefcaseBusiness,
+          },
+          {
+            label: "Closing this month",
+            value: closing.length,
+            hint:
+              new Date().toLocaleDateString("en-US", { month: "long" }) +
+              " closings",
+            icon: CalendarDays,
+          },
+          {
+            label: "Needs your attention",
+            value: due.length,
+            hint: "Overdue or due within 7 days",
+            icon: Clock3,
+          },
+          {
+            label: "Closed transactions",
+            value: matters.filter((m) => m.stage === "closed").length,
+            hint: "Files marked as closed",
+            icon: CircleCheck,
+          },
+        ].map((st) => (
+          <div className={s.stat} key={st.label}>
+            <span className={s.statIcon}>
+              <st.icon />
+            </span>
+            <div className={s.statValue}>{query.loading ? "—" : st.value}</div>
+            <div className={s.statLabel}>{st.label}</div>
+            <div className={s.statHint}>{st.hint}</div>
+          </div>
+        ))}
+      </div>
+      <div className={s.columns}>
+        <div>
+          <section className={s.section}>
+            <div className={s.sectionHead}>
+              <div>
+                <h2>Transactions by stage</h2>
+                <p>Count of files at each stage.</p>
+              </div>
+              <Link href="/workspace/new?side=seller&package=full_listing">
+                Add a listing <Plus />
+              </Link>
+            </div>
+            <div className={s.stageGrid}>
+              {[
+                { name: "Pre-listing", stages: ["listing", "pre_listing"] },
+                {
+                  name: "Under contract",
+                  stages: ["active", "under_contract"],
+                },
+                { name: "Closing soon", stages: ["closing"] },
+                { name: "Closed", stages: ["closed"] },
+              ].map((g) => (
+                <div key={g.name} className={s.stage}>
+                  <strong>
+                    {query.loading
+                      ? "—"
+                      : matters.filter((m) => g.stages.includes(m.stage || ""))
+                          .length}
+                  </strong>
+                  <small>{g.name}</small>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className={s.section}>
+            <div className={s.sectionHead}>
+              <div>
+                <h2>
+                  {transactions ? "All transactions" : "Active transactions"}
+                </h2>
+                <p>Open a file to review its checklist, documents and dates.</p>
+              </div>
+              {!transactions && (
+                <Link href="/workspace/transactions">
+                  View all <ArrowUpRight />
+                </Link>
+              )}
+            </div>
+            {transactions && (
+              <form
+                className={s.sectionBody}
+                style={{ paddingBottom: 15 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setOlder([]);
+                  setHasMore(true);
+                  setSubmittedSearch(search.trim());
+                }}
+              >
+                <label className={s.srOnly} htmlFor="search">
+                  Search transactions
+                </label>
+                <input
+                  id="search"
+                  className={s.input}
+                  placeholder="Search by property address…"
+                  disabled={loadingMore}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <label className={s.field}>
+                  Stage
+                  <select
+                    className={s.select}
+                    value={stageFilter}
+                    disabled={loadingMore}
+                    onChange={(e) => {
+                      setStageFilter(e.target.value);
+                      setOlder([]);
+                      setHasMore(true);
+                    }}
+                  >
+                    <option value="">All stages</option>
+                    {[
+                      "listing",
+                      "under_contract",
+                      "closing",
+                      "closed",
+                      "terminated",
+                      "archived",
+                    ].map((stage) => (
+                      <option key={stage} value={stage}>
+                        {label(stage)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className={s.buttonSmall} disabled={loadingMore}>
+                  Search all transactions
+                </button>
+                <p className={s.fieldHint}>
+                  Counts reflect the records loaded below. Search includes
+                  historical transactions.
+                </p>
+              </form>
+            )}
+            {query.loading ? (
+              <div className={s.loading}>Loading your transactions…</div>
+            ) : filtered.length ? (
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    <th>Property / transaction</th>
+                    <th>Stage</th>
+                    <th>Progress</th>
+                    <th>Closing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(transactions
+                    ? filtered
+                    : filtered.filter((m) => m.stage !== "closed").slice(0, 6)
+                  ).map((m) => (
+                    <tr key={m.id}>
+                      <td>
+                        <Link href={`/workspace/transactions/${m.id}`}>
+                          {address(m)}
+                        </Link>
+                        <small>
+                          {m.title !== address(m)
+                            ? m.title
+                            : label(m.side) + " side"}{" "}
+                          · {label(m.packageCode)}
+                        </small>
+                      </td>
+                      <td>
+                        <span
+                          className={`${s.pill} ${m.stage === "closed" ? s.pillGreen : ""}`}
+                        >
+                          {label(m.stage)}
+                        </span>
+                      </td>
+                      <td>
+                        {progress(m)}%
+                        <div className={s.progress}>
+                          <span style={{ width: `${progress(m)}%` }} />
+                        </div>
+                      </td>
+                      <td>
+                        {date(
+                          m.closingDate ||
+                            m.closeAt ||
+                            (typeof m.details?.closingDate === "string"
+                              ? m.details.closingDate
+                              : null),
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className={s.empty}>
+                <BriefcaseBusiness />
+                No transactions yet.
+                <br />
+                Your transactions will appear here when you submit an intake.
+                <p>
+                  <Link className={s.buttonSmall} href="/workspace/new">
+                    Start a transaction <ArrowRight size={12} />
+                  </Link>
+                </p>
+              </div>
+            )}
+            {transactions &&
+              !query.loading &&
+              matters.length >= pageLimit &&
+              hasMore && (
+                <div className={s.sectionBody}>
+                  <button
+                    className={s.buttonSecondary}
+                    disabled={loadingMore}
+                    onClick={() => void loadMore()}
+                  >
+                    {loadingMore ? "Loading…" : "Load older transactions"}
+                  </button>
+                </div>
+              )}
+          </section>
+        </div>
+        <div>
+          <section className={s.section}>
+            <div className={s.sectionHead}>
+              <div>
+                <h2>Needs attention</h2>
+                <p>Overdue tasks and tasks due in the next seven days.</p>
+              </div>
+              <Clock3 size={17} color="#a18c6e" strokeWidth={1.3} />
+            </div>
+            <div className={s.sectionBody}>
+              {query.loading ? (
+                <div className={s.loading}>Checking deadlines…</div>
+              ) : due.length ? (
+                due.slice(0, 6).map((t) => (
+                  <div className={s.attention} key={t.id}>
+                    <div className={s.dateBadge}>{date(t.dueDate)}</div>
+                    <div>
+                      <strong>{t.title}</strong>
+                      <p>{t.matterAddress}</p>
+                    </div>
+                    <Link
+                      href={`/workspace/transactions/${t.matterId}`}
+                      aria-label={`Open ${t.title}`}
+                    >
+                      <ArrowUpRight />
+                    </Link>
+                  </div>
+                ))
+              ) : (
+                <div className={s.empty} style={{ padding: "20px 0" }}>
+                  <CircleCheck />
+                  No task deadlines need attention in this view.
+                  <br />
+                  Upcoming task deadlines will appear here.
+                </div>
+              )}
+            </div>
+          </section>
+          <section className={s.section}>
+            <div className={s.sectionHead}>
+              <div>
+                <h2>My to-do</h2>
+                <p className={s.privateLabel}>
+                  <LockKeyhole />
+                  Private to your workspace
+                </p>
+              </div>
+            </div>
+            <div className={s.sectionBody}>
+              {allTasks
+                .filter((t) => t.visibility === "coordinator")
+                .slice(0, 5)
+                .map((t) => (
+                  <Todo key={t.id} task={t} refresh={query.refresh} />
+                ))}
+              {!allTasks.some((t) => t.visibility === "coordinator") && (
+                <p className={`${s.muted} ${s.tiny}`}>
+                  Add a private task and link it to a transaction.
+                </p>
+              )}
+              {error && <p className={s.error}>{error}</p>}
+              <label className={s.field}>
+                Save private task to
+                <select
+                  className={s.select}
+                  value={todoMatter || active[0]?.id || ""}
+                  onChange={(e) => setTodoMatter(e.target.value)}
+                  disabled={!active.length}
+                >
+                  {!active.length && (
+                    <option value="">Create a transaction first</option>
+                  )}
+                  {active.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {address(m)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <form onSubmit={addTodo} className={s.formRow}>
+                <label className={s.srOnly} htmlFor="todo">
+                  New private to-do
+                </label>
+                <input
+                  id="todo"
+                  className={s.input}
+                  placeholder={
+                    active.length
+                      ? "Add a private task…"
+                      : "Create a transaction to add tasks"
+                  }
+                  value={todo}
+                  onChange={(e) => setTodo(e.target.value)}
+                  disabled={!active.length}
+                />
+                <button
+                  className={s.buttonSmall}
+                  type="submit"
+                  aria-label="Add private task"
+                  disabled={!todo.trim() || saving || !active.length}
+                >
+                  <Plus size={13} />
+                </button>
+              </form>
+            </div>
+          </section>
+        </div>
+      </div>
+    </>
+  );
+}
+function Todo({ task, refresh }: { task: Task; refresh: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <div>
+      <label className={s.todo}>
+        <input
+          type="checkbox"
+          checked={["completed", "signed", "not_applicable"].includes(
+            task.status,
+          )}
+          disabled={busy}
+          onChange={async (e) => {
+            setBusy(true);
+            try {
+              await mutate(
+                `/api/v1/matters/${task.matterId}/tasks/${task.id}`,
+                {
+                  expectedRevision: task.revision,
+                  status: e.target.checked ? "completed" : "pending",
+                },
+                "PATCH",
+              );
+              await refresh();
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+        <span
+          style={{
+            textDecoration: ["completed", "signed", "not_applicable"].includes(
+              task.status,
+            )
+              ? "line-through"
+              : "none",
+          }}
+        >
+          {task.title}
+        </span>
+      </label>
+      {error && <p className={s.error}>{error}</p>}
+    </div>
+  );
+}

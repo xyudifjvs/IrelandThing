@@ -14,8 +14,47 @@ import {
   refundPayment,
   reconcilePayment,
 } from "./operations";
+import {
+  listAccountTransactions,
+  listAccountPayments,
+  resumeAccountPayment,
+} from "./account";
 export function createBillingRouter() {
   const router = Router();
+  const historyQuery = (query: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(query).map(([key, value]) => [
+        key,
+        key === "limit" && typeof value === "string" ? Number(value) : value,
+      ]),
+    );
+  router.get(
+    "/account/transactions",
+    asyncHandler(async (req, res) => {
+      res.set("Cache-Control", "private, no-store");
+      res.json(
+        await listAccountTransactions(principal(req), historyQuery(req.query)),
+      );
+    }),
+  );
+  router.get(
+    "/account/payments",
+    asyncHandler(async (req, res) => {
+      res.set("Cache-Control", "private, no-store");
+      res.json(
+        await listAccountPayments(principal(req), historyQuery(req.query)),
+      );
+    }),
+  );
+  router.post(
+    "/account/payments/:id/checkout",
+    asyncHandler(async (req, res) => {
+      res.set("Cache-Control", "private, no-store");
+      res.json(
+        await resumeAccountPayment(principal(req), String(req.params.id)),
+      );
+    }),
+  );
   router.post(
     "/gifts/:id/quote",
     asyncHandler(async (req, res) =>

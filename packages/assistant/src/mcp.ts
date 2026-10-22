@@ -7,6 +7,12 @@ import { z } from "zod";
 import { prisma } from "@weatherly/db";
 import { audit } from "@weatherly/matters";
 import { queryStoredRecords, recordKinds } from "./records";
+import {
+  listAccountTransactions,
+  listAccountPayments,
+  accountTransactionQuery,
+  accountPaymentQuery,
+} from "@weatherly/billing";
 import { Router } from "express";
 import { asyncHandler, HttpError, sanitizeError } from "@weatherly/platform";
 import { grantPrincipal, mcpEnabled } from "./access";
@@ -217,6 +223,32 @@ export function createMcpRouter() {
         (input) =>
           run("search_evidence", input, (actor) =>
             searchEvidence(actor, input),
+          ),
+      );
+      server.registerTool(
+        "list_account_transactions",
+        {
+          description:
+            "Read retained authorized transaction history across every stage, including closed, terminated and archived records. Counts cover the complete filtered dataset. Follow nextCursor until null for all rows.",
+          inputSchema: accountTransactionQuery.shape,
+          annotations,
+        },
+        (input) =>
+          run("list_account_transactions", input, (actor) =>
+            listAccountTransactions(actor, input),
+          ),
+      );
+      server.registerTool(
+        "list_account_payments",
+        {
+          description:
+            "Read saved authorized payment requests and provider-confirmed states. Totals stay separate by currency and payment environment. Legacy records with unknown environment are never treated as live or test. Follow nextCursor until null; this tool cannot charge, refund or change payment status.",
+          inputSchema: accountPaymentQuery.shape,
+          annotations,
+        },
+        (input) =>
+          run("list_account_payments", input, (actor) =>
+            listAccountPayments(actor, input),
           ),
       );
       server.registerTool(

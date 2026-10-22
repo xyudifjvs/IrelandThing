@@ -51,3 +51,27 @@ export function assertPaymentEvent(
       "Unexpected payment environment.",
     );
 }
+
+/** Missing legacy provenance stays unknown until verified provider evidence arrives. */
+export function savedPaymentEnvironment(
+  details: unknown,
+): "test" | "live" | "unknown" {
+  const value =
+    details && typeof details === "object" && !Array.isArray(details)
+      ? (details as { paymentEnvironment?: unknown }).paymentEnvironment
+      : undefined;
+  return value === "test" || value === "live" ? value : "unknown";
+}
+
+export function assertSavedPaymentEnvironment(
+  details: unknown,
+  environment: "test" | "live",
+) {
+  const saved = savedPaymentEnvironment(details);
+  if (saved !== "unknown" && saved !== environment)
+    throw new HttpError(
+      400,
+      "PAYMENT_ENVIRONMENT_MISMATCH",
+      "The event does not match this payment request's saved environment.",
+    );
+}

@@ -9,6 +9,21 @@ import {
 } from "@weatherly/platform";
 import { requireMatter, audit } from "@weatherly/matters";
 import { verifiedStripe, applyStripeEvent } from "./service";
+import {
+  assertSavedPaymentEnvironment,
+  paymentMode,
+  savedPaymentEnvironment,
+} from "./mode";
+
+function requirePaymentEnvironment(details: unknown) {
+  assertSavedPaymentEnvironment(details, paymentMode());
+  if (savedPaymentEnvironment(details) === "unknown")
+    throw new HttpError(
+      409,
+      "PAYMENT_ENVIRONMENT_UNKNOWN",
+      "Reconcile this request in its original payment environment before changing it.",
+    );
+}
 
 export async function quoteGift(actor: Principal, id: string, raw: unknown) {
   assertCoordinator(actor);
@@ -129,6 +144,7 @@ export async function fulfillGift(
         payment &&
         ["creating", "pending"].includes(payment.status)
       ) {
+        requirePaymentEnvironment(payment.details);
         if (!payment.stripeSessionId)
           throw new HttpError(
             409,
@@ -243,6 +259,10 @@ export async function refundPayment(
     })
     .strict()
     .parse(raw);
+  const snapshot = await prisma.paymentOrder.findUnique({ where: { id } });
+  if (!snapshot) throw new HttpError(404, "NOT_FOUND", "Payment not found.");
+  await requireMatter(actor, snapshot.matterId);
+  requirePaymentEnvironment(snapshot.details);
   const stripe = await provider();
   // Reserve durably before crossing the network boundary. A crash or uncertain
   // response must not make the paid balance available for ordering/refunding again.
@@ -251,6 +271,7 @@ export async function refundPayment(
     const order = await tx.paymentOrder.findUnique({ where: { id } });
     if (!order) throw new HttpError(404, "NOT_FOUND", "Payment not found.");
     await requireMatter(actor, order.matterId, false, tx);
+    requirePaymentEnvironment(order.details);
     const intents = refundIntents(order.details),
       prior = intents.find((r) => r.key === input.idempotencyKey);
     if (prior) {
@@ -398,6 +419,9 @@ export async function reconcilePayment(
       "A Stripe checkout is required before reconciliation.",
     );
   await requireMatter(actor, order.matterId);
+  // Reconciliation only reads Stripe and may establish missing legacy provenance;
+  // a known conflicting environment is never queried with the current credentials.
+  assertSavedPaymentEnvironment(order.details, paymentMode());
   const stripe = await provider();
   const session = await stripe.checkout.sessions.retrieve(
     order.stripeSessionId,

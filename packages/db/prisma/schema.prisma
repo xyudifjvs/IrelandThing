@@ -535,3 +535,38 @@ model WorkerHeartbeat {
   id         String   @id
   lastSeenAt DateTime
 }
+
+// Provider-confirmed scheduling is intentionally separate from lead inquiries.
+model SchedulingBooking {
+  id String @id @default(cuid())
+  inviteeUri String @unique
+  eventUri String
+  eventTypeUri String
+  name String
+  email String
+  timezone String?
+  startAt DateTime
+  endAt DateTime
+  status String
+  oldInviteeUri String?
+  newInviteeUri String?
+  sourceUpdatedAt DateTime
+  lastDeliveryHash String
+  provenance String
+  verifiedAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([startAt, status])
+  @@index([oldInviteeUri])
+}
+
+model SchedulingDelivery {
+  deliveryHash String @id
+  event String
+  inviteeUri String
+  sourceAt DateTime
+  applied Boolean
+  payload Json
+  receivedAt DateTime @default(now())
+  @@index([inviteeUri, sourceAt])
+}

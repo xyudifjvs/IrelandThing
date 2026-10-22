@@ -1,3 +1,5 @@
+import { schedulingConfig } from "./calendly";
+export { calendlyWebhook } from "./calendly";
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -81,6 +83,31 @@ export async function createInquiry(input: unknown) {
 }
 export function createOnboardingRouter() {
   const r = Router();
+  r.get("/scheduling", (_req, res) => res.json(schedulingConfig()));
+  r.get(
+    "/bookings",
+    asyncHandler(async (req, res) => {
+      assertCoordinator(principal(req));
+      res.json(
+        await prisma.schedulingBooking.findMany({
+          orderBy: { startAt: "desc" },
+          take: 200,
+        }),
+      );
+    }),
+  );
+  r.get(
+    "/bookings/:id",
+    asyncHandler(async (req, res) => {
+      assertCoordinator(principal(req));
+      const booking = await prisma.schedulingBooking.findUnique({
+        where: { id: String(req.params.id) },
+      });
+      if (!booking)
+        throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found.");
+      res.json(booking);
+    }),
+  );
   r.post(
     "/inquiries",
     requestLimiter("inquiry", 5, { windowMs: 10 * 60000 }),

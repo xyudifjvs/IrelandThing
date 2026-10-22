@@ -20,8 +20,8 @@ export default function InquiryForm({
         Your request has been saved.
       </h3>
       <p>
-        Your request is ready for Ireland to review. Any meeting time still
-        needs her confirmation; no email response has been sent.
+        Your inquiry is ready for Ireland to review. This form does not book a
+        meeting or send an email response.
       </p>
       <button className={s.secondary} onClick={() => setSaved(false)}>
         Submit another request

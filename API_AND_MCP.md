@@ -28,3 +28,6 @@ The tools are `query_records`, `list_matters`, `get_matter`, `list_documents`, `
 4. Revoke its grant from settings or remove the manifest entry when access/compliance changes. Every request checks current admission, expiry, revocation and owner access.
 
 The server cannot control an arbitrary external client's later inference or copied records. Admission is therefore restricted to verified deployments; an ordinary assistant with unknown routing must remain unapproved. The application's own AI gateway is separately gated by `OPENROUTER_ZDR_APPROVED`, `OPENROUTER_ACCOUNT_PRIVACY_VERIFIED`, explicit model/provider configuration and disabled plugins/fallbacks.
+# Calendly scheduling records
+
+Public `GET /api/v1/onboarding/scheduling` exposes the approved booking URL and configuration flags. Coordinator-only `GET /api/v1/onboarding/bookings` and `/bookings/:id` expose signed-provider booking/cancellation/reschedule records. Authenticated API/MCP `query_records` accepts `kind: "scheduling_bookings"` for coordinators with normal cursor pagination; agent/client access is denied. Browser scheduling notifications never write bookings. The raw-body signed endpoint is `POST /api/webhooks/calendly`; see [account activation and agreement-email setup](docs/runbooks/calendly.md). Existing inquiry and agreement APIs are preserved.

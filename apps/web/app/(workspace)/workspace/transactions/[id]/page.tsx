@@ -25,18 +25,24 @@ import s from "../../_components/workspace.module.css";
 import DocumentFiles from "../../_components/DocumentFiles";
 import UserPicker from "../../_components/UserPicker";
 import Contacts, { AgentAssignment } from "../../_components/Contacts";
+import { LiveStatus, useLiveData } from "../../../../_components/useLiveData";
+import ChecklistShare from "../../../../_components/ChecklistShare";
+import ChecklistTask from "../../../../_components/ChecklistTask";
+import cs from "../../../../_components/checklist.module.css";
 export default function Detail({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const q = useData<Matter>(`/api/v1/matters/${id}`);
+  const q = useLiveData<Matter>(`/api/v1/matters/${id}`);
   const [tab, setTab] = useState("Checklist");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
   const [task, setTask] = useState("");
+  const [taskVisibility, setTaskVisibility] = useState("agent");
+  const [taskDueDate, setTaskDueDate] = useState("");
   const [person, setPerson] = useState({ userId: "", role: "client" });
   const [notice, setNotice] = useState("");
   async function act(key: string, fn: () => Promise<unknown>) {
@@ -58,6 +64,7 @@ export default function Detail({
     return (
       <div className={s.error}>
         {q.error || "Transaction not found."}
+        <LiveStatus query={q} />
         <p>
           <Link href="/workspace">Return to workspace</Link>
         </p>
@@ -65,6 +72,18 @@ export default function Detail({
     );
   const m = q.data;
   const tasks = m.tasks || [];
+  const sharedTasks = tasks.filter((t) => t.visibility !== "coordinator");
+  async function moveTask(taskId: string, targetId: string) {
+    const taskIds = tasks.map((t) => t.id);
+    const from = taskIds.indexOf(taskId),
+      to = taskIds.indexOf(targetId);
+    taskIds.splice(from, 1);
+    taskIds.splice(to, 0, taskId);
+    await mutate(`/api/v1/matters/${id}/tasks/reorder`, {
+      taskIds,
+      expectedRevision: m.revision,
+    });
+  }
   return (
     <>
       <Link className={s.backLink} href="/workspace/transactions">
@@ -132,6 +151,7 @@ export default function Detail({
         </div>
       )}
       {notice && <div className={s.notice}>{notice}</div>}
+      <LiveStatus query={q} />
       <div className={s.tabs} role="tablist" aria-label="Transaction sections">
         {[
           "Checklist",
@@ -184,103 +204,84 @@ export default function Detail({
                   </div>
                 </div>
                 <div className={s.sectionBody}>
-                  {tasks.filter((t) => t.visibility !== "coordinator")
-                    .length ? (
-                    tasks
-                      .filter((t) => t.visibility !== "coordinator")
-                      .map((t) => (
-                        <div className={s.taskLine} key={t.id}>
-                          <input
-                            aria-label={`Mark ${t.title} complete`}
-                            type="checkbox"
-                            checked={[
-                              "completed",
-                              "signed",
-                              "not_applicable",
-                            ].includes(t.status)}
-                            disabled={!!busy}
-                            onChange={(e) =>
-                              void act(t.id, () =>
-                                mutate(
-                                  `/api/v1/matters/${id}/tasks/${t.id}`,
-                                  {
-                                    expectedRevision: t.revision,
-                                    status: e.target.checked
-                                      ? "completed"
-                                      : "pending",
-                                  },
-                                  "PATCH",
-                                ),
-                              )
-                            }
-                          />
-                          <label>
-                            {t.title}
-                            <small>
-                              {label(t.visibility)} · {date(t.dueDate)}
-                            </small>
-                          </label>
-                          <select
-                            className={s.select}
-                            style={{ maxWidth: 150 }}
-                            aria-label={`Status for ${t.title}`}
-                            value={t.status}
-                            disabled={!!busy}
-                            onChange={(e) =>
-                              void act(t.id, () =>
-                                mutate(
-                                  `/api/v1/matters/${id}/tasks/${t.id}`,
-                                  {
-                                    expectedRevision: t.revision,
-                                    status: e.target.value,
-                                  },
-                                  "PATCH",
-                                ),
-                              )
-                            }
-                          >
-                            {[
-                              "pending",
-                              "received",
-                              "proposed",
-                              "completed",
-                              "signed",
-                              "not_applicable",
-                            ].map((value) => (
-                              <option key={value} value={value}>
-                                {label(value)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ))
+                  {sharedTasks.length ? (
+                    sharedTasks.map((t, index) => (
+                      <ChecklistTask
+                        key={t.id}
+                        task={t}
+                        matterId={id}
+                        busy={!!busy}
+                        act={act}
+                        moveUp={
+                          index > 0
+                            ? () => moveTask(t.id, sharedTasks[index - 1].id)
+                            : undefined
+                        }
+                        moveDown={
+                          index < sharedTasks.length - 1
+                            ? () => moveTask(t.id, sharedTasks[index + 1].id)
+                            : undefined
+                        }
+                      />
+                    ))
                   ) : (
                     <div className={s.empty}>
                       No checklist steps yet. Add the first step below.
                     </div>
                   )}
                   <form
-                    className={s.formRow}
+                    className={cs.addForm}
                     onSubmit={(e) => {
                       e.preventDefault();
                       void act("task", async () => {
                         await mutate(`/api/v1/matters/${id}/tasks`, {
                           title: task,
-                          visibility: "agent",
+                          visibility: taskVisibility,
+                          dueDate: taskDueDate || undefined,
                           kind: "custom",
                         });
                         setTask("");
+                        setTaskDueDate("");
                       });
                     }}
                   >
-                    <input
-                      className={s.input}
-                      aria-label="New checklist step"
-                      placeholder="Add a checklist step…"
-                      value={task}
-                      onChange={(e) => setTask(e.target.value)}
-                      required
-                    />
+                    <label>
+                      New checklist step
+                      <input
+                        className={s.input}
+                        aria-label="New checklist step"
+                        placeholder="Add a checklist step…"
+                        value={task}
+                        onChange={(e) => setTask(e.target.value)}
+                        required
+                        maxLength={300}
+                      />
+                    </label>
+                    <div className={cs.editorFields}>
+                      <label>
+                        Who can see this step
+                        <select
+                          className={s.select}
+                          aria-label="New step visibility"
+                          value={taskVisibility}
+                          onChange={(e) => setTaskVisibility(e.target.value)}
+                        >
+                          <option value="agent">Agent only</option>
+                          <option value="client">Clients & agent</option>
+                          <option value="coordinator">Coordinator only</option>
+                        </select>
+                      </label>
+                      <label>
+                        Due date (optional)
+                        <input
+                          className={s.input}
+                          aria-label="New step due date"
+                          type="date"
+                          value={taskDueDate}
+                          onChange={(e) => setTaskDueDate(e.target.value)}
+                        />
+                      </label>
+                    </div>
                     <button
                       className={s.buttonSmall}
                       disabled={!!busy || !task.trim()}
@@ -321,7 +322,7 @@ export default function Detail({
                   {m.deadlines?.length ? (
                     m.deadlines.map((d) => (
                       <DeadlineEditor
-                        key={`${d.id}:${d.revision}`}
+                        key={d.id}
                         matterId={id}
                         deadline={d}
                         busy={!!busy}
@@ -487,33 +488,13 @@ export default function Detail({
                 {tasks
                   .filter((t) => t.visibility === "coordinator")
                   .map((t) => (
-                    <div className={s.taskLine} key={t.id}>
-                      <input
-                        aria-label={`Complete ${t.title}`}
-                        type="checkbox"
-                        checked={[
-                          "completed",
-                          "signed",
-                          "not_applicable",
-                        ].includes(t.status)}
-                        disabled={!!busy}
-                        onChange={(e) =>
-                          void act(t.id, () =>
-                            mutate(
-                              `/api/v1/matters/${id}/tasks/${t.id}`,
-                              {
-                                expectedRevision: t.revision,
-                                status: e.target.checked
-                                  ? "completed"
-                                  : "pending",
-                              },
-                              "PATCH",
-                            ),
-                          )
-                        }
-                      />
-                      <span>{t.title}</span>
-                    </div>
+                    <ChecklistTask
+                      key={t.id}
+                      task={t}
+                      matterId={id}
+                      busy={!!busy}
+                      act={act}
+                    />
                   ))}
                 {m.notes?.map((n) => (
                   <div className={s.note} key={n.id}>
@@ -557,6 +538,7 @@ export default function Detail({
           )}
         </div>
         <aside>
+          <ChecklistShare matterId={id} tasks={tasks} />
           <AgentAssignment matter={m} refresh={q.refresh} />
           <Contacts matter={m} refresh={q.refresh} />
           <section className={s.section}>
@@ -674,25 +656,32 @@ function DeadlineEditor({
   busy: boolean;
   act: (key: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
-  const [value, setValue] = useState(d.date?.slice(0, 10) || "");
-  const [status, setStatus] = useState(d.status);
+  const [draft, setDraft] = useState<{
+    value: string;
+    status: string;
+    revision?: number;
+  } | null>(null);
+  const value = draft?.value ?? d.date?.slice(0, 10) ?? "";
+  const status = draft?.status ?? d.status;
+  const conflict = !!draft && draft.revision !== d.revision;
   return (
     <form
       className={s.taskLine}
       style={{ alignItems: "flex-start", flexWrap: "wrap" }}
       onSubmit={(e) => {
         e.preventDefault();
-        void act(d.id, () =>
-          mutate(
+        void act(d.id, async () => {
+          await mutate(
             `/api/v1/matters/${matterId}/deadlines/${d.id}`,
             {
-              expectedRevision: d.revision,
+              expectedRevision: draft?.revision ?? d.revision,
               date: value || null,
               status: value ? status : "unknown",
             },
             "PATCH",
-          ),
-        );
+          );
+          setDraft(null);
+        });
       }}
     >
       <div style={{ flex: "1 1 150px" }}>
@@ -720,7 +709,13 @@ function DeadlineEditor({
           className={s.input}
           type="date"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) =>
+            setDraft({
+              value: e.target.value,
+              status,
+              revision: draft?.revision ?? d.revision,
+            })
+          }
         />
       </label>
       <label className={s.field} style={{ maxWidth: 135 }}>
@@ -728,7 +723,13 @@ function DeadlineEditor({
         <select
           className={s.select}
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) =>
+            setDraft({
+              value,
+              status: e.target.value,
+              revision: draft?.revision ?? d.revision,
+            })
+          }
         >
           {["unknown", "proposed", "confirmed", "rejected"].map((v) => (
             <option key={v}>{v}</option>
@@ -738,10 +739,18 @@ function DeadlineEditor({
       <button
         className={s.buttonSmall}
         style={{ marginTop: 23 }}
-        disabled={busy}
+        disabled={busy || conflict}
       >
         Save date
       </button>
+      {conflict && (
+        <p className={s.error}>
+          This date changed while you were editing. Your draft is preserved.{" "}
+          <button type="button" onClick={() => setDraft(null)}>
+            Use latest date
+          </button>
+        </p>
+      )}
     </form>
   );
 }

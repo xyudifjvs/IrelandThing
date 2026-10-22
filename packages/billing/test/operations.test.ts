@@ -254,6 +254,7 @@ it("reserves before dispatch and keeps ambiguous refunds from fulfillment or ove
       status: "paid",
       stripePaymentIntentId: `pi_reserve_${id}`,
       snapshot: {},
+      details: { paymentEnvironment: "test" },
     },
   });
   const gift = await prisma.giftOrder.create({
@@ -341,7 +342,7 @@ it("separately reserves Dashboard and local refunds until provider evidence prov
       stripeSessionId: `cs_mixed_${id}`,
       stripePaymentIntentId: `pi_mixed_${id}`,
       snapshot: {},
-      details: { refundedCents: 1000 },
+      details: { refundedCents: 1000, paymentEnvironment: "test" },
     },
   });
   const session = {

@@ -1,0 +1,183 @@
+.share {
+  padding: 24px;
+  margin: 0 0 24px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.share h2 {
+  font-size: 28px;
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+.share p {
+  font-size: 13px;
+}
+.eyebrow {
+  font-size: 10px !important;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 12px !important;
+  margin-top: 14px;
+}
+.preview {
+  border-block: 1px solid var(--line);
+  padding-block: 14px;
+  margin: 18px 0;
+  font-size: 12px;
+}
+.preview summary {
+  cursor: pointer;
+}
+.preview ul {
+  padding-left: 20px;
+}
+.preview p {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.primary,
+.secondary {
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  border: 1px solid var(--accent);
+  min-height: 40px;
+}
+.primary {
+  background: var(--accent);
+  color: white;
+}
+.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+.error {
+  color: var(--danger);
+  margin-top: 12px;
+}
+.linkField {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+}
+.linkField label {
+  font-size: 12px;
+}
+.linkField input {
+  min-width: 0;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.linkField button {
+  justify-self: start;
+}
+.editor {
+  border-bottom: 1px solid var(--line);
+  padding: 18px 0;
+}
+.editorTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.editorTop input {
+  margin-top: 6px;
+  accent-color: var(--accent);
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.editorText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.editorText strong {
+  display: block;
+  font-weight: 500;
+}
+.editorText small {
+  display: block;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.editorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0 30px;
+}
+.editorActions button {
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--accent);
+  min-height: 34px;
+  font-size: 12px;
+}
+.editorForm {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+.addForm {
+  margin-top: 22px;
+  display: grid;
+  gap: 12px;
+}
+.addForm label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+}
+.addForm button {
+  justify-self: start;
+}
+.editorForm label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+}
+.editorForm input,
+.editorForm select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+}
+.editorFields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 600px) {
+  .share {
+    padding: 20px;
+  }
+  .editorFields {
+    grid-template-columns: 1fr;
+  }
+  .editorForm input,
+  .editorForm select,
+  .linkField input {
+    font-size: 16px;
+  }
+}

@@ -22,6 +22,7 @@ model User {
   twoFactor        TwoFactor?
   matters          Matter[]            @relation("AgentMatters")
   participations   MatterParticipant[]
+  checklistShares  ChecklistShare[]
 }
 
 model Session {
@@ -109,6 +110,7 @@ model Matter {
   deadlines       Deadline[]
   notes           Note[]
   documents       Document[]
+  checklistShare  ChecklistShare?
 
   @@index([agentId, stage])
 }
@@ -135,11 +137,29 @@ model Task {
   dueDate    String?
   details    Json     @default("{}")
   revision   Int      @default(1)
+  position   Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   matter     Matter   @relation(fields: [matterId], references: [id], onDelete: Cascade)
 
   @@index([matterId, status])
+  @@index([matterId, position])
+}
+
+// A bearer secret is returned only at creation. Only its SHA-256 hash is stored.
+// One row per matter makes replacement atomic and invalidates every prior link.
+model ChecklistShare {
+  id         String    @id @default(cuid())
+  matterId   String    @unique
+  tokenHash  String    @unique
+  issuedById String
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  matter     Matter    @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  issuedBy   User      @relation(fields: [issuedById], references: [id], onDelete: Cascade)
+
+  @@index([issuedById])
 }
 
 model Deadline {

@@ -1,5 +1,10 @@
 import { applyInitialWorkflow, recalculateWorkflow } from "./rules";
 export * from "./rules";
+export * from "./checklist-sharing";
+import {
+  checklistPrivacyHeaders,
+  registerChecklistShareRoutes,
+} from "./checklist-sharing";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
@@ -143,6 +148,7 @@ export async function listMatters(
     take: limit,
     include: {
       tasks: {
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         where:
           actor.role === "coordinator"
             ? {}
@@ -168,12 +174,20 @@ export async function listMatters(
         revision: m.revision,
         createdAt: m.createdAt,
         updatedAt: m.updatedAt,
-        tasks: m.tasks.map(({ details: _, ...t }) => t),
+        tasks: m.tasks.map(({ details: _, ...t }, position) => ({
+          ...t,
+          position,
+        })),
         deadlines: m.deadlines.map(
           ({ details: _, sourceDocumentId: __, ...d }) => d,
         ),
       }))
-    : rows;
+    : actor.role === "agent"
+      ? rows.map((matter) => ({
+          ...matter,
+          tasks: matter.tasks.map((task, position) => ({ ...task, position })),
+        }))
+      : rows;
 }
 export async function getMatter(actor: Principal, id: string) {
   await requireMatter(actor, id);
@@ -187,7 +201,10 @@ export async function getMatter(actor: Principal, id: string) {
   const matter = await prisma.matter.findUniqueOrThrow({
     where: { id },
     include: {
-      tasks: { where: v, orderBy: { createdAt: "asc" } },
+      tasks: {
+        where: v,
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+      },
       deadlines: { orderBy: { createdAt: "asc" } },
       notes: {
         where:
@@ -218,14 +235,22 @@ export async function getMatter(actor: Principal, id: string) {
       revision: matter.revision,
       createdAt: matter.createdAt,
       updatedAt: matter.updatedAt,
-      tasks: matter.tasks.map(({ details: _, ...t }) => t),
+      tasks: matter.tasks.map(({ details: _, ...t }, position) => ({
+        ...t,
+        position,
+      })),
       deadlines: matter.deadlines
         .filter((d) => d.status === "confirmed")
         .map(({ details: _, sourceDocumentId: __, ...d }) => d),
       notes: matter.notes,
       documents: matter.documents,
     };
-  return matter;
+  return actor.role === "agent"
+    ? {
+        ...matter,
+        tasks: matter.tasks.map((task, position) => ({ ...task, position })),
+      }
+    : matter;
 }
 export async function createMatter(actor: Principal, input: unknown) {
   assertCoordinator(actor);
@@ -362,14 +387,24 @@ export async function addTask(
   const data = taskInput.parse(input);
   return prisma.$transaction(async (tx) => {
     await requireMatter(actor, matterId, true, tx);
+    const last = await tx.task.aggregate({
+      where: { matterId },
+      _max: { position: true },
+    });
     const row = await tx.task.create({
       data: {
         ...data,
         matterId,
+        position: (last._max.position ?? -1) + 1,
         details: data.details as Prisma.InputJsonValue,
       },
     });
     await audit(tx, actor, "task.created", "Task", row.id, matterId);
+    await tx.matter.update({
+      where: { id: matterId },
+      data: { revision: { increment: 1 } },
+    });
+    await matterChanged(tx, actor, matterId);
     return row;
   });
 }
@@ -453,6 +488,7 @@ async function updateChild(
               .optional(),
             visibility: z.enum(["coordinator", "agent", "client"]).optional(),
             dueDate: dateOnly.nullable().optional(),
+            position: z.number().int().min(0).max(1000000).optional(),
             details: json.optional(),
           })
           .strict()
@@ -509,17 +545,39 @@ async function updateChild(
       await audit(tx, actor, `${kind}.deleted`, kind, id, matterId, {
         before: JSON.parse(JSON.stringify(old)),
       });
-      if (kind === "deadline") {
+      if (kind === "deadline" || kind === "task") {
         await tx.matter.update({
           where: { id: matterId },
           data: { revision: { increment: 1 } },
         });
-        await recalculateWorkflow(tx, actor, matterId);
+        if (kind === "deadline") await recalculateWorkflow(tx, actor, matterId);
         await matterChanged(tx, actor, matterId);
       }
       return { deleted: true };
     }
     const patch: Record<string, unknown> = { ...data };
+    if (kind === "task" && "position" in data) {
+      if (old.revision !== expectedRevision)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "Record changed; refresh",
+        );
+      const tasks = await tx.task.findMany({
+        where: { matterId },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+      });
+      const ordered = tasks.filter((task) => task.id !== id);
+      ordered.splice(Math.min(Number(data.position), ordered.length), 0, old);
+      for (const [position, task] of ordered.entries()) {
+        if (task.id === id) patch.position = position;
+        else if (task.position !== position)
+          await tx.task.update({
+            where: { id: task.id },
+            data: { position, revision: { increment: 1 } },
+          });
+      }
+    }
     if (kind === "deadline" && "date" in data) {
       patch.details = {
         ...(old.details &&
@@ -544,20 +602,87 @@ async function updateChild(
       before: JSON.parse(JSON.stringify(old)),
       changes: data as Prisma.InputJsonValue,
     });
-    if (kind === "deadline") {
+    if (kind === "deadline" || kind === "task") {
       await tx.matter.update({
         where: { id: matterId },
         data: { revision: { increment: 1 } },
       });
-      await recalculateWorkflow(tx, actor, matterId);
+      if (kind === "deadline") await recalculateWorkflow(tx, actor, matterId);
       await matterChanged(tx, actor, matterId);
-    } else if (kind === "task" && "dueDate" in data)
-      await matterChanged(tx, actor, matterId);
+    }
     return delegate.findUniqueOrThrow({ where: { id } });
   });
 }
+/** Reorder the complete canonical task set without overwriting a concurrent edit. */
+export async function reorderTasks(
+  actor: Principal,
+  matterId: string,
+  input: unknown,
+) {
+  assertCoordinator(actor);
+  const data = z
+    .object({
+      expectedRevision: revision,
+      taskIds: z.array(z.string().min(1)).max(10000),
+    })
+    .strict()
+    .parse(input);
+  return prisma.$transaction(async (tx) => {
+    await requireMatter(actor, matterId, true, tx);
+    const tasks = await tx.task.findMany({ where: { matterId } });
+    const ids = new Set(data.taskIds);
+    if (
+      ids.size !== data.taskIds.length ||
+      ids.size !== tasks.length ||
+      tasks.some((task) => !ids.has(task.id))
+    )
+      throw new HttpError(
+        422,
+        "INVALID_TASK_ORDER",
+        "Include every task from this matter exactly once.",
+      );
+    const claimed = await tx.matter.updateMany({
+      where: { id: matterId, revision: data.expectedRevision },
+      data: { revision: { increment: 1 } },
+    });
+    if (!claimed.count)
+      throw new HttpError(
+        409,
+        "REVISION_CONFLICT",
+        "This matter changed; refresh before reordering.",
+      );
+    const byId = new Map(tasks.map((task) => [task.id, task]));
+    for (const [position, id] of data.taskIds.entries()) {
+      if (byId.get(id)!.position !== position)
+        await tx.task.update({
+          where: { id },
+          data: { position, revision: { increment: 1 } },
+        });
+    }
+    await audit(tx, actor, "task.reordered", "Matter", matterId, matterId, {
+      taskIds: data.taskIds,
+      beforeRevision: data.expectedRevision,
+    });
+    await matterChanged(tx, actor, matterId);
+    return tx.matter.findUniqueOrThrow({
+      where: { id: matterId },
+      select: { id: true, revision: true },
+    });
+  });
+}
+
 export function createMattersRouter() {
   const router = Router();
+  router.use(checklistPrivacyHeaders);
+  registerChecklistShareRoutes(router);
+  router.post(
+    "/:id/tasks/reorder",
+    asyncHandler(async (req, res) => {
+      res.json(
+        await reorderTasks(principal(req), String(req.params.id), req.body),
+      );
+    }),
+  );
   router.get(
     "/",
     asyncHandler(async (req, res) =>

@@ -8,7 +8,13 @@ import {
 } from "@weatherly/platform";
 import { audit, requireMatter, matterScope } from "@weatherly/matters";
 import { checkoutInput } from "./contracts";
-import { paymentMode, assertPaymentKey, assertPaymentEvent } from "./mode";
+import {
+  paymentMode,
+  assertPaymentKey,
+  assertPaymentEvent,
+  assertSavedPaymentEnvironment,
+  savedPaymentEnvironment,
+} from "./mode";
 
 export function billingConfigured() {
   try {
@@ -144,6 +150,7 @@ export async function createCheckout(
           amountCents: quote.amountCents!,
           currency: "USD",
           status: "creating",
+          details: { paymentEnvironment: paymentMode() },
           snapshot: {
             ...quote,
             name: quote.description,
@@ -209,6 +216,7 @@ export async function createCheckout(
         amountCents: catalog.priceCents,
         currency: catalog.currency,
         status: "creating",
+        details: { paymentEnvironment: paymentMode() },
         snapshot: {
           code: catalog.code,
           name: catalog.name,
@@ -229,12 +237,19 @@ export async function createCheckout(
     );
     return result;
   });
+  assertSavedPaymentEnvironment(order.details, paymentMode());
   if (
     ["paid", "refunded", "partially_refunded", "disputed"].includes(
       order.status,
     )
   )
     return { id: order.id, status: order.status, url: null };
+  if (savedPaymentEnvironment(order.details) === "unknown")
+    throw new HttpError(
+      409,
+      "PAYMENT_ENVIRONMENT_UNKNOWN",
+      "Reconcile this request in its original payment environment before opening checkout.",
+    );
   if (order.stripeSessionId) {
     const session = await stripe.checkout.sessions.retrieve(
       order.stripeSessionId,
@@ -322,6 +337,10 @@ export async function applyStripeEvent(event: Stripe.Event) {
           "PAYMENT_MISMATCH",
           "Unknown checkout session.",
         );
+      assertSavedPaymentEnvironment(
+        order.details,
+        event.livemode ? "live" : "test",
+      );
       if (
         session.amount_total !== order.amountCents ||
         session.currency?.toUpperCase() !== order.currency
@@ -353,6 +372,7 @@ export async function applyStripeEvent(event: Stripe.Event) {
               : session.payment_intent?.id,
           details: {
             ...(order.details as Record<string, Prisma.InputJsonValue>),
+            paymentEnvironment: event.livemode ? "live" : "test",
             lastStripeEvent: event.id,
           },
         },
@@ -384,6 +404,10 @@ export async function applyStripeEvent(event: Stripe.Event) {
           const current = await tx.paymentOrder.findUniqueOrThrow({
             where: { id: order.id },
           });
+          assertSavedPaymentEnvironment(
+            current.details,
+            event.livemode ? "live" : "test",
+          );
           const details = current.details as Record<
             string,
             Prisma.InputJsonValue
@@ -407,7 +431,12 @@ export async function applyStripeEvent(event: Stripe.Event) {
             where: { id: order.id },
             data: {
               status,
-              details: { ...details, refundedCents, lastStripeEvent: event.id },
+              details: {
+                ...details,
+                refundedCents,
+                paymentEnvironment: event.livemode ? "live" : "test",
+                lastStripeEvent: event.id,
+              },
             },
           });
         } else {

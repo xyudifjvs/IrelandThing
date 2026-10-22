@@ -14,6 +14,7 @@ export type Task = {
   revision?: number;
   visibility?: string;
   kind?: string;
+  position?: number;
 };
 export type Person = {
   id: string;

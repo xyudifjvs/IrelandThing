@@ -17,7 +17,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </Link>
         <nav className={s.nav} aria-label="Portal navigation">
           <Link href="/portal">Your transactions</Link>
-          <Link href="/account">Your profile</Link>
+          <Link href="/account">Your account</Link>
           <Link href="/contact">Contact Ireland</Link>
           <button
             disabled={busy}

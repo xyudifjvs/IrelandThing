@@ -46,6 +46,8 @@ import {
 } from "@weatherly/identity";
 import {
   createMattersRouter,
+  createPublicChecklistRouter,
+  checklistPrivacyHeaders,
   registerMatterChangeHook,
 } from "@weatherly/matters";
 import { createDotloopRouter, dotloopConfigured } from "@weatherly/dotloop";
@@ -91,6 +93,14 @@ app.post(
   calendlyWebhook,
 );
 app.use(express.json({ limit: "2mb" }));
+// The bearer token arrives in Authorization, never in a logged URL. Set privacy
+// headers before rate limiting so even unavailable/error responses cannot cache.
+app.use(
+  "/api/public/checklist",
+  checklistPrivacyHeaders,
+  requestLimiter("public-checklist", 600),
+  createPublicChecklistRouter(),
+);
 app.get("/authorize", sessionMiddleware(auth), (req, res, next) => {
   if (!req.principal) {
     res.redirect(
@@ -128,6 +138,8 @@ app.use("/api/v1", (req, res, next) => {
   }
   next();
 });
+// Auth and limiter failures on checklist reads must also be non-cacheable.
+app.use("/api/v1/matters", checklistPrivacyHeaders);
 app.use("/api/v1", sessionMiddleware(auth));
 app.use("/api/v1", requestLimiter("api", 240));
 app.use("/api/v1/ai", requestLimiter("ai", 10, { authenticatedOnly: true }));
@@ -220,7 +232,11 @@ app.use(
 const port = Number(process.env.PORT || 4000);
 const server = app.listen(
   port,
-  process.env.NODE_ENV === "production" ? "::" : "127.0.0.1",
+  process.env.NODE_ENV === "production"
+    ? "::"
+    : process.env.APP_ENV === "local" && process.env.LOCAL_DOCKER === "true"
+      ? "0.0.0.0"
+      : "127.0.0.1",
   () => console.log(`Weatherly API: http://127.0.0.1:${port}`),
 );
 process.on("SIGTERM", () =>

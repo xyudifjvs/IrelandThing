@@ -23,6 +23,8 @@ import {
 } from "../../../../(workspace)/workspace/_components/data";
 import s from "../../_components/portal.module.css";
 import SharedMessages from "../../_components/SharedMessages";
+import { LiveStatus, useLiveData } from "../../../../_components/useLiveData";
+import ChecklistShare from "../../../../_components/ChecklistShare";
 import DocumentFiles from "../../../../(workspace)/workspace/_components/DocumentFiles";
 export default function Detail({
   params,
@@ -30,7 +32,7 @@ export default function Detail({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const q = useData<Matter>(`/api/v1/matters/${id}`);
+  const q = useLiveData<Matter>(`/api/v1/matters/${id}`);
   const session = useData<Session>("/api/v1/session");
   const client = session.data?.user?.role === "client";
   const [error, setError] = useState("");
@@ -38,7 +40,7 @@ export default function Detail({
   const [uploaded, setUploaded] = useState("");
   const [assistant, setAssistant] = useState("");
   const [answer, setAnswer] = useState("");
-  if (q.loading || session.loading)
+  if ((q.loading && !q.data) || session.loading)
     return (
       <div className={s.main}>
         <div className={s.loading}>Opening your file…</div>
@@ -48,6 +50,7 @@ export default function Detail({
     return (
       <div className={s.main}>
         <div className={s.error}>{q.error || "This file is unavailable."}</div>
+        <LiveStatus query={q} />
         <Link href="/portal">Return to portal</Link>
       </div>
     );
@@ -72,6 +75,7 @@ export default function Detail({
           {error}
         </div>
       )}
+      <LiveStatus query={q} />
       <div className={s.columns}>
         <div>
           <section className={s.card}>
@@ -131,6 +135,9 @@ export default function Detail({
           />
         </div>
         <aside>
+          {["agent", "coordinator"].includes(
+            session.data?.user?.role || "",
+          ) && <ChecklistShare matterId={id} tasks={m.tasks || []} />}
           <section className={s.card}>
             <p className={s.eyebrow}>Your coordinator</p>
             <h2>Questions about this file?</h2>

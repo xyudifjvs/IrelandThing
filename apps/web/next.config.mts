@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { sitePolicy } from "./app/_lib/seo";
+import { sitePolicy } from "./app/_lib/seo.ts";
 const config: NextConfig = {
   poweredByHeader: false,
   async headers() {

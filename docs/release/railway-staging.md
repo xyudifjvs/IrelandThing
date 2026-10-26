@@ -2,6 +2,8 @@
 
 ## October 26 custom-domain release accepted
 
+Current owner login after the October 26 handover: `ireland@weatherlytc.com`, display name Ireland. The authorized operator update changed the existing PostgreSQL user and its hashed password while preserving the user ID, coordinator role and MFA policy. Previous login credentials, sessions, reset tokens and assistant grants were invalidated as applicable. HTTPS sign-in, secure cookies, pre-enrollment MFA enforcement and sign-out passed with the new account details. Ireland must complete authenticator enrollment at first sign-in. The saved Railway bootstrap email/name now match Ireland; they are setup metadata, not the live login source. No password was stored as a Railway variable or committed to Git.
+
 The site is live at **https://www.weatherlytc.com**, with https://weatherlytc.com forwarding to it. Railway ownership is verified and its HTTPS certificate is valid. The initial verification attempt appears to have expired or stalled before the October 26 DNS setup; a fresh connector retry cleared it. See `../runbooks/custom-domain.md` for the correction to the earlier outage diagnosis and the complete domain evidence.
 
 API, worker and web successfully serve GitHub main commit `80e5a51796c7d067d50878d6834df2a309a42e2e`. Deployment IDs:

@@ -10,35 +10,22 @@
     "worker": "80e5a51796c7d067d50878d6834df2a309a42e2e",
     "web": "80e5a51796c7d067d50878d6834df2a309a42e2e"
   },
-  "deploymentStatus": "healthy_preview_custom_domain_pending",
-  "verifiedAt": "2026-10-26T19:26:34.267229+00:00",
-  "pendingRelease": {
-    "commit": "80e5a51796c7d067d50878d6834df2a309a42e2e",
-    "status": "blocked_by_provider",
-    "queued": false,
-    "canceledApiDeploymentId": "45427fc5-8c92-4448-85db-57d7d636b7d3",
-    "remainingServices": [
-      "api",
-      "worker",
-      "web"
-    ],
-    "requiredMigrationCount": 11,
-    "reason": "Railway certificate-issuance outage blocks safe custom-domain sign-in. API build was canceled before cutover, and API/worker origins restored to the working preview. DNS and web build settings are prepared.",
-    "providerStatusUrl": "https://status.railway.com/"
-  },
+  "deploymentStatus": "healthy_custom_domain_verified",
+  "verifiedAt": "2026-10-26T22:20:43.343824+00:00",
+  "pendingRelease": null,
   "servingCommitByService": {
-    "api": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
-    "worker": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
-    "web": "ed5b4aa3eb8c6be65b83d886f827218562efd468"
+    "api": "80e5a51796c7d067d50878d6834df2a309a42e2e",
+    "worker": "80e5a51796c7d067d50878d6834df2a309a42e2e",
+    "web": "80e5a51796c7d067d50878d6834df2a309a42e2e"
   },
   "healthyDeploymentByService": {
     "postgres": "e6048d57-9dd2-4f72-85ec-2ab74b532c92",
-    "api": "0db276e1-99a5-4042-af21-b8233735e2db",
-    "worker": "477df8a8-1103-4ef5-bb70-6a3722674d5b",
-    "web": "c90251c8-ae34-4e95-ab82-6ff9d37600dd"
+    "api": "1e75bb67-64a7-44a7-bd5d-42d55de5b54b",
+    "worker": "61c091b5-1464-403b-900a-99f4bc58fbc1",
+    "web": "d9852e81-36f5-49fd-bf03-462e68ec1f9a"
   },
   "automaticDeployOnPush": false,
-  "publicOrigin": "https://web-staging-be4e.up.railway.app",
+  "publicOrigin": "https://www.weatherlytc.com",
   "services": {
     "postgres": "23a7b3dd-883a-4740-bf31-c89d4d0c61a3",
     "api": "36b6d0e1-54ea-49e2-a9a6-d05b2c0c5340",
@@ -56,5 +43,23 @@
   "runtimeMode": "production",
   "liveProvidersEnabled": false,
   "ownerBootstrapCompleted": true,
-  "plannedPublicOrigin": "https://www.weatherlytc.com"
+  "plannedPublicOrigin": "https://www.weatherlytc.com",
+  "appliedMigrationCount": 11,
+  "siteIndexingEnabled": false,
+  "acceptance": {
+    "https": true,
+    "canonicalOrigin": true,
+    "ownerSignInAndSignOut": true,
+    "secureHttpOnlyCookies": true,
+    "preEnrollmentMfaGate": true,
+    "foreignOriginDenied": true,
+    "oldSessionCookieInvalidated": true,
+    "unauthorizedDocumentApiDenied": true,
+    "workerHeartbeatAndHealth": true,
+    "googleMailDnsPreserved": true,
+    "browserHomeAndLogin": true,
+    "ownerMfaEnrollmentCompleted": false,
+    "realProviderJourneysCompleted": false,
+    "apexRedirectCode": 302
+  }
 }

@@ -1,32 +1,24 @@
 # Connect weatherlytc.com
 
-Updated October 26, 2026. Squarespace DNS and root forwarding are configured. The reviewed release and web build settings are prepared. API/worker origins remain on the working preview until valid HTTPS permits the coordinated switch. The domain is not yet accepted. This is not approval for real-client operations.
+Updated October 26, 2026. **The domain is live with valid HTTPS.** The canonical website and application address is https://www.weatherlytc.com. The root domain forwards to it and preserves paths. API, worker and web successfully serve reviewed GitHub main release `80e5a51796c7d067d50878d6834df2a309a42e2e`.
 
-## October 21 preparation state (historical)
+## Verification recovery
 
-- Railway has `www.weatherlytc.com` attached to the existing web service, port 3000, in the existing staging environment. Domain ID: `d16dc661-04dd-43af-b86e-5ecc764377bf`.
-- Ownership is unverified and its TLS certificate is waiting for verification. The existing Railway URL still serves the current hosted deployment. No deployment was triggered by this preparation.
-- Public DNS still resolves the root to Squarespace's four default A records and `www` to `ext-sq.squarespace.com`. The domain's nameservers remain `nsc1` through `nsc4.squarespacedns.com`.
-- Google Workspace mail uses `MX @ 1 smtp.google.com`. Screenshots also show Google SPF and DKIM records. Preserve these and all other mail/verification records; the screenshot truncates the DKIM value, so it must not be used to reconstruct that record.
-- Exact machine-readable setup: `../../infra/railway/custom-domain.json`. Its verification TXT value is intended for public DNS; it is not an account credential.
+The domain was registered with Railway on October 21, but its DNS verification record was added on October 26. Railway's domain tool reports that automatic ownership checks run for up to 72 hours. The old attempt remained at validating ownership after the DNS was correct. An expired or stalled verification attempt is the best-supported explanation; the internal queue cause was not independently observed.
 
-## October 26 cutover
+Railway's certificate incident was marked resolved at 20:02 UTC on October 26. The earlier claim that the continuing platform outage blocked this domain was stale. A fresh `retry_domain_certificate` request through the connected Railway account was accepted, followed by ownership verified and `CERTIFICATE_STATUS_TYPE_VALID`. The old local CLI had refused to retry the pending state. No DNS recreation or certificate-validation bypass was needed.
 
-- Replaced the Squarespace website defaults with the Railway `www` CNAME and public verification TXT. The complete prior DNS snapshot is retained locally under `.local/domain-cutover/`.
-- Authoritative DNS and public resolvers return the intended CNAME and TXT. Google MX, SPF and the complete DKIM value match the saved records. Nameservers and Domain Connect remain unchanged.
-- Squarespace forwards the apex to the canonical origin with HTTPS and path preservation. Verified `https://weatherlytc.com/login` returns HTTP 302 to `https://www.weatherlytc.com/login`. Keep it temporary until acceptance.
-- API/worker/web source pins now target reviewed GitHub main commit `80e5a51796c7d067d50878d6834df2a309a42e2e`. Web build inputs use `www`, staging noindex and all provider gates remain in place. API/worker origins were prepared for `www`, then restored to the preview because the custom domain could not provide valid HTTPS.
-- API build `45427fc5-8c92-4448-85db-57d7d636b7d3` reached image upload but was canceled to prevent a partial sign-in cutover during the TLS outage. Worker and web were not deployed. All three application services continue serving `ed5b4aa`; see the staging manifest. Preview `/health`, owner sign-in, secure/HttpOnly cookies, MFA gating, sign-out and session invalidation passed.
-- Railway currently reports a [certificate-issuance outage and build-upload delays](https://status.railway.com/). The domain still reports validating ownership and fails hostname verification. A certificate retry request was rejected because the domain has not entered a failed state. Do not bypass certificate validation or repeatedly recreate the domain.
+## Accepted October 26
 
-## Resume after Railway certificate recovery
+- Ordinary HTTPS succeeds on the canonical site. Both HTTP and HTTPS apex requests redirect to the canonical origin; `/login` preserves its path.
+- The coordinated API, worker and web deployment succeeded from the same reviewed commit. All 11 database migrations are complete with no failed or rolled-back rows. The worker has a current database heartbeat and returns healthy through private networking.
+- API/worker `WEB_ORIGIN` and `BETTER_AUTH_URL`, plus the web build's `PUBLIC_SITE_URL`, use `https://www.weatherlytc.com`. Only web has public networking; API, worker, PostgreSQL and document storage remain private.
+- Owner HTTPS sign-in, Secure/HttpOnly cookies, required MFA enrollment, blocked business-data access before MFA, canonical-origin acceptance, foreign-origin rejection, sign-out and rejection of the old session cookie passed. The owner still needs to enroll an authenticator; a complete post-MFA business workflow was not tested here.
+- Public health, homepage/login/checklist pages, canonical metadata, staging noindex, unauthenticated API/document denials and invalid checklist-token privacy headers passed. The new homepage and login rendered in the browser without a certificate warning or local-demo sign-in.
+- Authoritative CNAME/TXT, nameservers and Google MX/SPF/full DKIM records match the saved post-DNS-change snapshot. Mail configuration was preserved.
+- The apex redirect remains **302**. Changing it to 301 is optional follow-up: Squarespace now requires fresh Google reauthentication. The working redirect was left intact. Squarespace drops query parameters, so all token-bearing links must use canonical `www` directly.
 
-1. Check `www.weatherlytc.com` ownership/certificate status and verify HTTPS without bypassing validation. Do not remove/recreate a correctly configured domain to work around the provider outage.
-2. Set API and worker `WEB_ORIGIN` and `BETTER_AUTH_URL` to `https://www.weatherlytc.com`. Web already has `PUBLIC_SITE_URL=https://www.weatherlytc.com`, `DEPLOYMENT_ENV=staging` and `SITE_INDEXING_ENABLED=false`.
-3. Deploy pinned API commit `80e5a51796c7d067d50878d6834df2a309a42e2e`, verify migration history is current through all 11 migrations and health passes, then deploy worker and web from the same commit.
-4. Complete the acceptance checks below and update both manifests with actual serving revisions. Only then change the apex forwarding from 302 to 301.
-
-The provider outage is an external blocker. No background deployment or follow-up automation was left running. The existing preview remains the usable sign-in address.
+Provider activation and indexing remain disabled. This is domain/deployment acceptance, not approval for real-client operations. Ireland's accounts, owner MFA enrollment, real provider journeys, recovery delivery, hosted restore/monitoring and other business gates remain in `../release/requirements-evidence.md`. Nonsecret identifiers and acceptance flags are in `../../infra/railway/staging.json` and `../../infra/railway/custom-domain.json`; local diagnostic reports and screenshots are under ignored `.local/domain-cutover/`.
 
 ## Address choice
 
@@ -45,7 +37,7 @@ Use `https://www.weatherlytc.com` as the canonical website/application address, 
 
 4. Under Squarespace Website → Domain forwarding, forward `@` to `https://www.weatherlytc.com`; enable SSL and maintain paths. Use a temporary redirect while validating, then a permanent redirect after acceptance. Squarespace forwarding does not preserve query parameters, so all authentication/invitation/recovery/provider-callback links must use the canonical `www` origin directly.
 5. Set the API's `WEB_ORIGIN` and `BETTER_AUTH_URL` to `https://www.weatherlytc.com`; use that `WEB_ORIGIN` for worker-generated links as well. Set web build input `PUBLIC_SITE_URL=https://www.weatherlytc.com`. Keep `DEPLOYMENT_ENV=staging`, `SITE_INDEXING_ENABLED=false`, production authentication settings, MFA requirements and provider activation gates. Deploy the reviewed API/worker/web configuration. Do not broaden trusted origins with a wildcard to accommodate the transition. Leave provider account setup paused; later OAuth callbacks must match this canonical origin.
-6. Check Railway domain status until ownership is verified and the certificate is issued. Railway retries ownership checks for up to 72 hours; if setup happens later and issuance has failed, inspect `domain_status` and use `retry_domain_certificate` only when the record is correct and the reported failure is retryable.
+6. Check Railway domain status until ownership is verified and the certificate is issued. Railway reports a 72-hour automatic ownership-check window. If DNS is configured after that window and status stays at validating ownership, inspect `domain_status` and request a fresh `retry_domain_certificate` through the Railway connector after confirming the records. In this cutover the connector accepted that request even though the older CLI had refused the pending state. Do not repeatedly recreate a correctly configured domain.
 7. Verify HTTPS on both hostnames, root path forwarding, `/health`, sign-in/MFA/sign-out, same-origin authenticated writes, unauthorized document/API denial, public metadata and noindex. Confirm the Google MX/SPF/DKIM records are unchanged. Recheck the API/worker/web serving commits before updating the deployment manifest.
 
 ## Rollback

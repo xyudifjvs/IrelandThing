@@ -1,12 +1,26 @@
 # Railway staging deployment
 
-## October 26 custom-domain setup; rollout held for TLS
+## October 26 custom-domain release accepted
 
-The configured source for all three application services is now GitHub main commit `80e5a51796c7d067d50878d6834df2a309a42e2e`. The API build `45427fc5-8c92-4448-85db-57d7d636b7d3` was accepted and reached image upload, then canceled because Railway could not issue the domain certificate. No worker/web deployment was started. All services continue running the prior healthy release. There are 11 migrations in the reviewed release; API `npm run db:deploy` must complete before worker/web rollout.
+The site is live at **https://www.weatherlytc.com**, with https://weatherlytc.com forwarding to it. Railway ownership is verified and its HTTPS certificate is valid. The initial verification attempt appears to have expired or stalled before the October 26 DNS setup; a fresh connector retry cleared it. See `../runbooks/custom-domain.md` for the correction to the earlier outage diagnosis and the complete domain evidence.
 
-The desired public origin is `https://www.weatherlytc.com`. Squarespace DNS and HTTPS apex path forwarding are configured; Railway ownership/certificate acceptance is still pending. API/worker origins were restored to the existing preview, and secure owner sign-in/MFA gating/sign-out passed there. No deployment is queued. Settings alone do not establish a completed release. Check `infra/railway/staging.json` and `infra/railway/custom-domain.json` for the last recorded state.
+API, worker and web successfully serve GitHub main commit `80e5a51796c7d067d50878d6834df2a309a42e2e`. Deployment IDs:
 
-The October 21 sections below are retained as historical evidence and are superseded for the next release selection. Keep production authentication, MFA, staging noindex and provider activation gates.
+| Service | Successful deployment |
+| --- | --- |
+| API | `1e75bb67-64a7-44a7-bd5d-42d55de5b54b` |
+| Worker | `61c091b5-1464-403b-900a-99f4bc58fbc1` |
+| Web | `d9852e81-36f5-49fd-bf03-462e68ec1f9a` |
+
+The API predeploy reports all 11 migrations current; a private database query confirms all completed and none failed/rolled back. The worker's heartbeat was 13 seconds old at acceptance and its private health endpoint returned 200. Railway reports all four services successful and no pending work. Exact serving revisions are verified separately from source pins and recorded in `infra/railway/staging.json`.
+
+API/worker authentication and generated links now use canonical `www`. The fresh web build uses that origin and the private API address. Public HTTPS/health, canonical metadata/noindex, unauthorized API/document denial, invalid public-checklist token privacy, and browser home/login rendering passed. Owner sign-in uses Secure/HttpOnly cookies; the pre-enrollment MFA gate, same-origin checks, sign-out and old-cookie invalidation passed. The owner still must enroll MFA. No post-MFA business flow or real email/payment/AI integration is certified by these checks.
+
+Root HTTP/HTTPS path forwarding works with 302. Squarespace requires fresh Google reauthentication before changing it to 301; that optional follow-up does not block use of the site. Google mail DNS records are unchanged. Keep `DEPLOYMENT_ENV=staging`, `SITE_INDEXING_ENABLED=false`, production authentication and all provider gates. Domain availability does not close the real-client readiness items in `requirements-evidence.md`.
+
+## Historical deployment evidence
+
+The dated sections below describe earlier states and are superseded by the accepted October 26 deployment above. In particular, the preview origin, `ed5b4aa` serving revision and provider-outage statements below are historical, not the current state.
 
 Deployed at the user's explicit request on October 20, 2026 (America/New_York). This is a hosted staging system, not acceptance for real-client operations.
 

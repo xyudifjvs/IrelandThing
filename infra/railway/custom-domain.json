@@ -2,7 +2,7 @@
   "domain": "weatherlytc.com",
   "canonicalOrigin": "https://www.weatherlytc.com",
   "dnsProvider": "Squarespace",
-  "status": "waiting_for_owner_dns_access",
+  "status": "dns_configured_tls_blocked",
   "projectId": "5b58af24-8d43-4226-8901-a5dd63c5dfbb",
   "environmentId": "4870a88d-5253-4ac1-918a-7874af0870b0",
   "serviceId": "e1ea2c79-fc46-43c2-ac6e-6e1e495028e4",
@@ -10,7 +10,7 @@
   "targetPort": 3000,
   "verified": false,
   "certificateStatus": "CERTIFICATE_STATUS_TYPE_VALIDATING_OWNERSHIP",
-  "dnsChangesApplied": false,
+  "dnsChangesApplied": true,
   "applicationOriginChangesApplied": false,
   "requiredRecords": [
     {
@@ -29,9 +29,22 @@
   "rootForwarding": {
     "from": "weatherlytc.com",
     "to": "https://www.weatherlytc.com",
-    "status": "planned",
+    "status": "configured_and_https_path_redirect_verified",
     "https": true,
-    "maintainPaths": true
+    "maintainPaths": true,
+    "redirectCode": 302
   },
-  "runbook": "docs/runbooks/custom-domain.md"
+  "runbook": "docs/runbooks/custom-domain.md",
+  "checkedAt": "2026-10-26T19:26:34.267229+00:00",
+  "configuredOrigin": "https://web-staging-be4e.up.railway.app",
+  "googleMailRecordsPreserved": true,
+  "remaining": [
+    "Railway domain ownership verification and valid HTTPS certificate",
+    "Set API and worker origins to canonical www after HTTPS is valid",
+    "Deploy pinned API release and verify all 11 migrations, then deploy worker and web",
+    "Custom-domain sign-in/MFA and HTTP acceptance",
+    "Change temporary root redirect to permanent after acceptance"
+  ],
+  "webBuildOrigin": "https://www.weatherlytc.com",
+  "cutoverAccepted": false
 }

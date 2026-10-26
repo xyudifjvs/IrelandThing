@@ -1,5 +1,13 @@
 # Railway staging deployment
 
+## October 26 custom-domain setup; rollout held for TLS
+
+The configured source for all three application services is now GitHub main commit `80e5a51796c7d067d50878d6834df2a309a42e2e`. The API build `45427fc5-8c92-4448-85db-57d7d636b7d3` was accepted and reached image upload, then canceled because Railway could not issue the domain certificate. No worker/web deployment was started. All services continue running the prior healthy release. There are 11 migrations in the reviewed release; API `npm run db:deploy` must complete before worker/web rollout.
+
+The desired public origin is `https://www.weatherlytc.com`. Squarespace DNS and HTTPS apex path forwarding are configured; Railway ownership/certificate acceptance is still pending. API/worker origins were restored to the existing preview, and secure owner sign-in/MFA gating/sign-out passed there. No deployment is queued. Settings alone do not establish a completed release. Check `infra/railway/staging.json` and `infra/railway/custom-domain.json` for the last recorded state.
+
+The October 21 sections below are retained as historical evidence and are superseded for the next release selection. Keep production authentication, MFA, staging noindex and provider activation gates.
+
 Deployed at the user's explicit request on October 20, 2026 (America/New_York). This is a hosted staging system, not acceptance for real-client operations.
 
 - Site: https://web-staging-be4e.up.railway.app

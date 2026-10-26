@@ -4,19 +4,26 @@
   "environmentId": "4870a88d-5253-4ac1-918a-7874af0870b0",
   "environmentName": "staging",
   "repository": "xyudifjvs/IrelandThing",
-  "branch": "build/B00-foundation",
+  "branch": "main",
   "pinnedCommitByService": {
-    "api": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
-    "worker": "ed5b4aa3eb8c6be65b83d886f827218562efd468",
-    "web": "c5a3e38da3a5823c0ca52b66b818d85e29f4c708"
+    "api": "80e5a51796c7d067d50878d6834df2a309a42e2e",
+    "worker": "80e5a51796c7d067d50878d6834df2a309a42e2e",
+    "web": "80e5a51796c7d067d50878d6834df2a309a42e2e"
   },
-  "deploymentStatus": "healthy",
-  "verifiedAt": "2026-10-21T15:01:51Z",
+  "deploymentStatus": "healthy_preview_custom_domain_pending",
+  "verifiedAt": "2026-10-26T19:26:34.267229+00:00",
   "pendingRelease": {
-    "service": "web",
-    "commit": "c5a3e38da3a5823c0ca52b66b818d85e29f4c708",
+    "commit": "80e5a51796c7d067d50878d6834df2a309a42e2e",
     "status": "blocked_by_provider",
-    "reason": "Railway has temporarily paused new deploys during a platform incident. The source pin is saved, but no new deployment was created.",
+    "queued": false,
+    "canceledApiDeploymentId": "45427fc5-8c92-4448-85db-57d7d636b7d3",
+    "remainingServices": [
+      "api",
+      "worker",
+      "web"
+    ],
+    "requiredMigrationCount": 11,
+    "reason": "Railway certificate-issuance outage blocks safe custom-domain sign-in. API build was canceled before cutover, and API/worker origins restored to the working preview. DNS and web build settings are prepared.",
     "providerStatusUrl": "https://status.railway.com/"
   },
   "servingCommitByService": {
@@ -43,8 +50,11 @@
   "postgresImage": "ghcr.io/railwayapp-templates/postgres-ssl:17",
   "computeRegion": "sfo",
   "bucketRegion": "iad",
-  "publicServices": ["web"],
+  "publicServices": [
+    "web"
+  ],
   "runtimeMode": "production",
   "liveProvidersEnabled": false,
-  "ownerBootstrapCompleted": true
+  "ownerBootstrapCompleted": true,
+  "plannedPublicOrigin": "https://www.weatherlytc.com"
 }

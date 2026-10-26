@@ -166,7 +166,7 @@ describe("document AI worker checks current owner access", () => {
     ).rejects.toMatchObject({ status: 403, code: "REVIEW_ACCESS_REVOKED" });
     expect(calls).toBe(before);
   });
-  it("requires MFA in production even when APP_ENV says local", async () => {
+  it("allows a coordinator without MFA to process reviews in production", async () => {
     const f = await fixture(false);
     const previousNode = process.env.NODE_ENV,
       previousApp = process.env.APP_ENV;
@@ -174,10 +174,15 @@ describe("document AI worker checks current owner access", () => {
     process.env.APP_ENV = "local";
     const before = calls;
     try {
-      await expect(
-        processReview(f.proposal.id, { generate: fake }),
-      ).rejects.toMatchObject({ status: 403, code: "MFA_REQUIRED" });
-      expect(calls).toBe(before);
+      await processReview(f.proposal.id, { generate: fake });
+      expect(calls).toBe(before + 1);
+      expect(
+        (
+          await prisma.aIProposal.findUniqueOrThrow({
+            where: { id: f.proposal.id },
+          })
+        ).status,
+      ).toBe("pending");
     } finally {
       vi.stubEnv("NODE_ENV", previousNode);
       process.env.APP_ENV = previousApp;

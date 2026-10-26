@@ -84,12 +84,6 @@ async function issuerHasAccess(
     });
     if (!agreement && !override) return false;
   }
-  if (
-    !localAccessBypass &&
-    user.role === "coordinator" &&
-    !user.twoFactorEnabled
-  )
-    return false;
   try {
     await requireMatter(
       {

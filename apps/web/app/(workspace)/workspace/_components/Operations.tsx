@@ -126,7 +126,7 @@ export function Settings() {
       <div className={s.notice}>
         <strong>Account security</strong>
         <p>
-          Authenticator verification protects coordinator access.{" "}
+          Authenticator verification is optional.{" "}
           <Link href="/security">Set up your authenticator</Link> ·{" "}
           <Link href="/forgot-password">Password recovery</Link>
         </p>

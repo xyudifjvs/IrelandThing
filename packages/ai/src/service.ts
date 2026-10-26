@@ -98,9 +98,7 @@ async function currentReviewOwner(
       ? "REVIEW_ACCESS_REVOKED"
       : access?.action === "identity.access_revoked"
         ? "ACCOUNT_REVOKED"
-        : process.env.NODE_ENV === "production" && !user.twoFactorEnabled
-          ? "MFA_REQUIRED"
-          : null;
+        : null;
   if (code) {
     await prisma.$transaction(async (tx) => {
       await tx.aIProposal.updateMany({

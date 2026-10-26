@@ -149,20 +149,6 @@ export function sessionMiddleware(auth: WeatherlyAuth): RequestHandler {
           role: user.role as Principal["role"],
           sessionId: session.session.id,
         };
-        if (
-          !(
-            process.env.APP_ENV === "local" &&
-            process.env.NODE_ENV !== "production"
-          ) &&
-          user.role === "coordinator" &&
-          !user.twoFactorEnabled &&
-          !["/session", "/profile"].includes(req.path)
-        )
-          throw new HttpError(
-            403,
-            "MFA_REQUIRED",
-            "Set up authenticator verification before accessing business records",
-          );
       }
     }
     next();
@@ -193,7 +179,7 @@ export function createIdentityRouter(auth: WeatherlyAuth) {
       res.json({
         user,
         session,
-        mfaRequired: user.role === "coordinator" && !user.twoFactorEnabled,
+        mfaRequired: false,
       });
     }),
   );

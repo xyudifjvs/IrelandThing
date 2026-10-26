@@ -1,5 +1,9 @@
 # Railway staging deployment
 
+## October 26 optional authenticator update
+
+The owner requested email/password access without mandatory authenticator enrollment. The new application change removes that prerequisite consistently from browser login, authenticated API access, checklist sharing, background AI review and assistant grants. The session API retains `mfaRequired: false` for older clients. Authenticator enrollment remains available at `/security`; accounts that enable it still complete Better Auth's second-factor challenge. Existing roles, revoked access, agent agreements and provider approval gates are preserved. No database migration or credential change is required. Deployment and hosted verification of this update are pending; the earlier deployment below still describes its original acceptance checks.
+
 ## October 26 custom-domain release accepted
 
 Current owner login after the October 26 handover: `ireland@weatherlytc.com`, display name Ireland. The authorized operator update changed the existing PostgreSQL user and its hashed password while preserving the user ID, coordinator role and MFA policy. Previous login credentials, sessions, reset tokens and assistant grants were invalidated as applicable. HTTPS sign-in, secure cookies, pre-enrollment MFA enforcement and sign-out passed with the new account details. Ireland must complete authenticator enrollment at first sign-in. The saved Railway bootstrap email/name now match Ireland; they are setup metadata, not the live login source. No password was stored as a Railway variable or committed to Git.

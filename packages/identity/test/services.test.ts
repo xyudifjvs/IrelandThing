@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, describe, it, expect } from "vitest";
+import { beforeAll, afterAll, describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import { rm, mkdtemp } from "node:fs/promises";
@@ -570,7 +570,7 @@ describe("real PostgreSQL services and Better Auth", () => {
       })
       .expect(400);
   });
-  it("uses real Better Auth cookies, enforces MFA outside local, and revokes sessions", async () => {
+  it("allows password-only production access, preserves enrolled MFA challenges, and revokes sessions", async () => {
     const auth = createAuth();
     const app = express();
     app.all("/api/auth/*splat", authHandler(auth));
@@ -600,13 +600,23 @@ describe("real PostgreSQL services and Better Auth", () => {
       .set("Cookie", cookie);
     expect(session.status, session.text).toBe(200);
     expect(session.body.user.id).toBe(owner.id);
-    process.env.APP_ENV = "staging";
-    const denied = await request(app)
-      .get("/api/v1/business")
-      .set("Cookie", cookie);
-    expect(denied.status).toBe(403);
-    expect(denied.body.error.code).toBe("MFA_REQUIRED");
-    process.env.APP_ENV = "local";
+    expect(session.body.mfaRequired).toBe(false);
+    try {
+      vi.stubEnv("NODE_ENV", "production");
+      process.env.APP_ENV = "staging";
+      const allowed = await request(app)
+        .get("/api/v1/business")
+        .set("Cookie", cookie);
+      expect(allowed.status, allowed.text).toBe(200);
+      const productionSession = await request(app)
+        .get("/api/v1/session")
+        .set("Cookie", cookie);
+      expect(productionSession.status, productionSession.text).toBe(200);
+      expect(productionSession.body.mfaRequired).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      process.env.APP_ENV = "local";
+    }
     const enrollment = await request(app)
       .post("/api/auth/two-factor/enable")
       .set("Cookie", cookie)

@@ -4,7 +4,7 @@ PostgreSQL is the system of record. Private object storage holds immutable docum
 
 ## Application API
 
-Authenticated routes are rooted at `/api/v1`. Browser writes require the exact configured origin. Coordinator, agent and client access is enforced in the services, including matter participation, document/message visibility and revoked access. BetterAuth sessions and MFA protect coordinator access. Useful route families are `matters`, `documents`, `intake`, `onboarding`, `communications`, `billing`, `dotloop`, `workflows`, `ai`, and `assistant`.
+Authenticated routes are rooted at `/api/v1`. Browser writes require the exact configured origin. Coordinator, agent and client access is enforced in the services, including matter participation, document/message visibility and revoked access. BetterAuth sessions protect coordinator access. Authenticator enrollment is optional; accounts that enable it must complete the second-factor challenge at sign-in. The session response retains `mfaRequired: false` for older clients. Useful route families are `matters`, `documents`, `intake`, `onboarding`, `communications`, `billing`, `dotloop`, `workflows`, `ai`, and `assistant`.
 
 - `GET /assistant/matters/:id` returns an authorized matter bundle. Collection limits are disclosed; use paginated reads for complete history.
 - `GET /assistant/records?kind=...&matterId=...&cursor=...&limit=50` returns `{items, nextCursor, hasMore}`. Follow `nextCursor` until it is null.

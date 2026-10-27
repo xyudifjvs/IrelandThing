@@ -6,23 +6,23 @@
   "repository": "xyudifjvs/IrelandThing",
   "branch": "main",
   "pinnedCommitByService": {
-    "api": "80e5a51796c7d067d50878d6834df2a309a42e2e",
-    "worker": "80e5a51796c7d067d50878d6834df2a309a42e2e",
-    "web": "80e5a51796c7d067d50878d6834df2a309a42e2e"
+    "api": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c",
+    "worker": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c",
+    "web": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c"
   },
-  "deploymentStatus": "healthy_custom_domain_verified",
-  "verifiedAt": "2026-10-26T22:20:43.343824+00:00",
+  "deploymentStatus": "healthy_optional_authenticator_verified",
+  "verifiedAt": "2026-10-27 00:47:54 UTC",
   "pendingRelease": null,
   "servingCommitByService": {
-    "api": "80e5a51796c7d067d50878d6834df2a309a42e2e",
-    "worker": "80e5a51796c7d067d50878d6834df2a309a42e2e",
-    "web": "80e5a51796c7d067d50878d6834df2a309a42e2e"
+    "api": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c",
+    "worker": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c",
+    "web": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c"
   },
   "healthyDeploymentByService": {
     "postgres": "e6048d57-9dd2-4f72-85ec-2ab74b532c92",
-    "api": "1e75bb67-64a7-44a7-bd5d-42d55de5b54b",
-    "worker": "61c091b5-1464-403b-900a-99f4bc58fbc1",
-    "web": "d9852e81-36f5-49fd-bf03-462e68ec1f9a"
+    "api": "7255bc97-8a35-47a4-8851-47ed6eb06338",
+    "worker": "abb4302e-581d-4302-9289-8379455acdc8",
+    "web": "9e2e3141-df51-4bd4-913b-3b25db0bea7d"
   },
   "automaticDeployOnPush": false,
   "publicOrigin": "https://www.weatherlytc.com",
@@ -51,7 +51,6 @@
     "canonicalOrigin": true,
     "ownerSignInAndSignOut": true,
     "secureHttpOnlyCookies": true,
-    "preEnrollmentMfaGate": true,
     "foreignOriginDenied": true,
     "oldSessionCookieInvalidated": true,
     "unauthorizedDocumentApiDenied": true,
@@ -60,6 +59,9 @@
     "browserHomeAndLogin": true,
     "ownerMfaEnrollmentCompleted": false,
     "realProviderJourneysCompleted": false,
-    "apexRedirectCode": 302
+    "apexRedirectCode": 302,
+    "coordinatorMfaEnrollmentRequired": false,
+    "passwordOnlyBusinessAccess": true,
+    "browserAuthenticatedWorkspace": true
   }
 }

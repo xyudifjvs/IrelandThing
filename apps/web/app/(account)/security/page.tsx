@@ -35,10 +35,10 @@ export default function Page() {
           <small>TRANSACTION CO.</small>
         </Link>
         <div>
-          <h1>Set up two-step sign-in.</h1>
+          <h1>Choose two-step sign-in.</h1>
           <p>
-            Coordinators need a password and an authenticator code to access the
-            workspace.
+            You can sign in with your email and password. Add an authenticator
+            if you want a second verification step.
           </p>
         </div>
       </aside>
@@ -49,8 +49,9 @@ export default function Page() {
             {done ? "Authenticator connected." : "Set up your authenticator."}
           </h2>
           <p className={s.sub}>
-            Use an authenticator app to generate a code when you sign in. Keep
-            the setup key and recovery codes private.
+            Authenticator setup is optional. If you enable it, you will also
+            enter a code when signing in. Keep the setup key and recovery codes
+            private.
           </p>
           {error && (
             <p className={s.error} role="alert">
@@ -191,6 +192,11 @@ export default function Page() {
                 Save backup codes
               </button>
             </div>
+          )}
+          {!done && (
+            <Link className={s.back} href={returnTo}>
+              Continue without setting up an authenticator
+            </Link>
           )}
           <Link className={s.back} href="/account">
             Return to account

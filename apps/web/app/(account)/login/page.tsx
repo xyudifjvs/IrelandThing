@@ -14,7 +14,7 @@ export default function Login() {
     [code, setCode] = useState(""),
     [backup, setBackup] = useState(false);
   async function enter() {
-    const session = await api<{ user: { role: string }; mfaRequired: boolean }>(
+    const session = await api<{ user: { role: string } }>(
       "/api/v1/session",
     );
     const next = safeAuthorizationReturn(
@@ -22,10 +22,7 @@ export default function Login() {
       window.location.origin,
     );
     window.location.href =
-      session.mfaRequired && process.env.NEXT_PUBLIC_APP_ENV !== "local"
-        ? `/security${next ? "?next=" + encodeURIComponent(next) : ""}`
-        : next ||
-          (session.user.role === "coordinator" ? "/workspace" : "/portal");
+      next || (session.user.role === "coordinator" ? "/workspace" : "/portal");
   }
   async function signIn(mail = email, secret = password) {
     setBusy(true);

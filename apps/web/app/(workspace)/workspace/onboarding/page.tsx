@@ -166,8 +166,12 @@ export default function Page() {
         <section className={s.section}>
           <div className={s.sectionHead}>
             <div>
-              <h2>Signed agreement evidence</h2>
-              <p>Record signed evidence before arranging agent access. Sending an agreement link does not record a signature.</p>
+              <h2>Signed service agreement evidence</h2>
+              <p>
+                Record an agreement signed outside this portal. This upload
+                records evidence; it does not collect an electronic signature.
+              </p>
+              <p>Record approved evidence before arranging agent access.</p>
             </div>
           </div>
           <div className={s.sectionBody}>

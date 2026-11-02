@@ -5,7 +5,7 @@ All API responses contain raw JSON. Validation errors are handled by the applica
 ## Mounting
 
 - `createAuth({sendSystemEmail?})`, `authHandler(auth)`: mount Better Auth at `/api/auth/*splat` **before** Express body parsing. Password reset delivery requires injected `sendSystemEmail({to,subject,text,purpose:'password_reset'})`; no direct email provider is used.
-- `sessionMiddleware(auth)`: mount after parsing and before domain routers. Reads real Better Auth sessions, reloads user role, and checks account revocation. Coordinator MFA and agent agreement enforcement bypass only when APP_ENV=local and NODE_ENV is not production. Production requires a strong BETTER_AUTH_SECRET and private S3 storage. No fabricated session/JWT path exists.
+- `sessionMiddleware(auth)`: mount after parsing and before domain routers. Reads real Better Auth sessions, reloads user role, and checks account revocation. Authenticator enrollment is optional. Enrolled accounts still complete Better Auth second-factor verification at sign-in. Agent agreement enforcement bypasses only when APP_ENV=local and NODE_ENV is not production. Production requires a strong BETTER_AUTH_SECRET and private S3 storage. No fabricated session/JWT path exists.
 - `createIdentityRouter(auth)` at `/api/v1`; `createMattersRouter()` at `/api/v1/matters`; `createDocumentsRouter(store?)` at `/api/v1/documents`; `createIntakeRouter()` at `/api/v1/intake`; `createOnboardingRouter()` at `/api/v1/onboarding`.
 - All routers require session-derived Principal for business records. The only unauthenticated writes are inquiries and invitation-token account registration; raw public signup is disabled. Application owner must rate-limit public inquiries; registration has its own limiter.
 
@@ -13,7 +13,7 @@ All API responses contain raw JSON. Validation errors are handled by the applica
 
 Better Auth owns `/api/auth/sign-in/email`, `/sign-out`, `/request-password-reset`, `/reset-password`, `/two-factor/enable`, `/two-factor/verify-totp`, `/two-factor/disable`, session cookies, challenge cookies and recovery tokens. Password policy is 12–128 characters. Enabling TOTP returns `totpURI` and backup codes; verification rotates the session cookie. A sign-in challenge supplies `twoFactorRedirect` and cannot access business data before verification.
 
-- GET `/session`: `{user:{id,name,email,role,brokerage,twoFactorEnabled},session:{id,expiresAt},mfaRequired}`.
+- GET `/session`: `{user:{id,name,email,role,brokerage,twoFactorEnabled},session:{id,expiresAt},mfaRequired:false}`.
 - GET/PATCH `/profile`: patch `{name?,brokerage?}`; cannot set role/email/MFA flags.
 - GET `/users`: coordinator only, profile projections without credentials.
 - POST `/invitations`: coordinator `{email,role:'agent'|'client',matterId?,agreementId?,approvalOverrideReason?,expiresInHours?:72}`. Agent requires an approved agreement with signed document evidence or an explicit exception reason of at least 10 characters. Returns one manual-delivery acceptanceToken; no email is sent.

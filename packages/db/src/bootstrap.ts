@@ -68,11 +68,11 @@ await prisma.$transaction(async (tx) => {
       action: "identity.owner_bootstrapped",
       entityType: "User",
       entityId: id,
-      details: { source: "operator-command", mfaRequired: true },
+      details: { source: "operator-command", mfaRequired: false },
     },
   });
 });
 console.log(
-  "The initial owner account and approved service catalog were created. Enroll MFA at first sign-in. Remove the bootstrap password from the environment now.",
+  "The initial owner account and approved service catalog were created. Authenticator verification is optional and can be enabled in account settings. Remove the bootstrap password from the environment now.",
 );
 await prisma.$disconnect();

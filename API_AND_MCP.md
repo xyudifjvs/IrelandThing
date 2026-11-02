@@ -4,7 +4,7 @@ PostgreSQL is the system of record. Private object storage holds immutable docum
 
 ## Application API
 
-Authenticated routes are rooted at `/api/v1`. Browser writes require the exact configured origin. Coordinator, agent and client access is enforced in the services, including matter participation, document/message visibility and revoked access. BetterAuth sessions and MFA protect coordinator access. Useful route families are `matters`, `documents`, `intake`, `onboarding`, `communications`, `billing`, `dotloop`, `workflows`, `ai`, and `assistant`.
+Authenticated routes are rooted at `/api/v1`. Browser writes require the exact configured origin. Coordinator, agent and client access is enforced in the services, including matter participation, document/message visibility and revoked access. BetterAuth sessions protect coordinator access. Authenticator enrollment is optional; accounts that enable it must complete the second-factor challenge at sign-in. The session response retains `mfaRequired: false` for older clients. Useful route families are `matters`, `documents`, `intake`, `onboarding`, `communications`, `billing`, `dotloop`, `workflows`, `ai`, and `assistant`.
 
 - `GET /assistant/matters/:id` returns an authorized matter bundle. Collection limits are disclosed; use paginated reads for complete history.
 - `GET /assistant/records?kind=...&matterId=...&cursor=...&limit=50` returns `{items, nextCursor, hasMore}`. Follow `nextCursor` until it is null.
@@ -33,6 +33,10 @@ The tools are `query_records`, `list_matters`, `get_matter`, `list_documents`, `
 
 The server cannot control an arbitrary external client's later inference or copied records. Admission is therefore restricted to verified deployments; an ordinary assistant with unknown routing must remain unapproved. The application's own AI gateway is separately gated by `OPENROUTER_ZDR_APPROVED`, `OPENROUTER_ACCOUNT_PRIVACY_VERIFIED`, explicit model/provider configuration and disabled plugins/fallbacks.
 # Calendly scheduling records
+
+Public `GET /api/v1/onboarding/scheduling` exposes the approved booking URL and configuration flags. Coordinator-only `GET /api/v1/onboarding/bookings` and `/bookings/:id` expose signed-provider booking/cancellation/reschedule records. Authenticated API/MCP `query_records` accepts `kind: "scheduling_bookings"` for coordinators with normal cursor pagination; agent/client access is denied. Browser scheduling notifications never write bookings. The raw-body signed endpoint is `POST /api/webhooks/calendly`; see [account activation and agreement-email setup](docs/runbooks/calendly.md). Existing inquiry and agreement APIs are preserved.
+
+## Calendly scheduling records
 
 Public `GET /api/v1/onboarding/scheduling` exposes the approved booking URL and configuration flags. Coordinator-only `GET /api/v1/onboarding/bookings` and `/bookings/:id` expose signed-provider booking/cancellation/reschedule records. Authenticated API/MCP `query_records` accepts `kind: "scheduling_bookings"` for coordinators with normal cursor pagination; agent/client access is denied. Browser scheduling notifications never write bookings. The raw-body signed endpoint is `POST /api/webhooks/calendly`; see [account activation and agreement-email setup](docs/runbooks/calendly.md). Existing inquiry and agreement APIs are preserved.
 

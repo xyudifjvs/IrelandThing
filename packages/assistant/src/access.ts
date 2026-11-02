@@ -146,16 +146,12 @@ export async function grantPrincipal(token: string) {
   if (
     access?.action === "identity.access_revoked" ||
     !user ||
-    user.role !== "coordinator" ||
-    (!user.twoFactorEnabled &&
-      !(
-        process.env.APP_ENV === "local" && process.env.NODE_ENV !== "production"
-      ))
+    user.role !== "coordinator"
   )
     throw new HttpError(
       403,
       "ACCESS_REVOKED",
-      "The account no longer has coordinator access with MFA.",
+      "The account no longer has coordinator access.",
     );
   if (!Array.isArray(grant.scopes) || !grant.scopes.includes("weatherly:read"))
     throw new HttpError(403, "SCOPE_DENIED", "A read grant is required.");

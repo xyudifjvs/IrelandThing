@@ -260,25 +260,8 @@
   color: #8a9770;
 }
 .file {
-  border: 1px dashed #bba78a;
-  background: #f7f1e6;
-  padding: 27px;
-  text-align: center;
-  border-radius: 6px;
-}
-.file input {
-  display: block;
-  width: 100%;
   margin-top: 18px;
-  font-size: 11px;
-}
-.file svg {
-  color: #9b835f;
-}
-.file p {
-  font:
-    18px Georgia,
-    serif;
+  text-align: left;
 }
 .footer {
   display: flex;

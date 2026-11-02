@@ -1,3 +1,5 @@
+import { schedulingConfig } from "./calendly";
+export { calendlyWebhook } from "./calendly";
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -49,6 +51,19 @@ const inquiryInput = z
       }
     }
   });
+async function validateAgreementEvidence(documentId?: string, supportingDocumentIds: string[] = []) {
+  if (supportingDocumentIds.length && !documentId)
+    throw new HttpError(422, "EVIDENCE_REQUIRED", "Choose one primary signed agreement before attaching supporting files.");
+  const ids = [documentId, ...supportingDocumentIds].filter((id): id is string => !!id);
+  if (new Set(ids).size !== ids.length)
+    throw new HttpError(422, "DUPLICATE_EVIDENCE", "Each agreement evidence document must be attached only once.");
+  if (!ids.length) return;
+  const docs = await prisma.document.findMany({ where: { id: { in: ids } } });
+  if (docs.length !== ids.length)
+    throw new HttpError(422, "INVALID_DOCUMENT", "An evidence document was not found. Refresh and choose the saved files again.");
+  if (docs.some((doc) => doc.visibility !== "coordinator" || doc.matterId || doc.category !== "service_agreement"))
+    throw new HttpError(422, "INVALID_AGREEMENT_EVIDENCE", "Agreement evidence must be a private service-agreement upload without a transaction association.");
+}
 export async function createInquiry(input: unknown) {
   const {
     requestId = randomUUID(),
@@ -81,6 +96,31 @@ export async function createInquiry(input: unknown) {
 }
 export function createOnboardingRouter() {
   const r = Router();
+  r.get("/scheduling", (_req, res) => res.json(schedulingConfig()));
+  r.get(
+    "/bookings",
+    asyncHandler(async (req, res) => {
+      assertCoordinator(principal(req));
+      res.json(
+        await prisma.schedulingBooking.findMany({
+          orderBy: { startAt: "desc" },
+          take: 200,
+        }),
+      );
+    }),
+  );
+  r.get(
+    "/bookings/:id",
+    asyncHandler(async (req, res) => {
+      assertCoordinator(principal(req));
+      const booking = await prisma.schedulingBooking.findUnique({
+        where: { id: String(req.params.id) },
+      });
+      if (!booking)
+        throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found.");
+      res.json(booking);
+    }),
+  );
   r.post(
     "/inquiries",
     requestLimiter("inquiry", 5, { windowMs: 10 * 60000 }),
@@ -158,11 +198,13 @@ export function createOnboardingRouter() {
     asyncHandler(async (req, res) => {
       const actor = principal(req);
       assertCoordinator(actor);
-      const data = z
+      const { agreementRequestId, ...data } = z
         .object({
           userId: z.string(),
           version: z.string().min(1).max(100),
           documentId: z.string().optional(),
+          supportingDocumentIds: z.array(z.string()).max(19).default([]),
+          agreementRequestId: z.uuid().optional(),
           status: z
             .enum(["draft", "sent", "received", "approved"])
             .default("draft"),
@@ -180,18 +222,21 @@ export function createOnboardingRouter() {
           "EVIDENCE_REQUIRED",
           "Attach the signed agreement evidence",
         );
-      if (
-        data.documentId &&
-        !(await prisma.document.findUnique({ where: { id: data.documentId } }))
-      )
-        throw new HttpError(
-          422,
-          "INVALID_DOCUMENT",
-          "Evidence document not found",
-        );
+      await validateAgreementEvidence(data.documentId, data.supportingDocumentIds);
+      const agreementRequestHash = hashToken(JSON.stringify({ actorId: actor.id, ...data }));
       res.status(201).json(
         await prisma.$transaction(async (tx) => {
-          const row = await tx.agreement.create({ data });
+          let row;
+          if (agreementRequestId) {
+            const created = await tx.agreement.createMany({
+              data: [{ ...data, agreementRequestId, agreementRequestHash }],
+              skipDuplicates: true,
+            });
+            row = await tx.agreement.findUniqueOrThrow({ where: { agreementRequestId } });
+            if (row.agreementRequestHash !== agreementRequestHash)
+              throw new HttpError(409, "AGREEMENT_REQUEST_CONFLICT", "This recording request was already used for different agreement details. Refresh before trying again.");
+            if (!created.count) return row;
+          } else row = await tx.agreement.create({ data });
           await audit(
             tx,
             actor,
@@ -199,7 +244,7 @@ export function createOnboardingRouter() {
             "Agreement",
             row.id,
             null,
-            { version: row.version, status: row.status },
+            { version: row.version, status: row.status, documentId: row.documentId, supportingDocumentIds: row.supportingDocumentIds },
           );
           return row;
         }),
@@ -211,11 +256,12 @@ export function createOnboardingRouter() {
     asyncHandler(async (req, res) => {
       const actor = principal(req);
       assertCoordinator(actor);
-      const { expectedRevision, status, documentId } = z
+      const { expectedRevision, status, documentId, supportingDocumentIds } = z
         .object({
           expectedRevision: revision,
           status: z.enum(["draft", "sent", "received", "approved"]),
           documentId: z.string().optional(),
+          supportingDocumentIds: z.array(z.string()).max(19).optional(),
         })
         .strict()
         .parse(req.body);
@@ -225,21 +271,16 @@ export function createOnboardingRouter() {
           "EVIDENCE_REQUIRED",
           "Attach the signed agreement evidence",
         );
-      if (
-        documentId &&
-        !(await prisma.document.findUnique({ where: { id: documentId } }))
-      )
-        throw new HttpError(
-          422,
-          "INVALID_DOCUMENT",
-          "Evidence document not found",
-        );
       const id = String(req.params.id);
+      const existing = await prisma.agreement.findUnique({ where: { id } });
+      if (!existing) throw new HttpError(404, "AGREEMENT_NOT_FOUND", "Agreement not found");
+      const supporting = supportingDocumentIds ?? existing.supportingDocumentIds;
+      await validateAgreementEvidence(documentId ?? existing.documentId ?? undefined, supporting);
       res.json(
         await prisma.$transaction(async (tx) => {
           const changed = await tx.agreement.updateMany({
             where: { id, revision: expectedRevision },
-            data: { status, documentId, revision: { increment: 1 } },
+            data: { status, documentId, supportingDocumentIds: supporting, revision: { increment: 1 } },
           });
           if (!changed.count)
             throw new HttpError(
@@ -250,6 +291,7 @@ export function createOnboardingRouter() {
           await audit(tx, actor, "agreement.updated", "Agreement", id, null, {
             status,
             documentId: documentId || null,
+            supportingDocumentIds: supporting,
           });
           return tx.agreement.findUniqueOrThrow({ where: { id } });
         }),

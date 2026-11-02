@@ -1,6 +1,9 @@
 "use client";
-import { useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { api, mutate, useData, date, label } from "./data";
+import { DocumentUploadQueue } from "../../../_components/DocumentUploadQueue";
+import type { TransactionDocumentUploads } from "../../../_components/useTransactionDocumentUploads";
+import { validateDocumentFile } from "../../../_lib/document-uploads";
 import s from "./workspace.module.css";
 type Version = {
   id: string;
@@ -8,6 +11,7 @@ type Version = {
   createdAt: string;
   size?: number;
   checksum?: string;
+  originalName?: string;
 };
 type FileRecord = {
   id: string;
@@ -25,24 +29,18 @@ const scopes = [
   ["agent", "Ireland and agents on this file"],
   ["client", "Ireland, agents and clients on this file"],
 ];
-function validateFile(file: File) {
-  if (!file.size || file.size > 20 * 1024 * 1024)
-    throw new Error("Choose a file between 1 byte and 20 MB.");
-  if (!/\.(pdf|docx)$/i.test(file.name))
-    throw new Error(
-      "Choose a PDF or DOCX file. Convert other formats before uploading.",
-    );
-}
 export default function DocumentFiles({
   matterId,
   coordinator = false,
   actorId,
   canUpload = true,
+  uploads: controller,
 }: {
   matterId: string;
   coordinator?: boolean;
   actorId?: string;
   canUpload?: boolean;
+  uploads: TransactionDocumentUploads;
 }) {
   const [cursor, setCursor] = useState("");
   const [earlier, setEarlier] = useState<FileRecord[]>([]);
@@ -52,14 +50,16 @@ export default function DocumentFiles({
   const files = [...earlier, ...(query.data || [])].filter(
     (f, i, all) => all.findIndex((x) => x.id === f.id) === i,
   );
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState("");
-  async function reload() {
+  const { queue: uploads, visibility, setVisibility } = controller;
+  const reload = useCallback(async () => {
     setEarlier([]);
     if (cursor) setCursor("");
     else await query.refresh();
-  }
+  }, [cursor, query.refresh]);
+  useEffect(
+    () => controller.registerRefresh(reload),
+    [controller.registerRefresh, reload],
+  );
   return (
     <section className={s.section}>
       <div className={s.sectionHead}>
@@ -73,7 +73,7 @@ export default function DocumentFiles({
         </div>
         <button
           className={s.buttonSmall}
-          disabled={query.loading || busy}
+          disabled={query.loading || uploads.running}
           onClick={() => void reload()}
         >
           Refresh documents
@@ -109,7 +109,7 @@ export default function DocumentFiles({
         {query.data?.length === 50 && (
           <button
             className={s.buttonSecondary}
-            disabled={query.loading}
+            disabled={query.loading || uploads.running}
             onClick={() => {
               const last = files.at(-1);
               if (last) {
@@ -122,56 +122,22 @@ export default function DocumentFiles({
           </button>
         )}
         {canUpload && (
-          <form
-            style={{ marginTop: 22 }}
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const form = e.currentTarget;
-              setBusy(true);
-              setError("");
-              setMessage("");
-              try {
-                const body = new FormData(form);
-                const file = body.get("file");
-                if (!(file instanceof File)) throw new Error("Choose a file.");
-                validateFile(file);
-                body.set("matterId", matterId);
-                body.set("category", "other");
-                if (!coordinator) body.set("visibility", "agent");
-                await api("/api/v1/documents", { method: "POST", body });
-                form.reset();
-                setMessage("Document uploaded.");
-                await reload();
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <label className={s.field}>
-              Upload a new document
-              <input
-                className={s.input}
-                type="file"
-                name="file"
-                required
-                accept=".pdf,.docx"
-                disabled={busy}
-              />
-            </label>
+          <div style={{ marginTop: 22 }}>
             <p className={s.fieldHint}>
-              PDF or DOCX, up to 20 MB. To revise an existing file, open its
-              versions below.
+              Upload several new documents together. To revise an existing
+              document, open its versions above.
             </p>
             {coordinator && (
               <label className={s.field}>
-                Who can access this file?
+                Who can access these new documents?
                 <select
                   className={s.select}
                   name="visibility"
-                  defaultValue="agent"
-                  disabled={busy}
+                  value={visibility}
+                  onChange={(event) => setVisibility(event.target.value)}
+                  disabled={
+                    !controller.enabled || uploads.running || uploads.hasPending
+                  }
                 >
                   {scopes.map(([v, n]) => (
                     <option value={v} key={v}>
@@ -183,24 +149,17 @@ export default function DocumentFiles({
             )}
             {coordinator && (
               <p className={s.fieldHint}>
-                Sharing applies to this document and all versions. Only people
-                already granted access to the transaction can see it.
+                This access setting applies to every file in this batch. Remove
+                pending files before changing it. Only people already granted
+                access to the transaction can see shared documents.
               </p>
             )}
-            {error && (
-              <p role="alert" className={s.error}>
-                {error}
-              </p>
-            )}
-            {message && (
-              <p role="status" className={s.notice}>
-                {message}
-              </p>
-            )}
-            <button className={s.buttonSecondary} disabled={busy}>
-              {busy ? "Uploading…" : "Upload document"}
-            </button>
-          </form>
+            <DocumentUploadQueue
+              queue={uploads}
+              label="Upload new documents"
+              disabled={!controller.enabled}
+            />
+          </div>
         )}
       </div>
     </section>
@@ -228,10 +187,43 @@ function DocumentRow({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  const [versionFile, setVersionFile] = useState<File | null>(null);
+  const [versionRequestId, setVersionRequestId] = useState("");
+  const versionInput = useRef<HTMLInputElement>(null);
+  const mutationRunning = useRef(false);
+  function chooseVersion(selected: FileList | File[]) {
+    setError("");
+    setMessage("");
+    if (selected.length !== 1) {
+      setVersionFile(null);
+      setVersionRequestId("");
+      if (versionInput.current) versionInput.current.value = "";
+      setError(
+        "Choose exactly one revised file. A version updates this specific document; upload additional documents in the new documents area.",
+      );
+      return;
+    }
+    const file = selected[0];
+    const validation = validateDocumentFile(
+      file,
+      doc.mimeType === "application/pdf" ? "pdf" : "docx",
+    );
+    if (validation) {
+      setVersionFile(null);
+      setVersionRequestId("");
+      if (versionInput.current) versionInput.current.value = "";
+      setError(validation);
+      return;
+    }
+    setVersionFile(file);
+    setVersionRequestId(crypto.randomUUID());
+  }
   const canVersion =
     coordinator ||
     (!!actorId && doc.createdById === actorId && doc.visibility === "agent");
   async function changeScope(value: string) {
+    if (mutationRunning.current) return;
+    mutationRunning.current = true;
     setBusy(true);
     setError("");
     setMessage("");
@@ -253,6 +245,7 @@ function DocumentRow({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      mutationRunning.current = false;
       setBusy(false);
     }
   }
@@ -374,6 +367,9 @@ function DocumentRow({
                     href={`/api/v1/documents/${doc.id}/download?versionId=${encodeURIComponent(v.id)}`}
                   >
                     Download version {v.version} of {file.name}
+                    {v.originalName && v.originalName !== file.name
+                      ? ` (${v.originalName})`
+                      : ""}
                   </a>
                   <span className={s.fieldHint}>
                     {" "}
@@ -394,18 +390,30 @@ function DocumentRow({
             {canVersion && (
               <form
                 style={{ marginTop: 18 }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (!busy) chooseVersion(event.dataTransfer.files);
+                }}
                 onSubmit={async (e) => {
                   e.preventDefault();
+                  if (mutationRunning.current) return;
+                  mutationRunning.current = true;
                   const form = e.currentTarget;
                   setBusy(true);
                   setError("");
                   setMessage("");
                   try {
-                    const body = new FormData(form);
-                    const upload = body.get("file");
-                    if (!(upload instanceof File))
-                      throw new Error("Choose a revised file.");
-                    validateFile(upload);
+                    const upload = versionFile;
+                    if (!upload) throw new Error("Choose a revised file.");
+                    const validation = validateDocumentFile(
+                      upload,
+                      doc.mimeType === "application/pdf" ? "pdf" : "docx",
+                    );
+                    if (validation) throw new Error(validation);
+                    const body = new FormData();
+                    body.set("file", upload, upload.name);
+                    body.set("uploadRequestId", versionRequestId);
                     body.set("visibility", doc.visibility);
                     body.set("category", doc.category);
                     await api(`/api/v1/documents/${doc.id}/versions`, {
@@ -413,6 +421,8 @@ function DocumentRow({
                       body,
                     });
                     form.reset();
+                    setVersionFile(null);
+                    setVersionRequestId("");
                     await q.refresh();
                     await refresh();
                     setMessage(
@@ -421,6 +431,7 @@ function DocumentRow({
                   } catch (e) {
                     setError((e as Error).message);
                   } finally {
+                    mutationRunning.current = false;
                     setBusy(false);
                   }
                 }}
@@ -428,22 +439,48 @@ function DocumentRow({
                 <label className={s.field}>
                   Upload a new version
                   <input
+                    ref={versionInput}
                     className={s.input}
                     type="file"
                     name="file"
-                    required
                     accept={
                       doc.mimeType === "application/pdf" ? ".pdf" : ".docx"
                     }
                     disabled={busy}
+                    onChange={(event) => {
+                      if (event.currentTarget.files?.length)
+                        chooseVersion(event.currentTarget.files);
+                    }}
                   />
                 </label>
                 <p className={s.fieldHint}>
-                  Use the same file format. Existing sharing stays in place and
-                  includes the new version. Older versions remain available to
-                  everyone who can access this document.
+                  Choose or drop exactly one file in the same format. Multiple
+                  files are rejected because this action creates one new version
+                  of this document. Existing sharing stays in place, and older
+                  versions remain available.
                 </p>
-                <button className={s.buttonSecondary} disabled={busy}>
+                {versionFile && (
+                  <p className={s.fieldHint}>
+                    Selected: {versionFile.name}{" "}
+                    <button
+                      type="button"
+                      className={s.buttonSmall}
+                      disabled={busy}
+                      onClick={() => {
+                        setVersionFile(null);
+                        setVersionRequestId("");
+                        if (versionInput.current)
+                          versionInput.current.value = "";
+                      }}
+                    >
+                      Remove selected revision
+                    </button>
+                  </p>
+                )}
+                <button
+                  className={s.buttonSecondary}
+                  disabled={busy || !versionFile}
+                >
                   {busy ? "Uploading…" : "Upload new version"}
                 </button>
               </form>

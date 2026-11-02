@@ -7,9 +7,12 @@ import {
   Check,
   CheckCircle2,
   Plus,
-  Upload,
   ShieldCheck,
 } from "lucide-react";
+import {
+  DocumentUploadQueue,
+  useDocumentUploadQueue,
+} from "../../../_components/DocumentUploadQueue";
 import {
   api,
   mutate,
@@ -50,6 +53,7 @@ type Payload = {
     pre1978: boolean;
     ownChecklist: boolean;
     checklistDocumentId?: string;
+    checklistDocumentIds?: string[];
   };
   notes: string;
   gift: {
@@ -86,9 +90,6 @@ export default function Intake() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [uploaded, setUploaded] = useState("");
-  const [checklistFile, setChecklistFile] = useState<File | null>(null);
   const [submission, setSubmission] = useState<Matter | null>(null);
   const resumeQuery = useData<Draft[]>("/api/v1/intake/drafts");
   const resume = (resumeQuery.data || []).filter((x) => x.status === "draft");
@@ -100,10 +101,48 @@ export default function Intake() {
   const [dirty, setDirty] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const errorSummary = useRef<HTMLDivElement>(null);
-  const contractInput = useRef<HTMLInputElement>(null);
-  const checklistInput = useRef<HTMLInputElement>(null);
-  const pendingUpload = !!file || !!checklistFile;
-  const unsaved = dirty || pendingUpload;
+  const payloadRef = useRef(d);
+  const draftRef = useRef(draft);
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+  const uploadReservations = useRef({
+    contract: new Set<string>(),
+    brokerage_checklist: new Set<string>(),
+  });
+  const contracts = useDocumentUploadQueue<{ id: string; name?: string }>({
+    upload: (file, itemId) => uploadFile(file, itemId, "contract"),
+    finalize: async (doc) => {
+      update({
+        documentIds: [...new Set([...payloadRef.current.documentIds, doc.id])],
+      });
+      await persistPayload(payloadRef.current);
+    },
+    onBatchComplete: async () => {
+      await resumeQuery.refresh();
+    },
+    maxFiles: 30,
+  });
+  const checklists = useDocumentUploadQueue<{ id: string; name?: string }>({
+    upload: (file, itemId) => uploadFile(file, itemId, "brokerage_checklist"),
+    finalize: async (doc) => {
+      const broker = payloadRef.current.broker;
+      const ids = [...new Set([...checklistIds(broker), doc.id])];
+      update({
+        broker: {
+          ...broker,
+          checklistDocumentId: ids[0],
+          checklistDocumentIds: ids,
+        },
+      });
+      await persistPayload(payloadRef.current);
+    },
+    onBatchComplete: async () => {
+      await resumeQuery.refresh();
+    },
+    maxFiles: 30,
+  });
+  const pendingUpload = contracts.hasPending || checklists.hasPending;
+  const uploading = contracts.running || checklists.running;
+  const unsaved = dirty || pendingUpload || uploading;
   const steps = [
     "Service",
     "The deal",
@@ -147,7 +186,13 @@ export default function Intake() {
         anchor.getAttribute("href")?.startsWith("#")
       )
         return;
-      if (
+      if (pendingUpload || uploading) {
+        event.preventDefault();
+        event.stopPropagation();
+        setError(
+          "Upload or remove the remaining selected documents before leaving this intake.",
+        );
+      } else if (
         !window.confirm(
           "This intake has unsaved changes. Leave without saving?",
         )
@@ -162,8 +207,14 @@ export default function Intake() {
       window.removeEventListener("beforeunload", leave);
       document.removeEventListener("click", navigate, true);
     };
-  }, [unsaved, submission]);
+  }, [unsaved, submission, pendingUpload, uploading]);
   async function openDraft(id: string) {
+    if (pendingUpload || uploading) {
+      setError(
+        "Upload or remove the remaining selected documents before opening another intake.",
+      );
+      return;
+    }
     if (
       unsaved &&
       !window.confirm("Replace your unsaved entries with the saved intake?")
@@ -179,8 +230,9 @@ export default function Intake() {
         throw new Error(
           "This intake was already submitted. Return to your portal to open the transaction.",
         );
+      draftRef.current = x;
       setDraft(x);
-      setD({
+      const payload = {
         ...fresh,
         ...x.payload,
         broker: { ...fresh.broker, ...x.payload?.broker },
@@ -188,10 +240,11 @@ export default function Intake() {
         clients: x.payload?.clients?.length
           ? x.payload.clients
           : [{ name: "" }],
-      });
-      setFile(null);
-      setChecklistFile(null);
-      setUploaded("");
+      };
+      payloadRef.current = payload;
+      setD(payload);
+      contracts.clear();
+      checklists.clear();
       setDirty(false);
       setSaved("");
       setStep(0);
@@ -208,93 +261,122 @@ export default function Intake() {
       params.get("package") === "listing" ||
       params.get("package") === "full_listing"
     )
-      setD({
+      setInitialPayload({
         ...fresh,
         packageCode: "full_listing",
         side: "seller",
         contractSource: "not_yet_executed",
       });
     else if (params.get("side") === "seller")
-      setD({ ...fresh, side: "seller" });
+      setInitialPayload({ ...fresh, side: "seller" });
   }, []);
+  function setInitialPayload(payload: Payload) {
+    payloadRef.current = payload;
+    setD(payload);
+  }
   const update = (patch: Partial<Payload>) => {
-    setD((prev) => ({ ...prev, ...patch }));
+    const next = { ...payloadRef.current, ...patch };
+    payloadRef.current = next;
+    setD(next);
     setDirty(true);
   };
+  function persistPayload(payload: Payload | Omit<Payload, "broker">) {
+    const saving = saveChain.current
+      .catch(() => undefined)
+      .then(async () => {
+        let current = draftRef.current;
+        if (!current)
+          current = await mutate<Draft>("/api/v1/intake/drafts", { payload });
+        else
+          current = await mutate<Draft>(
+            `/api/v1/intake/drafts/${current.id}`,
+            { expectedRevision: current.revision, payload },
+            "PATCH",
+          );
+        draftRef.current = current;
+        setDraft(current);
+        if (payload === payloadRef.current) setDirty(false);
+        setSaved(
+          new Date().toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+        );
+        return current;
+      });
+    saveChain.current = saving;
+    return saving;
+  }
   async function save() {
-    if (pendingUpload)
+    if (pendingUpload || uploading)
       throw new Error(
-        "Upload or clear your selected file before saving the intake.",
+        "Upload or remove the remaining selected documents before saving the intake.",
       );
-    let current = draft;
-    if (!current)
-      current = await mutate<Draft>("/api/v1/intake/drafts", { payload: d });
-    else
-      current = await mutate<Draft>(
-        `/api/v1/intake/drafts/${current.id}`,
-        { expectedRevision: current.revision, payload: d },
-        "PATCH",
+    return persistPayload(payloadRef.current);
+  }
+  async function uploadFile(
+    file: File,
+    itemId: string,
+    category: "contract" | "brokerage_checklist",
+  ) {
+    const currentIds =
+      category === "contract"
+        ? payloadRef.current.documentIds
+        : checklistIds(payloadRef.current.broker);
+    const reservations = uploadReservations.current[category];
+    if (currentIds.length + reservations.size >= 30)
+      throw new Error(
+        "This intake allows up to 30 documents in this section. Remove any remaining selected files.",
       );
-    setDraft(current);
-    setDirty(false);
-    setSaved(
-      new Date().toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-      }),
-    );
-    return current;
+    reservations.add(itemId);
+    const f = new FormData();
+    f.set("file", file);
+    f.set("category", category);
+    f.set("visibility", "agent");
+    f.set("uploadRequestId", itemId);
+    try {
+      const doc = await api<{ id: string; name?: string }>(
+        "/api/v1/documents",
+        { method: "POST", body: f },
+      );
+      // Count durable records immediately so concurrent uploads cannot exceed the intake limit.
+      if (category === "contract")
+        update({
+          documentIds: [
+            ...new Set([...payloadRef.current.documentIds, doc.id]),
+          ],
+        });
+      else {
+        const broker = payloadRef.current.broker;
+        const ids = [...new Set([...checklistIds(broker), doc.id])];
+        update({
+          broker: {
+            ...broker,
+            checklistDocumentId: ids[0],
+            checklistDocumentIds: ids,
+          },
+        });
+      }
+      return doc;
+    } finally {
+      reservations.delete(itemId);
+    }
   }
   function validate() {
     if (step === 0) {
       if (d.packageCode === "full_listing" && d.side !== "seller")
         throw new Error("Full Listing is available for seller representation.");
     }
-    if (step === 1) {
-      if (!d.propertyAddress.trim())
-        throw new Error("Enter the property address.");
-      if (d.contractSource === "upload" && !d.documentIds.length)
-        throw new Error("Upload the executed contract before continuing.");
-      if (d.contractSource === "dotloop" && !d.dotloopLoopId?.trim())
-        throw new Error("Enter the approved Dotloop loop ID.");
-    }
-    if (step === 2) {
-      if (
-        d.clients.some(
-          (c) =>
-            !c.name.trim() ||
-            !c.email?.trim() ||
-            !c.phone?.trim() ||
-            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email || ""),
-        )
-      )
-        throw new Error("Add a name, email and phone number for each client.");
-    }
-    if (step === 3) {
-      if (d.title.choice === "have" && !d.title.name?.trim())
-        throw new Error(
-          "Enter the title company name or choose a follow-up instruction.",
-        );
-      if (
-        d.purchaseType === "financed" &&
-        d.lender?.choice === "have" &&
-        !d.lender.name?.trim()
-      )
-        throw new Error(
-          "Enter the lender name or choose a follow-up instruction.",
-        );
-    }
-    if (step === 4) {
-      if (
-        d.packageCode !== "essentials" &&
-        (!d.broker.name.trim() || !d.broker.email.trim())
-      )
-        throw new Error("Enter your broker’s name and email.");
-      if (d.gift.requested && (!d.gift.tier || !d.gift.choice?.trim()))
-        throw new Error(
-          "Choose a gift tier and enter your preferred gift. Final availability and pricing require confirmation.",
-        );
-    }
+    const emails = [
+      ...d.clients.map((client) => client.email),
+      d.title.email,
+      d.lender?.email,
+      d.broker.email,
+    ];
+    if (
+      emails.some((email) => email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    )
+      throw new Error("Enter a valid email address or leave it blank.");
   }
   async function next() {
     setBusy(true);
@@ -310,83 +392,24 @@ export default function Intake() {
       setBusy(false);
     }
   }
-  async function upload() {
-    if (!file) return;
-    setBusy(true);
-    setError("");
-    try {
-      if (!file.size || file.size > 20 * 1024 * 1024)
-        throw new Error("Choose a contract between 1 byte and 20 MB.");
-      if (!/\.(pdf|docx)$/i.test(file.name))
-        throw new Error(
-          "Convert the contract to PDF or DOCX before uploading.",
-        );
-      const f = new FormData();
-      f.set("file", file);
-      f.set("category", "contract");
-      f.set("visibility", "agent");
-      const doc = await api<{ id: string; name: string }>("/api/v1/documents", {
-        method: "POST",
-        body: f,
-      });
-      update({ documentIds: [...d.documentIds, doc.id] });
-      setUploaded(doc.name || file.name);
-      setFile(null);
-      if (contractInput.current) contractInput.current.value = "";
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function uploadChecklist() {
-    if (!checklistFile) return;
-    setBusy(true);
-    setError("");
-    try {
-      if (!checklistFile.size || checklistFile.size > 20 * 1024 * 1024)
-        throw new Error("Choose a checklist between 1 byte and 20 MB.");
-      if (!/\.(pdf|docx)$/i.test(checklistFile.name))
-        throw new Error(
-          "Convert the checklist to PDF or DOCX before uploading.",
-        );
-      const f = new FormData();
-      f.set("file", checklistFile);
-      f.set("visibility", "agent");
-      f.set("category", "brokerage_checklist");
-      const doc = await api<{ id: string }>("/api/v1/documents", {
-        method: "POST",
-        body: f,
-      });
-      update({ broker: { ...d.broker, checklistDocumentId: doc.id } });
-      setChecklistFile(null);
-      if (checklistInput.current) checklistInput.current.value = "";
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   async function submit() {
     setBusy(true);
     setError("");
     try {
+      if (pendingUpload || uploading)
+        throw new Error(
+          "Upload or remove the remaining selected documents before submitting the intake.",
+        );
       if (
         d.packageCode === "essentials" &&
         !d.broker.name.trim() &&
-        !d.broker.email.trim()
+        !d.broker.email.trim() &&
+        !d.broker.ownChecklist &&
+        !d.broker.pre1978 &&
+        !checklistIds(d.broker).length
       ) {
-        const payload = { ...d, broker: undefined };
-        let current = draft;
-        if (!current)
-          current = await mutate<Draft>("/api/v1/intake/drafts", { payload });
-        else
-          current = await mutate<Draft>(
-            `/api/v1/intake/drafts/${current.id}`,
-            { expectedRevision: current.revision, payload },
-            "PATCH",
-          );
-        setDraft(current);
+        const { broker: _broker, ...payload } = d;
+        const current = await persistPayload(payload);
         const result = await mutate<{ matter: Matter }>(
           `/api/v1/intake/drafts/${current.id}/submit`,
           {
@@ -455,17 +478,21 @@ export default function Intake() {
         {session.data?.user?.email && <> · {session.data.user.email}</>}
         <br />
         <span className={s.hint}>
-          Representing both sides? Submit one intake for each.
+          All detail fields and document uploads are optional. You can submit a
+          mock or incomplete transaction and fill in details later. Representing
+          both sides? Submit one intake for each.
         </span>
       </div>
       <p className={s.notice} role="status" aria-live="polite">
-        {unsaved
-          ? "Unsaved changes. Save before leaving this intake."
-          : saved
-            ? `Saved at ${saved}.`
-            : draft
-              ? "Saved intake loaded."
-              : "This intake has not been saved yet."}
+        {pendingUpload || uploading
+          ? "Upload or remove the remaining selected documents before continuing or leaving. Completed uploads are retained."
+          : unsaved
+            ? "Unsaved changes. Save before leaving this intake."
+            : saved
+              ? `Saved at ${saved}.`
+              : draft
+                ? "Saved intake loaded."
+                : "This intake has not been saved yet."}
       </p>
       {resumeQuery.loading && !draft && (
         <p role="status" className={s.notice}>
@@ -478,7 +505,7 @@ export default function Intake() {
           <button
             className={s.secondary}
             onClick={() => void resumeQuery.refresh()}
-            disabled={busy}
+            disabled={busy || pendingUpload || uploading}
           >
             Try again
           </button>
@@ -503,7 +530,7 @@ export default function Intake() {
               className={s.secondary}
               key={x.id}
               style={{ margin: "10px 8px 0 0" }}
-              disabled={busy}
+              disabled={busy || pendingUpload || uploading}
               onClick={() => void openDraft(x.id)}
             >
               {x.payload?.propertyAddress || "Untitled intake"}
@@ -520,7 +547,7 @@ export default function Intake() {
         Step {step + 1} of {steps.length}: {steps[step]}
       </p>
       <fieldset
-        disabled={busy || loadBlocked}
+        disabled={busy || loadBlocked || uploading}
         style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
       >
         <legend className={s.srOnly}>Transaction intake</legend>
@@ -594,11 +621,11 @@ export default function Intake() {
                         update({
                           packageCode: p.code,
                           side: p.code === "full_listing" ? "seller" : d.side,
-                          contractSource:
-                            p.code === "full_listing"
+                          contractSource: d.documentIds.length
+                            ? "upload"
+                            : p.code === "full_listing"
                               ? "not_yet_executed"
                               : "upload",
-                          documentIds: [],
                           dotloopLoopId: undefined,
                           title: { choice: "have" },
                           lender:
@@ -653,8 +680,8 @@ export default function Intake() {
                 The deal
               </h2>
               <p className={s.sub}>
-                Enter the property address and provide the signed contract, if
-                the property is under contract.
+                Add any property details or documents you have. You can continue
+                with these fields blank.
               </p>
               <label className={s.field}>
                 Property address
@@ -664,7 +691,6 @@ export default function Intake() {
                   onChange={(e) => update({ propertyAddress: e.target.value })}
                   autoComplete="street-address"
                   placeholder="Street address, city, state, ZIP"
-                  required
                 />
               </label>
               <h3>Is this a cash purchase?</h3>
@@ -695,6 +721,7 @@ export default function Intake() {
                   <input
                     name="source"
                     type="radio"
+                    disabled={pendingUpload}
                     checked={d.contractSource === "upload"}
                     onChange={() =>
                       update({
@@ -710,6 +737,7 @@ export default function Intake() {
                     <input
                       name="source"
                       type="radio"
+                      disabled={pendingUpload || d.documentIds.length > 0}
                       checked={d.contractSource === "dotloop"}
                       onChange={() =>
                         update({ contractSource: "dotloop", documentIds: [] })
@@ -723,6 +751,7 @@ export default function Intake() {
                     <input
                       name="source"
                       type="radio"
+                      disabled={pendingUpload || d.documentIds.length > 0}
                       checked={d.contractSource === "not_yet_executed"}
                       onChange={() =>
                         update({
@@ -736,30 +765,21 @@ export default function Intake() {
                   </label>
                 )}
               </div>
+              {d.documentIds.length > 0 && (
+                <p className={s.hint}>
+                  Uploaded contracts stay attached to this intake. Continue with
+                  the upload source for these documents.
+                </p>
+              )}
               {d.contractSource === "upload" && (
                 <div className={s.file}>
-                  <Upload size={25} strokeWidth={1} />
-                  <p>Upload your signed contract.</p>
-                  <span className={s.hint}>
-                    PDF or DOCX · up to 20 MB · include amendments
-                  </span>
-                  <input
-                    ref={contractInput}
-                    type="file"
-                    accept=".pdf,.docx"
-                    aria-label="Choose executed contract"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  <DocumentUploadQueue
+                    queue={contracts}
+                    label="Executed contracts and amendments"
+                    disabled={
+                      busy || checklists.hasPending || checklists.running
+                    }
                   />
-                  {file && (
-                    <button
-                      className={s.secondary}
-                      style={{ marginTop: 15 }}
-                      disabled={busy}
-                      onClick={() => void upload()}
-                    >
-                      {busy ? "Uploading…" : "Upload contract"}
-                    </button>
-                  )}
                   {d.documentIds.length > 0 && (
                     <p
                       style={{
@@ -768,22 +788,12 @@ export default function Intake() {
                         color: "#71805e",
                       }}
                     >
-                      <CheckCircle2 size={14} />{" "}
-                      {uploaded || `${d.documentIds.length} saved document(s)`}
+                      <CheckCircle2 size={14} /> {d.documentIds.length} contract
+                      document(s) uploaded. Unfinished intake saves are shown in
+                      the queue above.
                     </p>
                   )}
                 </div>
-              )}
-              {file && (
-                <button
-                  className={s.secondary}
-                  onClick={() => {
-                    setFile(null);
-                    if (contractInput.current) contractInput.current.value = "";
-                  }}
-                >
-                  Clear selected contract file
-                </button>
               )}
               {d.contractSource === "dotloop" && (
                 <>
@@ -842,7 +852,6 @@ export default function Intake() {
                     Full name
                     <input
                       className={s.input}
-                      required
                       value={c.name}
                       onChange={(e) =>
                         update({
@@ -879,7 +888,6 @@ export default function Intake() {
                       <input
                         type="email"
                         className={s.input}
-                        required
                         value={c.email || ""}
                         onChange={(e) =>
                           update({
@@ -897,7 +905,6 @@ export default function Intake() {
                       <input
                         type="tel"
                         className={s.input}
-                        required
                         value={c.phone || ""}
                         onChange={(e) =>
                           update({
@@ -1044,20 +1051,17 @@ export default function Intake() {
               </p>
               <div className={s.grid}>
                 <label className={s.field}>
-                  Broker of record
-                  {d.packageCode === "essentials" ? " (optional)" : ""}
+                  Broker of record (optional)
                   <input
                     className={s.input}
                     value={d.broker.name}
                     onChange={(e) =>
                       update({ broker: { ...d.broker, name: e.target.value } })
                     }
-                    required={d.packageCode !== "essentials"}
                   />
                 </label>
                 <label className={s.field}>
-                  Broker email
-                  {d.packageCode === "essentials" ? " (optional)" : ""}
+                  Broker email (optional)
                   <input
                     type="email"
                     className={s.input}
@@ -1065,7 +1069,6 @@ export default function Intake() {
                     onChange={(e) =>
                       update({ broker: { ...d.broker, email: e.target.value } })
                     }
-                    required={d.packageCode !== "essentials"}
                   />
                 </label>
               </div>
@@ -1085,6 +1088,7 @@ export default function Intake() {
                 <input
                   type="checkbox"
                   checked={d.broker.ownChecklist}
+                  disabled={pendingUpload || checklistIds(d.broker).length > 0}
                   onChange={(e) =>
                     update({
                       broker: { ...d.broker, ownChecklist: e.target.checked },
@@ -1093,44 +1097,23 @@ export default function Intake() {
                 />
                 My brokerage has its own checklist
               </label>
+              {checklistIds(d.broker).length > 0 && (
+                <p className={s.hint}>
+                  Uploaded brokerage documents remain attached to this intake.
+                </p>
+              )}
               {d.broker.ownChecklist && (
                 <div style={{ marginTop: 18 }}>
-                  <label className={s.field}>
-                    Brokerage checklist (PDF or DOCX)
-                    <input
-                      ref={checklistInput}
-                      className={s.input}
-                      type="file"
-                      accept=".pdf,.docx"
-                      onChange={(e) =>
-                        setChecklistFile(e.target.files?.[0] || null)
-                      }
-                    />
-                  </label>
-                  {checklistFile && (
-                    <button
-                      className={s.secondary}
-                      disabled={busy}
-                      onClick={() => void uploadChecklist()}
-                    >
-                      {busy ? "Uploading…" : "Upload brokerage checklist"}
-                    </button>
-                  )}
-                  {checklistFile && (
-                    <button
-                      className={s.secondary}
-                      onClick={() => {
-                        setChecklistFile(null);
-                        if (checklistInput.current)
-                          checklistInput.current.value = "";
-                      }}
-                    >
-                      Clear selected checklist file
-                    </button>
-                  )}
-                  {d.broker.checklistDocumentId && (
+                  <DocumentUploadQueue
+                    queue={checklists}
+                    label="Brokerage checklists and supporting documents"
+                    disabled={busy || contracts.hasPending || contracts.running}
+                  />
+                  {checklistIds(d.broker).length > 0 && (
                     <p className={s.hint}>
-                      Brokerage checklist uploaded securely.
+                      {checklistIds(d.broker).length} brokerage document(s)
+                      uploaded. Unfinished intake saves are shown in the queue
+                      above.
                     </p>
                   )}
                 </div>
@@ -1251,24 +1234,27 @@ export default function Intake() {
                     "Service",
                     `${d.packageCode === "essentials" ? "Essentials · $375" : d.packageCode === "complete" ? "Complete · $475" : "Full Listing · $625"} · ${d.side} side`,
                   ],
-                  ["Property", d.propertyAddress],
+                  ["Property", d.propertyAddress || "Not provided"],
                   ["Purchase", d.purchaseType],
                   [
                     "Contract",
                     d.contractSource === "upload"
                       ? `${d.documentIds.length} document(s) uploaded`
                       : d.contractSource === "dotloop"
-                        ? `Dotloop · ${d.dotloopLoopId}`
+                        ? `Dotloop · ${d.dotloopLoopId || "loop ID to follow"}`
                         : "Pre-listing · contract not yet executed",
                   ],
                   [
                     "Clients",
                     d.clients
+                      .filter(
+                        (c) => c.name || c.email || c.phone || c.relationship,
+                      )
                       .map(
                         (c) =>
                           `${c.name}${c.relationship ? " (" + c.relationship + ")" : ""}${c.email ? " · " + c.email : ""}${c.phone ? " · " + c.phone : ""}`,
                       )
-                      .join("\n"),
+                      .join("\n") || "Not provided",
                   ],
                   [
                     "Contact permission",
@@ -1305,15 +1291,20 @@ export default function Intake() {
                     "Prior title policy",
                     d.priorPolicy?.replaceAll("_", " ") || "N/A",
                   ],
-                  ["Broker", `${d.broker.name} · ${d.broker.email}`],
+                  [
+                    "Broker",
+                    [d.broker.name, d.broker.email]
+                      .filter(Boolean)
+                      .join(" · ") || "Not provided",
+                  ],
                   [
                     "Compliance",
-                    `${d.broker.pre1978 ? "Built before 1978" : "Built in/after 1978"} · ${d.broker.ownChecklist ? `Brokerage checklist requested${d.broker.checklistDocumentId ? " · file uploaded" : " · file to follow"}` : "Standard checklist"}`,
+                    `${d.broker.pre1978 ? "Built before 1978" : "Built in/after 1978"} · ${d.broker.ownChecklist ? `Brokerage checklist requested${checklistIds(d.broker).length ? ` · ${checklistIds(d.broker).length} document(s) uploaded` : " · files to follow"}` : "Standard checklist"}`,
                   ],
                   [
                     "Gift",
                     d.gift.requested
-                      ? `${d.gift.tier} · ${d.gift.choice} · price and payment to be confirmed`
+                      ? `${d.gift.tier || "Tier to follow"} · ${d.gift.choice || "Selection to follow"} · price and payment to be confirmed`
                       : "No closing gift",
                   ],
                   [
@@ -1343,7 +1334,7 @@ export default function Intake() {
         <div className={s.actions}>
           <button
             className={s.secondary}
-            disabled={busy || step === 0}
+            disabled={busy || pendingUpload || uploading || step === 0}
             onClick={() => setStep((x) => Math.max(0, x - 1))}
           >
             <ArrowLeft size={13} />
@@ -1352,7 +1343,7 @@ export default function Intake() {
           <div className={s.footer}>
             <button
               className={s.secondary}
-              disabled={busy}
+              disabled={busy || pendingUpload || uploading}
               onClick={async () => {
                 setBusy(true);
                 setError("");
@@ -1380,7 +1371,7 @@ export default function Intake() {
           {step < 5 ? (
             <button
               className={s.btn}
-              disabled={busy}
+              disabled={busy || pendingUpload || uploading}
               onClick={() => void next()}
             >
               {busy ? "Saving…" : "Continue"}
@@ -1389,7 +1380,7 @@ export default function Intake() {
           ) : (
             <button
               className={s.btn}
-              disabled={busy}
+              disabled={busy || pendingUpload || uploading}
               onClick={() => void submit()}
             >
               {busy ? "Submitting…" : "Submit transaction"}
@@ -1400,6 +1391,14 @@ export default function Intake() {
       </fieldset>
     </div>
   );
+}
+function checklistIds(broker: Payload["broker"]) {
+  return [
+    ...new Set([
+      ...(broker.checklistDocumentIds || []),
+      ...(broker.checklistDocumentId ? [broker.checklistDocumentId] : []),
+    ]),
+  ];
 }
 function Choices({
   name,

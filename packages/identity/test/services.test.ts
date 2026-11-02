@@ -269,16 +269,18 @@ describe("real PostgreSQL services and Better Auth", () => {
   });
   it("validates all key conditional intake branches and atomically returns one concurrent receipt", async () => {
     expect(intakePayload.safeParse(fixture).success).toBe(true);
+    for (const patch of [{ side: "buyer" }, { hoa: "request_listing_agent" }])
+      expect(intakePayload.safeParse({ ...fixture, ...patch }).success).toBe(
+        false,
+      );
     for (const patch of [
-      { side: "buyer" },
       { purchaseType: "financed" },
       { contractSource: "upload" },
       { contractSource: "dotloop" },
       { gift: { requested: true } },
-      { hoa: "request_listing_agent" },
     ])
       expect(intakePayload.safeParse({ ...fixture, ...patch }).success).toBe(
-        false,
+        true,
       );
     const draft = await prisma.intakeDraft.create({
       data: { userId: agent.id, payload: fixture },

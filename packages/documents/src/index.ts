@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { randomUUID, createHash } from "node:crypto";
@@ -121,6 +121,7 @@ export async function listDocuments(
           version: true,
           size: true,
           checksum: true,
+          originalName: true,
           processingStatus: true,
           error: true,
           createdAt: true,
@@ -311,6 +312,7 @@ export async function uploadDocument(
       matterId: z.string().optional(),
       visibility: visibility.default("agent"),
       category: z.string().max(100).default("contract"),
+      uploadRequestId: z.uuid().optional(),
     })
     .strict()
     .parse(params);
@@ -346,8 +348,60 @@ export async function uploadDocument(
       "VERSION_TYPE_MISMATCH",
       "A new version must use the same file format; create a separate document for another format",
     );
+  const checksum = createHash("sha256").update(file.buffer).digest("hex");
+  const originalName =
+    path.basename(file.originalname).replace(/[\r\n\u0000-\u001f]/g, "") ||
+    "document";
+  const uploadContextHash = createHash("sha256")
+    .update(
+      JSON.stringify({
+        documentId: documentId || null,
+        matterId: data.matterId || null,
+        visibility: data.visibility,
+        category: data.category,
+        name: file.originalname,
+        size: file.size,
+        checksum,
+      }),
+    )
+    .digest("hex");
+  // A response can be lost after PostgreSQL commits. Replaying the same selected
+  // file must return that record rather than create a duplicate or new version.
+  const replay = async () => {
+    if (!data.uploadRequestId) return null;
+    const stored = await prisma.documentVersion.findUnique({
+      where: {
+        uploadedById_uploadRequestId: {
+          uploadedById: actor.id,
+          uploadRequestId: data.uploadRequestId,
+        },
+      },
+    });
+    if (!stored) return null;
+    if (stored.uploadContextHash !== uploadContextHash)
+      throw new HttpError(
+        409,
+        "UPLOAD_REQUEST_CONFLICT",
+        "This upload was already used for a different file or destination. Remove it and select the intended file again.",
+      );
+    return getDocument(actor, stored.documentId);
+  };
+  const existing = await replay();
+  if (existing) return existing;
   const key = `documents/${randomUUID()}/${randomUUID()}`;
-  await store.put(key, file.buffer, mimeType);
+  try {
+    await store.put(key, file.buffer, mimeType);
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    console.error("Document storage write failed", {
+      type: error instanceof Error ? error.name : "unknown",
+    });
+    throw new HttpError(
+      503,
+      "STORAGE_UNAVAILABLE",
+      "Document storage is temporarily unavailable. Your file was not saved. Retry the upload; you can also remove the selected file and submit the intake without it.",
+    );
+  }
   let extraction;
   try {
     extraction = await extractDocument(file.buffer, mimeType);
@@ -378,11 +432,7 @@ export async function uploadDocument(
         doc = await tx.document.create({
           data: {
             matterId: data.matterId || null,
-            name:
-              path
-                .basename(file.originalname)
-                .replace(/[\r\n\u0000-\u001f]/g, "")
-                .slice(0, 250) || "document",
+            name: originalName,
             mimeType,
             category: data.category,
             visibility: data.visibility,
@@ -399,7 +449,11 @@ export async function uploadDocument(
           documentId: doc.id,
           version: (last?.version || 0) + 1,
           objectKey: key,
-          checksum: createHash("sha256").update(file.buffer).digest("hex"),
+          checksum,
+          originalName,
+          uploadedById: actor.id,
+          uploadRequestId: data.uploadRequestId,
+          uploadContextHash: data.uploadRequestId ? uploadContextHash : null,
           size: file.size,
           extractedText: extraction.text,
           pages: extraction.pages as Prisma.InputJsonValue,
@@ -416,11 +470,22 @@ export async function uploadDocument(
         doc.matterId,
         { version: version.version, checksum: version.checksum },
       );
-      const { objectKey: _, ...safeVersion } = version;
+      const {
+        objectKey: _,
+        uploadRequestId: _request,
+        uploadContextHash: _context,
+        ...safeVersion
+      } = version;
       return { ...doc, versions: [safeVersion] };
     });
   } catch (error) {
     await store.remove(key);
+    // A concurrent request may have committed the same token while this request
+    // was extracting the file. The unique constraint arbitrates that race.
+    if (data.uploadRequestId) {
+      const existing = await replay();
+      if (existing) return existing;
+    }
     throw error;
   }
 }
@@ -432,7 +497,14 @@ export async function getDocument(actor: Principal, id: string) {
   });
   return {
     ...doc,
-    versions: versions.map(({ objectKey: _, ...version }) => version),
+    versions: versions.map(
+      ({
+        objectKey: _,
+        uploadRequestId: _request,
+        uploadContextHash: _context,
+        ...version
+      }) => version,
+    ),
   };
 }
 export function createDocumentsRouter(store = createObjectStore()) {
@@ -451,7 +523,42 @@ export function createDocumentsRouter(store = createObjectStore()) {
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: maxBytes, files: 1, fields: 5, fieldSize: 1000 },
+    // Browser filenames are UTF-8; Multer otherwise decodes untagged headers as
+    // latin1 and corrupts the original name before it reaches durable storage.
+    defParamCharset: "utf8",
   });
+  const receiveFile: RequestHandler = (req, res, next) => {
+    upload.single("file")(req, res, (error: unknown) => {
+      if (error instanceof multer.MulterError) {
+        next(
+          new HttpError(
+            error.code === "LIMIT_FILE_SIZE" ? 413 : 422,
+            error.code,
+            error.code === "LIMIT_FILE_SIZE"
+              ? "This file exceeds 20 MB. Choose a smaller PDF or DOCX."
+              : ["LIMIT_FILE_COUNT", "LIMIT_UNEXPECTED_FILE"].includes(
+                    error.code,
+                  )
+                ? "Send one file per upload request. Use the document queue for multiple files; a revised version accepts exactly one file."
+                : "The upload form exceeds its limits. Choose the file again and retry.",
+          ),
+        );
+      } else if (
+        error instanceof Error &&
+        /unexpected end of (form|file)|boundary not found|malformed part header/i.test(
+          error.message,
+        )
+      ) {
+        next(
+          new HttpError(
+            422,
+            "INCOMPLETE_UPLOAD",
+            "The file did not finish uploading. Choose it again and retry. PDF and DOCX files up to 20 MB are supported.",
+          ),
+        );
+      } else next(error);
+    });
+  };
   r.get(
     "/",
     asyncHandler(async (req, res) =>
@@ -479,7 +586,7 @@ export function createDocumentsRouter(store = createObjectStore()) {
   r.post(
     "/",
     uploader,
-    upload.single("file"),
+    receiveFile,
     asyncHandler(async (req, res) => {
       if (!req.file) throw new HttpError(422, "FILE_REQUIRED", "Choose a file");
       res
@@ -496,7 +603,7 @@ export function createDocumentsRouter(store = createObjectStore()) {
   r.post(
     "/:id/versions",
     uploader,
-    upload.single("file"),
+    receiveFile,
     asyncHandler(async (req, res) => {
       if (!req.file) throw new HttpError(422, "FILE_REQUIRED", "Choose a file");
       res
@@ -538,7 +645,7 @@ export function createDocumentsRouter(store = createObjectStore()) {
       res.setHeader("Content-Type", doc.mimeType);
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename*=UTF-8''${encodeURIComponent(doc.name)}`,
+        `attachment; filename*=UTF-8''${encodeURIComponent(version.originalName || doc.name)}`,
       );
       res.setHeader("Cache-Control", "private, no-store");
       res.setHeader("X-Content-Type-Options", "nosniff");

@@ -20,6 +20,7 @@ import {
   label,
   progress,
   type Matter,
+  type Session,
 } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import DocumentFiles from "../../_components/DocumentFiles";
@@ -29,13 +30,24 @@ import { LiveStatus, useLiveData } from "../../../../_components/useLiveData";
 import ChecklistShare from "../../../../_components/ChecklistShare";
 import ChecklistTask from "../../../../_components/ChecklistTask";
 import cs from "../../../../_components/checklist.module.css";
+import { useTransactionDocumentUploads } from "../../../../_components/useTransactionDocumentUploads";
 export default function Detail({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const q = useLiveData<Matter>(`/api/v1/matters/${id}`);
+  return <TransactionDetail key={id} id={id} />;
+}
+function TransactionDetail({ id }: { id: string }) {
+  const q = useLiveData<Matter>(`/api/v1/matters/${id}`, undefined, true);
+  const session = useData<Session>("/api/v1/session");
+  const documentUploads = useTransactionDocumentUploads({
+    matterId: id,
+    coordinator: true,
+    actorId: session.data?.user?.id,
+    authorized: !!q.data && session.data?.user?.role === "coordinator",
+  });
   const [tab, setTab] = useState("Checklist");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -384,7 +396,13 @@ export default function Detail({
               </section>
             </>
           )}
-          {tab === "Documents" && <DocumentFiles matterId={id} coordinator />}
+          {tab === "Documents" && (
+            <DocumentFiles
+              matterId={id}
+              coordinator
+              uploads={documentUploads}
+            />
+          )}
           {tab === "Emails" && (
             <section className={s.section}>
               <div className={s.sectionHead}>

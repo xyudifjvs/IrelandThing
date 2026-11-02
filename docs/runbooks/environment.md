@@ -32,3 +32,6 @@ This maps application code to deployment settings. It contains no credentials. P
 Railway bucket credentials supply these references, and current buckets use virtual-host URLs. Objects remain private and are served through authorized application routes. Do not rely on native bucket versioning or lifecycle backups; application versions and encrypted recovery snapshots cover those needs. [Railway bucket reference](https://docs.railway.com/storage-buckets).
 
 Use separate credentials for each environment. The placeholder `ireland@ireland.com` is never a sending or receiving account. No existing Carson Stripe account or connector credentials are reused. Provider activation checks are in `providers.md`.
+# Calendly account configuration
+
+The API reads `CALENDLY_EVENT_URL` for the public embed and `CALENDLY_EVENT_TYPE_URI` / `CALENDLY_WEBHOOK_SIGNING_KEY` for verified synchronization. `CALENDLY_API_TOKEN` is an optional older-payload read fallback. All values remain blank pending Ireland's account; never expose the signing key/token to the web app. See [calendly.md](calendly.md) for plan requirements, signed callbacks, rollout and native Calendly agreement-email setup.

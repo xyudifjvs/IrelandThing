@@ -1,7 +1,9 @@
 "use client";
 import { useState } from "react";
-import { useData, mutate, api, label, date } from "../_components/data";
+import { useData, mutate, label, date } from "../_components/data";
 import MatterPicker from "../_components/MatterPicker";
+import CalendlyBookings from "../_components/CalendlyBookings";
+import SignedAgreementBatch from "../_components/SignedAgreementBatch";
 import { Heading } from "../_components/Operations";
 import s from "../_components/workspace.module.css";
 type Inquiry = {
@@ -27,6 +29,7 @@ type Agreement = {
   status: string;
   revision: number;
   documentId?: string;
+  supportingDocumentIds?: string[];
 };
 export default function Page() {
   const [invitationMatter, setInvitationMatter] = useState("");
@@ -71,13 +74,14 @@ export default function Page() {
           {message}
         </div>
       )}
+      <CalendlyBookings />
       <section className={s.section}>
         <div className={s.sectionHead}>
           <div>
             <h2>New inquiries</h2>
             <p>
-              Public forms save requests here. A request is not an email sent or
-              a meeting confirmed.
+              Public forms and earlier meeting requests are preserved here.
+              Verified Calendly bookings appear separately above.
             </p>
           </div>
         </div>
@@ -162,8 +166,8 @@ export default function Page() {
         <section className={s.section}>
           <div className={s.sectionHead}>
             <div>
-              <h2>Signed service agreements</h2>
-              <p>Record approved evidence before arranging agent access.</p>
+              <h2>Signed agreement evidence</h2>
+              <p>Record signed evidence before arranging agent access. Sending an agreement link does not record a signature.</p>
             </div>
           </div>
           <div className={s.sectionBody}>
@@ -185,76 +189,22 @@ export default function Page() {
                       "No evidence attached"
                     )}
                   </p>
+                  {!!a.supportingDocumentIds?.length && (
+                    <ul aria-label={`Supporting evidence for agreement version ${a.version}`}>
+                      {a.supportingDocumentIds.map((id, index) => (
+                        <li key={id}>
+                          <a href={`/api/v1/documents/${id}/download`} target="_blank" rel="noreferrer">
+                            Download supporting evidence {index + 1}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <span className={s.pill}>{label(a.status)}</span>
               </div>
             ))}
-            <form
-              style={{ display: "grid", gap: 13, marginTop: 20 }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                const form = e.currentTarget;
-                const f = new FormData(form);
-                void action(async () => {
-                  let documentId = String(f.get("documentId") || "");
-                  const file = f.get("file");
-                  if (file instanceof File && file.size) {
-                    const upload = new FormData();
-                    upload.set("file", file);
-                    upload.set("visibility", "coordinator");
-                    upload.set("category", "service_agreement");
-                    const doc = await api<{ id: string }>("/api/v1/documents", {
-                      method: "POST",
-                      body: upload,
-                    });
-                    documentId = doc.id;
-                  }
-                  await mutate("/api/v1/onboarding/agreements", {
-                    userId: String(f.get("userId")),
-                    version: String(f.get("version")),
-                    status: documentId ? "approved" : "draft",
-                    ...(documentId ? { documentId } : {}),
-                  });
-                  form.reset();
-                  setMessage(
-                    documentId
-                      ? "Signed agreement evidence recorded and approved."
-                      : "Agreement draft recorded. Signed evidence is needed before approval.",
-                  );
-                });
-              }}
-            >
-              <label className={s.field}>
-                Agent email
-                <input
-                  className={s.input}
-                  name="userId"
-                  type="email"
-                  required
-                />
-              </label>
-              <label className={s.field}>
-                Agreement version
-                <input
-                  className={s.input}
-                  name="version"
-                  required
-                  placeholder="e.g. 2026-01"
-                />
-              </label>
-              <label className={s.field}>
-                Signed evidence (PDF or DOCX)
-                <input
-                  className={s.input}
-                  name="file"
-                  type="file"
-                  accept=".pdf,.docx"
-                />
-              </label>
-              <button className={s.button} disabled={busy}>
-                Record agreement evidence
-              </button>
-            </form>
+            <SignedAgreementBatch onSaved={agreements.refresh} />
           </div>
         </section>
         <section className={s.section}>

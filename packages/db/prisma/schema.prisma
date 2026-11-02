@@ -218,10 +218,15 @@ model DocumentVersion {
   processingStatus String   @default("pending")
   error            String?
   version          Int
+  uploadedById     String?
+  uploadRequestId  String?
+  uploadContextHash String?
+  originalName     String?
   createdAt        DateTime @default(now())
   document         Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@unique([documentId, version])
+  @@unique([uploadedById, uploadRequestId])
 }
 
 model IntakeDraft {
@@ -268,6 +273,9 @@ model Agreement {
   version    String
   status     String   @default("pending")
   documentId String?
+  supportingDocumentIds String[] @default([])
+  agreementRequestId String? @unique
+  agreementRequestHash String?
   revision   Int      @default(1)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -554,4 +562,39 @@ model RequestLimit {
 model WorkerHeartbeat {
   id         String   @id
   lastSeenAt DateTime
+}
+
+// Provider-confirmed scheduling is intentionally separate from lead inquiries.
+model SchedulingBooking {
+  id String @id @default(cuid())
+  inviteeUri String @unique
+  eventUri String
+  eventTypeUri String
+  name String
+  email String
+  timezone String?
+  startAt DateTime
+  endAt DateTime
+  status String
+  oldInviteeUri String?
+  newInviteeUri String?
+  sourceUpdatedAt DateTime
+  lastDeliveryHash String
+  provenance String
+  verifiedAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([startAt, status])
+  @@index([oldInviteeUri])
+}
+
+model SchedulingDelivery {
+  deliveryHash String @id
+  event String
+  inviteeUri String
+  sourceAt DateTime
+  applied Boolean
+  payload Json
+  receivedAt DateTime @default(now())
+  @@index([inviteeUri, sourceAt])
 }

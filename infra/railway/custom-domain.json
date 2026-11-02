@@ -2,16 +2,16 @@
   "domain": "weatherlytc.com",
   "canonicalOrigin": "https://www.weatherlytc.com",
   "dnsProvider": "Squarespace",
-  "status": "waiting_for_owner_dns_access",
+  "status": "live_verified",
   "projectId": "5b58af24-8d43-4226-8901-a5dd63c5dfbb",
   "environmentId": "4870a88d-5253-4ac1-918a-7874af0870b0",
   "serviceId": "e1ea2c79-fc46-43c2-ac6e-6e1e495028e4",
   "railwayDomainId": "d16dc661-04dd-43af-b86e-5ecc764377bf",
   "targetPort": 3000,
-  "verified": false,
-  "certificateStatus": "CERTIFICATE_STATUS_TYPE_VALIDATING_OWNERSHIP",
-  "dnsChangesApplied": false,
-  "applicationOriginChangesApplied": false,
+  "verified": true,
+  "certificateStatus": "CERTIFICATE_STATUS_TYPE_VALID",
+  "dnsChangesApplied": true,
+  "applicationOriginChangesApplied": true,
   "requiredRecords": [
     {
       "type": "CNAME",
@@ -29,9 +29,26 @@
   "rootForwarding": {
     "from": "weatherlytc.com",
     "to": "https://www.weatherlytc.com",
-    "status": "planned",
+    "status": "https_and_http_path_redirect_verified_302_permanent_requires_reauthentication",
     "https": true,
-    "maintainPaths": true
+    "maintainPaths": true,
+    "redirectCode": 302
   },
-  "runbook": "docs/runbooks/custom-domain.md"
+  "runbook": "docs/runbooks/custom-domain.md",
+  "checkedAt": "2026-10-26T22:20:43.343824+00:00",
+  "configuredOrigin": "https://www.weatherlytc.com",
+  "googleMailRecordsPreserved": true,
+  "remaining": [
+    "Optional: change working apex redirect from 302 to 301 after Squarespace Google reauthentication",
+    "Business launch gates remain in docs/release/requirements-evidence.md; indexing and live providers stay disabled"
+  ],
+  "webBuildOrigin": "https://www.weatherlytc.com",
+  "cutoverAccepted": true,
+  "verificationRecovery": {
+    "initialDomainCreated": "2026-10-21",
+    "dnsConfigured": "2026-10-26",
+    "retried": "2026-10-26",
+    "result": "ownership_verified_certificate_valid",
+    "likelyCause": "Initial verification attempt exceeded Railway automatic ownership-check window before DNS was configured; a fresh connector retry completed verification."
+  }
 }

@@ -8,11 +8,12 @@ import {
   type Principal,
 } from "@weatherly/platform";
 import { audit, revision, applyInitialWorkflow } from "@weatherly/matters";
+const optionalEmail = z.union([z.email(), z.literal("")]).optional();
 const contact = z
   .object({
-    name: z.string().trim().min(1).max(200),
-    email: z.email(),
-    phone: z.string().min(1).max(60),
+    name: z.string().trim().max(200).default(""),
+    email: optionalEmail,
+    phone: z.string().max(60).optional(),
     relationship: z.string().max(200).optional(),
   })
   .strict();
@@ -20,7 +21,7 @@ const handling = z
   .object({
     choice: z.enum(["have", "listing_agent", "mls", "dotloop", "buyers_agent"]),
     name: z.string().max(250).optional(),
-    email: z.email().optional(),
+    email: optionalEmail,
     phone: z.string().max(60).optional(),
   })
   .strict();
@@ -28,15 +29,15 @@ export const intakePayload = z
   .object({
     packageCode: z.enum(["essentials", "complete", "full_listing"]),
     side: z.enum(["buyer", "seller"]),
-    propertyAddress: z.string().trim().min(1).max(500),
+    propertyAddress: z.string().trim().max(500).default(""),
     purchaseType: z.enum(["cash", "financed"]),
     contractSource: z.enum(["upload", "dotloop", "not_yet_executed"]),
     documentIds: z.array(z.string()).max(30).default([]),
     dotloopLoopId: z.string().max(200).optional(),
-    clients: z.array(contact).min(1).max(12),
+    clients: z.array(contact).max(12).default([]),
     relationship: z.string().max(200).optional(),
     directContact: z.enum(["copy_agent", "through_agent"]),
-    title: handling,
+    title: handling.default({ choice: "have" }),
     lender: handling.optional(),
     hoa: z.enum([
       "none",
@@ -57,11 +58,13 @@ export const intakePayload = z
       .optional(),
     broker: z
       .object({
-        name: z.string().min(1).max(200),
-        email: z.email(),
+        name: z.string().max(200).optional(),
+        email: optionalEmail,
         pre1978: z.boolean(),
         ownChecklist: z.boolean(),
         checklistDocumentId: z.string().optional(),
+        // Keep the legacy first-document field readable for existing drafts.
+        checklistDocumentIds: z.array(z.string()).max(30).optional(),
       })
       .strict()
       .optional(),
@@ -81,13 +84,20 @@ export const intakePayload = z
   .superRefine((v, c) => {
     const err = (path: (string | number)[], message: string) =>
       c.addIssue({ code: "custom", path, message });
-    if (v.broker?.checklistDocumentId && !v.broker.ownChecklist)
+    const checklistIds = new Set([
+      ...(v.broker?.checklistDocumentIds || []),
+      ...(v.broker?.checklistDocumentId ? [v.broker.checklistDocumentId] : []),
+    ]);
+    if (checklistIds.size && !v.broker?.ownChecklist)
       err(
         ["broker", "checklistDocumentId"],
         "Remove checklist evidence when no brokerage checklist is selected",
       );
-    if (v.packageCode !== "essentials" && !v.broker)
-      err(["broker"], "Compliance and Full Listing require broker details");
+    if (checklistIds.size > 30)
+      err(
+        ["broker", "checklistDocumentIds"],
+        "Attach at most 30 checklist documents",
+      );
     if (v.packageCode === "full_listing" && v.side !== "seller")
       err(["side"], "Full Listing requires seller representation");
     if (v.contractSource !== "dotloop" && v.dotloopLoopId)
@@ -97,19 +107,8 @@ export const intakePayload = z
       );
     if (v.contractSource === "dotloop" && v.documentIds.length)
       err(["documentIds"], "Use one contract source");
-    if (
-      v.packageCode !== "full_listing" &&
-      v.contractSource === "not_yet_executed"
-    )
-      err(["contractSource"], "An executed contract is required");
-    if (v.contractSource === "upload" && !v.documentIds.length)
-      err(["documentIds"], "Upload the executed contract");
     if (v.contractSource === "dotloop" && v.packageCode === "essentials")
       err(["contractSource"], "Dotloop intake requires Complete");
-    if (v.contractSource === "dotloop" && !v.dotloopLoopId)
-      err(["dotloopLoopId"], "Select the Dotloop loop");
-    if (v.purchaseType === "financed" && !v.lender)
-      err(["lender"], "Provide lender handling");
     if (v.purchaseType === "cash" && v.lender)
       err(["lender"], "Cash purchases must not include lender instructions");
     for (const key of ["title", "lender"] as const) {
@@ -127,8 +126,6 @@ export const intakePayload = z
         !["have", "dotloop", "buyers_agent"].includes(h.choice)
       )
         err([key, "choice"], "Select lender details, Dotloop, or buyer agent");
-      if (h.choice === "have" && !h.name)
-        err([key, "name"], "Company or officer name is required");
       if (h.choice === "dotloop" && v.packageCode === "essentials")
         err([key, "choice"], "Dotloop requires Complete");
       if (h.choice === "listing_agent" && v.side !== "buyer")
@@ -159,8 +156,6 @@ export const intakePayload = z
     ];
     if (!(v.side === "buyer" ? buyer : seller).includes(v.hoa))
       err(["hoa"], "HOA handling does not match the represented side");
-    if (v.gift.requested && (!v.gift.tier || !v.gift.choice))
-      err(["gift"], "Select gift tier and choice");
     if (
       !v.gift.requested &&
       (v.gift.tier ||
@@ -302,6 +297,7 @@ export async function submitIntake(
           ...(data.broker?.checklistDocumentId
             ? [data.broker.checklistDocumentId]
             : []),
+          ...(data.broker?.checklistDocumentIds || []),
         ]),
       ];
       const docs = await tx.document.findMany({
@@ -315,7 +311,7 @@ export async function submitIntake(
         );
       const matter = await tx.matter.create({
         data: {
-          title: data.propertyAddress,
+          title: data.propertyAddress || "Untitled transaction",
           propertyAddress: data.propertyAddress,
           side: data.side,
           packageCode: data.packageCode,
@@ -356,24 +352,38 @@ export async function submitIntake(
           visibility: "agent",
           details: { intakeDraftId: id },
         });
+      if (!data.propertyAddress) add("Obtain property address");
+      if (
+        !data.clients.length ||
+        data.clients.some((c) => !c.name || !c.email || !c.phone)
+      )
+        add("Complete client contact information");
       add(
-        data.contractSource === "not_yet_executed"
+        data.contractSource === "not_yet_executed" ||
+          (data.contractSource === "upload" && !data.documentIds.length)
           ? "Obtain executed contract"
           : data.contractSource === "dotloop"
-            ? "Import executed contract from Dotloop"
+            ? data.dotloopLoopId
+              ? "Import executed contract from Dotloop"
+              : "Obtain Dotloop loop ID and executed contract"
             : "Review executed contract",
       );
       add(
         data.title.choice === "have"
-          ? "Confirm title company details"
+          ? data.title.name
+            ? "Confirm title company details"
+            : "Obtain title company details"
           : `Resolve title company via ${data.title.choice}`,
       );
       if (data.lender)
         add(
           data.lender.choice === "have"
-            ? "Confirm lender details"
+            ? data.lender.name
+              ? "Confirm lender details"
+              : "Obtain lender details"
             : `Resolve lender details via ${data.lender.choice}`,
         );
+      else if (data.purchaseType === "financed") add("Obtain lender details");
       if (data.hoa !== "none") add(`HOA follow-up: ${data.hoa}`);
       if (data.priorPolicy && data.priorPolicy !== "not_applicable")
         add(`Prior title policy: ${data.priorPolicy}`);

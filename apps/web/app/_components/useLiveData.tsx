@@ -5,7 +5,7 @@ const POLL_MS = 3000;
 const TIMEOUT_MS = 4000;
 
 /** Bounded, single-flight reads. Never retain withdrawn data across a failed read. */
-export function useLiveData<T>(path: string | null, bearer?: string) {
+export function useLiveData<T>(path: string | null, bearer?: string, retainOnBackground = false) {
   const [state, setState] = useState<{
     key: string;
     data: T | null;
@@ -34,16 +34,25 @@ export function useLiveData<T>(path: string | null, bearer?: string) {
     };
     const available = () =>
       navigator.onLine && document.visibilityState !== "hidden";
+    // Native file pickers temporarily background an authenticated detail view.
+    // Keep its form mounted while polling is paused; every actual read failure
+    // (including revoked permissions) still clears the view below. Public bearer
+    // checklists retain the default immediate background concealment.
+    const pause = () => {
+      if (retainOnBackground && !bearer && navigator.onLine) {
+        clearTimeout(next);
+        return;
+      }
+      clear(navigator.onLine
+        ? "Updates paused while this tab is hidden."
+        : "You’re offline. Checklist hidden until we reconnect.");
+    };
     const read = (): Promise<void> => {
       if (pending) return pending;
       clearTimeout(next);
       if (!active || !path) return Promise.resolve();
       if (!available()) {
-        clear(
-          navigator.onLine
-            ? "Updates paused while this tab is hidden."
-            : "You’re offline. Checklist hidden until we reconnect.",
-        );
+        pause();
         return Promise.resolve();
       }
       const version = ++generation;
@@ -109,14 +118,12 @@ export function useLiveData<T>(path: string | null, bearer?: string) {
     };
     const reconnect = () => {
       if (available()) void read();
-      else
-        clear(
-          navigator.onLine
-            ? "Updates paused while this tab is hidden."
-            : "You’re offline. Checklist hidden until we reconnect.",
-        );
+      else pause();
     };
-    const pagehide = () => clear("Reconnecting to the latest checklist…");
+    const pagehide = () => {
+      if (retainOnBackground && !bearer && navigator.onLine) pause();
+      else clear("Reconnecting to the latest checklist…");
+    };
     setState({ key, data: null, loading: !!path, error: "", updatedAt: null });
     run.current = read;
     void read();
@@ -138,7 +145,7 @@ export function useLiveData<T>(path: string | null, bearer?: string) {
       window.removeEventListener("pagehide", pagehide);
       window.removeEventListener("pageshow", reconnect);
     };
-  }, [path, bearer, key]);
+  }, [path, bearer, key, retainOnBackground]);
   return {
     data: state.key === key ? state.data : null,
     loading: !!path && (state.key !== key || state.loading),

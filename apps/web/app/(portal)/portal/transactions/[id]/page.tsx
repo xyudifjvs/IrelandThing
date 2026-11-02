@@ -26,15 +26,27 @@ import SharedMessages from "../../_components/SharedMessages";
 import { LiveStatus, useLiveData } from "../../../../_components/useLiveData";
 import ChecklistShare from "../../../../_components/ChecklistShare";
 import DocumentFiles from "../../../../(workspace)/workspace/_components/DocumentFiles";
+import { useTransactionDocumentUploads } from "../../../../_components/useTransactionDocumentUploads";
 export default function Detail({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const q = useLiveData<Matter>(`/api/v1/matters/${id}`);
+  return <TransactionDetail key={id} id={id} />;
+}
+function TransactionDetail({ id }: { id: string }) {
+  const q = useLiveData<Matter>(`/api/v1/matters/${id}`, undefined, true);
   const session = useData<Session>("/api/v1/session");
   const client = session.data?.user?.role === "client";
+  const documentUploads = useTransactionDocumentUploads({
+    matterId: id,
+    coordinator: session.data?.user?.role === "coordinator",
+    actorId: session.data?.user?.id,
+    authorized:
+      !!q.data &&
+      ["agent", "coordinator"].includes(session.data?.user?.role || ""),
+  });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploaded, setUploaded] = useState("");
@@ -127,6 +139,7 @@ export default function Detail({
           </section>
           <DocumentFiles
             matterId={id}
+            uploads={documentUploads}
             coordinator={session.data?.user?.role === "coordinator"}
             actorId={session.data?.user?.id}
             canUpload={["agent", "coordinator"].includes(

@@ -1,5 +1,13 @@
 # Railway staging deployment
 
+## November 1, 2026: optional intake and batch uploads deployed
+
+At the user's request, all pending project changes were committed and pushed to main, reconciled with the existing live password-only access changes, and deployed. API, worker and web now serve `84ee3ef867e2a44637a4b084a392d6b8bd9b1b6f`. The API applied the two additive batch-upload migrations before the web and worker rollout; all 13 migrations are complete. All four Railway services are healthy, with one running replica each, no crashed replicas and no pending work.
+
+The exact release passed 225 tests across 33 files, TypeScript, a production build, nine API acceptance groups, deployment safeguards and [GitHub CI](https://github.com/xyudifjvs/IrelandThing/actions/runs/41372786153). Hosted Chrome verified blank intake submission and agent transaction visibility, plus PDF/DOCX upload, completed text extraction and downloads. Private storage and owner password-only login also passed. The temporary test drafts, transactions and documents were removed while retaining their audit trail. Provider configuration remains disabled. See [the intake release evidence](optional-intake.md) and `infra/railway/staging.json` for the exact deployment IDs.
+
+The dated deployment entries below are historical and superseded by this release.
+
 ## October 26 optional authenticator update
 
 The owner requested email/password access without mandatory authenticator enrollment. The deployed application removes that prerequisite consistently from browser login, authenticated API access, checklist sharing, background AI review and assistant grants. The session API retains `mfaRequired: false` for older clients. Authenticator enrollment remains available at `/security`; accounts that enable it still complete Better Auth's second-factor challenge. Existing roles, revoked access, agent agreements and provider approval gates are preserved. No database migration or credential change is required. API, worker and web successfully serve commit `341f9179dda7aaf07d77182cf1cb3b8c840a6b4c`. All 180 regression tests, typecheck, production build, nine isolated API acceptance checks and [GitHub quality checks](https://github.com/xyudifjvs/IrelandThing/actions/runs/40424574637) passed. Independent code review found no blockers. Hosted verification confirmed Ireland can sign in using her email and password, receive secure HttpOnly cookies, read business data without MFA enrollment, and sign out with the old cookie rejected. Foreign-origin writes remain denied. The live browser loaded Ireland's authenticated workspace. Exact deployment IDs are recorded in `infra/railway/staging.json`. This update supersedes the mandatory-enrollment statements in the historical evidence below.

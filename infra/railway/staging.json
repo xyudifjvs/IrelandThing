@@ -6,23 +6,23 @@
   "repository": "xyudifjvs/IrelandThing",
   "branch": "main",
   "pinnedCommitByService": {
-    "api": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c",
-    "worker": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c",
-    "web": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c"
+    "api": "84ee3ef867e2a44637a4b084a392d6b8bd9b1b6f",
+    "worker": "84ee3ef867e2a44637a4b084a392d6b8bd9b1b6f",
+    "web": "84ee3ef867e2a44637a4b084a392d6b8bd9b1b6f"
   },
-  "deploymentStatus": "healthy_optional_authenticator_verified",
-  "verifiedAt": "2026-10-27 00:47:54 UTC",
+  "deploymentStatus": "healthy_optional_intake_and_uploads_verified",
+  "verifiedAt": "2026-11-02 01:40:30 UTC",
   "pendingRelease": null,
   "servingCommitByService": {
-    "api": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c",
-    "worker": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c",
-    "web": "341f9179dda7aaf07d77182cf1cb3b8c840a6b4c"
+    "api": "84ee3ef867e2a44637a4b084a392d6b8bd9b1b6f",
+    "worker": "84ee3ef867e2a44637a4b084a392d6b8bd9b1b6f",
+    "web": "84ee3ef867e2a44637a4b084a392d6b8bd9b1b6f"
   },
   "healthyDeploymentByService": {
     "postgres": "e6048d57-9dd2-4f72-85ec-2ab74b532c92",
-    "api": "7255bc97-8a35-47a4-8851-47ed6eb06338",
-    "worker": "abb4302e-581d-4302-9289-8379455acdc8",
-    "web": "9e2e3141-df51-4bd4-913b-3b25db0bea7d"
+    "api": "392e6642-b186-499c-9b93-d21d06f8003c",
+    "worker": "e4f52aa6-4a7f-4d47-b7e8-553661fee96d",
+    "web": "48624177-7612-46e1-84ed-a2ecbb4d0727"
   },
   "automaticDeployOnPush": false,
   "publicOrigin": "https://www.weatherlytc.com",
@@ -44,7 +44,7 @@
   "liveProvidersEnabled": false,
   "ownerBootstrapCompleted": true,
   "plannedPublicOrigin": "https://www.weatherlytc.com",
-  "appliedMigrationCount": 11,
+  "appliedMigrationCount": 13,
   "siteIndexingEnabled": false,
   "acceptance": {
     "https": true,
@@ -62,6 +62,11 @@
     "apexRedirectCode": 302,
     "coordinatorMfaEnrollmentRequired": false,
     "passwordOnlyBusinessAccess": true,
-    "browserAuthenticatedWorkspace": true
+    "browserAuthenticatedWorkspace": true,
+    "blankIntakeSubmission": true,
+    "agentTransactionBrowser": true,
+    "pdfAndDocxBrowserUploadAndDownload": true,
+    "privateStorageRoundTrip": true,
+    "temporaryVerificationRecordsRemoved": true
   }
 }

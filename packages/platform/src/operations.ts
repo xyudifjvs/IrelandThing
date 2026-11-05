@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { prisma } from "@weatherly/db";
+import { prisma, Prisma } from "@weatherly/db";
 import {
   asyncHandler,
   principal,
@@ -78,8 +78,89 @@ export async function operationStatus(actor: Principal, now = new Date()) {
   };
 }
 
+/** Business-wide counts use the database, not the first page of matter records.
+ * The optional transaction permits consistent composition and isolated tests. */
+export async function portfolioStatus(
+  actor: Principal,
+  now = new Date(),
+  db?: Prisma.TransactionClient,
+) {
+  assertCoordinator(actor);
+  const read = async (tx: Prisma.TransactionClient) => {
+    const inactive = ["closed", "terminated", "archived"];
+    const [
+      total,
+      open,
+      pendingReview,
+      unresolvedDates,
+      emailStates,
+      inboxReview,
+      failedSendJobs,
+      unpaid,
+    ] = await Promise.all([
+      tx.matter.count(),
+      tx.matter.count({ where: { stage: { notIn: inactive } } }),
+      tx.matter.count({
+        where: {
+          stage: { notIn: inactive },
+          OR: [
+            { stage: "pending_review" },
+            { details: { path: ["fileReview", "status"], equals: "pending" } },
+          ],
+        },
+      }),
+      tx.task.count({
+        where: {
+          kind: "unresolved_date",
+          status: { notIn: ["completed", "signed", "not_applicable"] },
+          matter: { stage: { notIn: inactive } },
+        },
+      }),
+      tx.emailDraft.groupBy({ by: ["status"], _count: { _all: true } }),
+      tx.emailThread.count({
+        where: { status: { in: ["unassigned", "review_required"] } },
+      }),
+      tx.outboxJob.count({ where: { topic: "gmail.send", state: "failed" } }),
+      tx.$queryRaw<
+        { count: bigint }[]
+      >`SELECT COUNT(*) AS count FROM "PaymentOrder" p JOIN "Matter" m ON m."id"=p."matterId" WHERE p."kind"='service' AND p."status" IN ('creating','pending','failed') AND m."stage" <> 'terminated'`,
+    ]);
+    const count = (...statuses: string[]) =>
+      emailStates
+        .filter((row) => statuses.includes(row.status))
+        .reduce((sum, row) => sum + row._count._all, 0);
+    return {
+      checkedAt: now.toISOString(),
+      scope: "all_transactions" as const,
+      transactions: { total, active: open - pendingReview, pendingReview },
+      tasks: { unresolvedDates },
+      email: {
+        draft: count("draft"),
+        queued: count("queued", "sending"),
+        failed: count("failed"),
+        deliveryUnknown: count("delivery_unknown"),
+        inboxReview,
+        failedSendJobs,
+      },
+      servicePayments: { unpaidOrders: Number(unpaid[0]?.count || 0) },
+    };
+  };
+  return db
+    ? read(db)
+    : prisma.$transaction(read, {
+        isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+      });
+}
+
 export function createOperationsRouter() {
   const router = Router();
+  router.get(
+    "/portfolio",
+    asyncHandler(async (req, res) => {
+      res.set("Cache-Control", "private, no-store");
+      res.json(await portfolioStatus(principal(req)));
+    }),
+  );
   router.get(
     "/",
     asyncHandler(async (req, res) =>

@@ -1,0 +1,1649 @@
+{
+  "mode": "Unmodified source canvas; scripts removed, local original font/image bytes; viewport meta added to make mobile responsive comparison explicit",
+  "origin": "http://127.0.0.1:3314",
+  "assetChecks": [
+    {
+      "url": "/brand/site/860e65833659dfd59b6b.jpg",
+      "sha256": "860e65833659dfd59b6b98922c1a4886ce20ada8742e9b508057ef58a3cd7d28",
+      "bytes": 196478
+    },
+    {
+      "url": "/brand/site/696b29a0989d7b0cc487.png",
+      "sha256": "696b29a0989d7b0cc487b1bb3a644b449209da7e901c4fb234d8cbc624d3e002",
+      "bytes": 4253366
+    },
+    {
+      "url": "/brand/site/c80b489f34b4bb27a716.woff2",
+      "sha256": "c80b489f34b4bb27a716682b8f8a5c3efec50fb8156e1088a43ed206003b6951",
+      "bytes": 23660
+    },
+    {
+      "url": "/brand/site/5d618c462b7a5b74f442.woff2",
+      "sha256": "5d618c462b7a5b74f442e1548880086af71764d9cc7d35c16ab45353da934621",
+      "bytes": 37776
+    },
+    {
+      "url": "/brand/site/744830a0e77dd14dd543.woff2",
+      "sha256": "744830a0e77dd14dd543a4230d6e3ce67ca961634074b5d536ebafc66c732301",
+      "bytes": 24072
+    },
+    {
+      "url": "/brand/site/0b00fbd6edcc84cd5f77.woff2",
+      "sha256": "0b00fbd6edcc84cd5f77364bbeb06b75ed263c740061eba34511f1e2ac1a82d3",
+      "bytes": 21492
+    },
+    {
+      "url": "/brand/site/9e2672d100bc36a37073.woff2",
+      "sha256": "9e2672d100bc36a37073fb250abfaa7394f5151bf5dda3f4d5fc281345eb391b",
+      "bytes": 10620
+    },
+    {
+      "url": "/brand/site/920711de9ae96c18970f.woff2",
+      "sha256": "920711de9ae96c18970fa4faca73cd302b93ac5ed57ebeb6bfec2ddeff930082",
+      "bytes": 68224
+    },
+    {
+      "url": "/brand/site/6438d7b8ea9c7c3992d5.woff2",
+      "sha256": "6438d7b8ea9c7c3992d5e2fd2afdb1ff948570a3ef0bedae76247b51632960ba",
+      "bytes": 35508
+    }
+  ],
+  "results": [
+    {
+      "page": "home",
+      "route": "/",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "default",
+      "reference": {
+        "width": 1280,
+        "height": 2246,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 2055.4375,
+          "width": 1280,
+          "height": 191,
+          "top": 2055.4375,
+          "right": 1280,
+          "bottom": 2246.4375,
+          "left": 0
+        },
+        "images": [
+          {
+            "src": "/brand/site/696b29a0989d7b0cc487.png",
+            "rect": {
+              "x": 260,
+              "y": 145,
+              "width": 760,
+              "height": 366.1875,
+              "top": 145,
+              "right": 1020,
+              "bottom": 511.1875,
+              "left": 260
+            },
+            "objectPosition": "50% 50%",
+            "objectFit": "fill",
+            "parent": {
+              "x": 0,
+              "y": 97,
+              "width": 1280,
+              "height": 698.46875,
+              "top": 97,
+              "right": 1280,
+              "bottom": 795.46875,
+              "left": 0
+            }
+          },
+          {
+            "src": "/brand/site/860e65833659dfd59b6b.jpg",
+            "rect": {
+              "x": 150,
+              "y": 819.46875,
+              "width": 420,
+              "height": 560,
+              "top": 819.46875,
+              "right": 570,
+              "bottom": 1379.46875,
+              "left": 150
+            },
+            "objectPosition": "50% 20%",
+            "objectFit": "cover",
+            "parent": {
+              "x": 150,
+              "y": 819.46875,
+              "width": 980,
+              "height": 560,
+              "top": 819.46875,
+              "right": 1130,
+              "bottom": 1379.46875,
+              "left": 150
+            }
+          }
+        ],
+        "forms": 0,
+        "details": 1
+      },
+      "actual": {
+        "width": 1280,
+        "height": 2246,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 2055.4375,
+          "width": 1280,
+          "height": 191,
+          "top": 2055.4375,
+          "right": 1280,
+          "bottom": 2246.4375,
+          "left": 0
+        },
+        "images": [
+          {
+            "src": "/brand/site/696b29a0989d7b0cc487.png",
+            "rect": {
+              "x": 260,
+              "y": 145,
+              "width": 760,
+              "height": 366.1875,
+              "top": 145,
+              "right": 1020,
+              "bottom": 511.1875,
+              "left": 260
+            },
+            "objectPosition": "50% 50%",
+            "objectFit": "fill",
+            "parent": {
+              "x": 0,
+              "y": 97,
+              "width": 1280,
+              "height": 698.46875,
+              "top": 97,
+              "right": 1280,
+              "bottom": 795.46875,
+              "left": 0
+            }
+          },
+          {
+            "src": "/brand/site/860e65833659dfd59b6b.jpg",
+            "rect": {
+              "x": 150,
+              "y": 819.46875,
+              "width": 420,
+              "height": 560,
+              "top": 819.46875,
+              "right": 570,
+              "bottom": 1379.46875,
+              "left": 150
+            },
+            "objectPosition": "50% 20%",
+            "objectFit": "cover",
+            "parent": {
+              "x": 150,
+              "y": 819.46875,
+              "width": 980,
+              "height": 560,
+              "top": 819.46875,
+              "right": 1130,
+              "bottom": 1379.46875,
+              "left": 150
+            }
+          }
+        ],
+        "forms": 0,
+        "details": 1
+      },
+      "changedIntersectingPixels": 108549,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0.017310403680617394,
+      "sideBySide": ".local/redesign/complete-site/home-1280-default-side-by-side.png"
+    },
+    {
+      "page": "home",
+      "route": "/",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "expanded",
+      "reference": {
+        "width": 1280,
+        "height": 2460,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 2268.8125,
+          "width": 1280,
+          "height": 191,
+          "top": 2268.8125,
+          "right": 1280,
+          "bottom": 2459.8125,
+          "left": 0
+        },
+        "images": [
+          {
+            "src": "/brand/site/696b29a0989d7b0cc487.png",
+            "rect": {
+              "x": 260,
+              "y": 145,
+              "width": 760,
+              "height": 366.1875,
+              "top": 145,
+              "right": 1020,
+              "bottom": 511.1875,
+              "left": 260
+            },
+            "objectPosition": "50% 50%",
+            "objectFit": "fill",
+            "parent": {
+              "x": 0,
+              "y": 97,
+              "width": 1280,
+              "height": 698.46875,
+              "top": 97,
+              "right": 1280,
+              "bottom": 795.46875,
+              "left": 0
+            }
+          },
+          {
+            "src": "/brand/site/860e65833659dfd59b6b.jpg",
+            "rect": {
+              "x": 150,
+              "y": 819.46875,
+              "width": 420,
+              "height": 560,
+              "top": 819.46875,
+              "right": 570,
+              "bottom": 1379.46875,
+              "left": 150
+            },
+            "objectPosition": "50% 20%",
+            "objectFit": "cover",
+            "parent": {
+              "x": 150,
+              "y": 819.46875,
+              "width": 980,
+              "height": 560,
+              "top": 819.46875,
+              "right": 1130,
+              "bottom": 1379.46875,
+              "left": 150
+            }
+          }
+        ],
+        "forms": 0,
+        "details": 1
+      },
+      "actual": {
+        "width": 1280,
+        "height": 2460,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 2268.8125,
+          "width": 1280,
+          "height": 191,
+          "top": 2268.8125,
+          "right": 1280,
+          "bottom": 2459.8125,
+          "left": 0
+        },
+        "images": [
+          {
+            "src": "/brand/site/696b29a0989d7b0cc487.png",
+            "rect": {
+              "x": 260,
+              "y": 145,
+              "width": 760,
+              "height": 366.1875,
+              "top": 145,
+              "right": 1020,
+              "bottom": 511.1875,
+              "left": 260
+            },
+            "objectPosition": "50% 50%",
+            "objectFit": "fill",
+            "parent": {
+              "x": 0,
+              "y": 97,
+              "width": 1280,
+              "height": 698.46875,
+              "top": 97,
+              "right": 1280,
+              "bottom": 795.46875,
+              "left": 0
+            }
+          },
+          {
+            "src": "/brand/site/860e65833659dfd59b6b.jpg",
+            "rect": {
+              "x": 150,
+              "y": 819.46875,
+              "width": 420,
+              "height": 560,
+              "top": 819.46875,
+              "right": 570,
+              "bottom": 1379.46875,
+              "left": 150
+            },
+            "objectPosition": "50% 20%",
+            "objectFit": "cover",
+            "parent": {
+              "x": 150,
+              "y": 819.46875,
+              "width": 980,
+              "height": 560,
+              "top": 819.46875,
+              "right": 1130,
+              "bottom": 1379.46875,
+              "left": 150
+            }
+          }
+        ],
+        "forms": 0,
+        "details": 1
+      },
+      "changedIntersectingPixels": 108524,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0.015811314363143633,
+      "sideBySide": ".local/redesign/complete-site/home-1280-expanded-side-by-side.png"
+    },
+    {
+      "page": "services",
+      "route": "/services",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "default",
+      "reference": {
+        "width": 1280,
+        "height": 1527,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1335.703125,
+          "width": 1280,
+          "height": 191,
+          "top": 1335.703125,
+          "right": 1280,
+          "bottom": 1526.703125,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 3
+      },
+      "actual": {
+        "width": 1280,
+        "height": 1527,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1335.703125,
+          "width": 1280,
+          "height": 191,
+          "top": 1335.703125,
+          "right": 1280,
+          "bottom": 1526.703125,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 3
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/services-1280-default-side-by-side.png"
+    },
+    {
+      "page": "services",
+      "route": "/services",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "expanded",
+      "reference": {
+        "width": 1280,
+        "height": 3937,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 3746,
+          "width": 1280,
+          "height": 191,
+          "top": 3746,
+          "right": 1280,
+          "bottom": 3937,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 3
+      },
+      "actual": {
+        "width": 1280,
+        "height": 3937,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 3746,
+          "width": 1280,
+          "height": 191,
+          "top": 3746,
+          "right": 1280,
+          "bottom": 3937,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 3
+      },
+      "changedIntersectingPixels": 8819,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0.11125837407924816,
+      "sideBySide": ".local/redesign/complete-site/services-1280-expanded-side-by-side.png"
+    },
+    {
+      "page": "process",
+      "route": "/process",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "default",
+      "reference": {
+        "width": 1280,
+        "height": 1358,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1167.28125,
+          "width": 1280,
+          "height": 191,
+          "top": 1167.28125,
+          "right": 1280,
+          "bottom": 1358.28125,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 0
+      },
+      "actual": {
+        "width": 1280,
+        "height": 1358,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1167.28125,
+          "width": 1280,
+          "height": 191,
+          "top": 1167.28125,
+          "right": 1280,
+          "bottom": 1358.28125,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 0
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/process-1280-default-side-by-side.png"
+    },
+    {
+      "page": "onboarding",
+      "route": "/onboarding",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "default",
+      "reference": {
+        "width": 1280,
+        "height": 1922,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1731.140625,
+          "width": 1280,
+          "height": 191,
+          "top": 1731.140625,
+          "right": 1280,
+          "bottom": 1922.140625,
+          "left": 0
+        },
+        "images": [],
+        "forms": 2,
+        "details": 0
+      },
+      "actual": {
+        "width": 1280,
+        "height": 1922,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1731.140625,
+          "width": 1280,
+          "height": 191,
+          "top": 1731.140625,
+          "right": 1280,
+          "bottom": 1922.140625,
+          "left": 0
+        },
+        "images": [],
+        "forms": 2,
+        "details": 0
+      },
+      "changedIntersectingPixels": 697,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0.0335354882067291,
+      "sideBySide": ".local/redesign/complete-site/onboarding-1280-default-side-by-side.png"
+    },
+    {
+      "page": "agentPortal",
+      "route": "/agent-portal",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "default",
+      "reference": {
+        "width": 1280,
+        "height": 1016,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 824.6875,
+          "width": 1280,
+          "height": 191,
+          "top": 824.6875,
+          "right": 1280,
+          "bottom": 1015.6875,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 0
+      },
+      "actual": {
+        "width": 1280,
+        "height": 1016,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 824.6875,
+          "width": 1280,
+          "height": 191,
+          "top": 824.6875,
+          "right": 1280,
+          "bottom": 1015.6875,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 0
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/agentPortal-1280-default-side-by-side.png"
+    },
+    {
+      "page": "contact",
+      "route": "/contact",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "default",
+      "reference": {
+        "width": 1280,
+        "height": 1649,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1457.859375,
+          "width": 1280,
+          "height": 191,
+          "top": 1457.859375,
+          "right": 1280,
+          "bottom": 1648.859375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 4
+      },
+      "actual": {
+        "width": 1280,
+        "height": 1649,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1457.859375,
+          "width": 1280,
+          "height": 191,
+          "top": 1457.859375,
+          "right": 1280,
+          "bottom": 1648.859375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 4
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/contact-1280-default-side-by-side.png"
+    },
+    {
+      "page": "contact",
+      "route": "/contact",
+      "viewport": {
+        "width": 1280
+      },
+      "state": "expanded",
+      "reference": {
+        "width": 1280,
+        "height": 1798,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1607.359375,
+          "width": 1280,
+          "height": 191,
+          "top": 1607.359375,
+          "right": 1280,
+          "bottom": 1798.359375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 4
+      },
+      "actual": {
+        "width": 1280,
+        "height": 1798,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 97,
+          "top": 0,
+          "right": 1280,
+          "bottom": 97,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1607.359375,
+          "width": 1280,
+          "height": 191,
+          "top": 1607.359375,
+          "right": 1280,
+          "bottom": 1798.359375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 4
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/contact-1280-expanded-side-by-side.png"
+    },
+    {
+      "page": "home",
+      "route": "/",
+      "viewport": {
+        "width": 390
+      },
+      "state": "default",
+      "reference": {
+        "width": 390,
+        "height": 3234,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 3042.90625,
+          "width": 390,
+          "height": 191,
+          "top": 3042.90625,
+          "right": 390,
+          "bottom": 3233.90625,
+          "left": 0
+        },
+        "images": [
+          {
+            "src": "/brand/site/696b29a0989d7b0cc487.png",
+            "rect": {
+              "x": 16,
+              "y": 217,
+              "width": 358,
+              "height": 172.484375,
+              "top": 217,
+              "right": 374,
+              "bottom": 389.484375,
+              "left": 16
+            },
+            "objectPosition": "50% 50%",
+            "objectFit": "fill",
+            "parent": {
+              "x": 0,
+              "y": 169,
+              "width": 390,
+              "height": 602.859375,
+              "top": 169,
+              "right": 390,
+              "bottom": 771.859375,
+              "left": 0
+            }
+          },
+          {
+            "src": "/brand/site/860e65833659dfd59b6b.jpg",
+            "rect": {
+              "x": 16,
+              "y": 795.859375,
+              "width": 358,
+              "height": 477.328125,
+              "top": 795.859375,
+              "right": 374,
+              "bottom": 1273.1875,
+              "left": 16
+            },
+            "objectPosition": "50% 20%",
+            "objectFit": "cover",
+            "parent": {
+              "x": 16,
+              "y": 795.859375,
+              "width": 358,
+              "height": 1059.140625,
+              "top": 795.859375,
+              "right": 374,
+              "bottom": 1855,
+              "left": 16
+            }
+          }
+        ],
+        "forms": 0,
+        "details": 1
+      },
+      "actual": {
+        "width": 390,
+        "height": 3234,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 3042.90625,
+          "width": 390,
+          "height": 191,
+          "top": 3042.90625,
+          "right": 390,
+          "bottom": 3233.90625,
+          "left": 0
+        },
+        "images": [
+          {
+            "src": "/brand/site/696b29a0989d7b0cc487.png",
+            "rect": {
+              "x": 16,
+              "y": 217,
+              "width": 358,
+              "height": 172.484375,
+              "top": 217,
+              "right": 374,
+              "bottom": 389.484375,
+              "left": 16
+            },
+            "objectPosition": "50% 50%",
+            "objectFit": "fill",
+            "parent": {
+              "x": 0,
+              "y": 169,
+              "width": 390,
+              "height": 602.859375,
+              "top": 169,
+              "right": 390,
+              "bottom": 771.859375,
+              "left": 0
+            }
+          },
+          {
+            "src": "/brand/site/860e65833659dfd59b6b.jpg",
+            "rect": {
+              "x": 16,
+              "y": 795.859375,
+              "width": 358,
+              "height": 477.328125,
+              "top": 795.859375,
+              "right": 374,
+              "bottom": 1273.1875,
+              "left": 16
+            },
+            "objectPosition": "50% 20%",
+            "objectFit": "cover",
+            "parent": {
+              "x": 16,
+              "y": 795.859375,
+              "width": 358,
+              "height": 1059.140625,
+              "top": 795.859375,
+              "right": 374,
+              "bottom": 1855,
+              "left": 16
+            }
+          }
+        ],
+        "forms": 0,
+        "details": 1
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/home-390-default-side-by-side.png"
+    },
+    {
+      "page": "home",
+      "route": "/",
+      "viewport": {
+        "width": 390
+      },
+      "state": "expanded",
+      "reference": {
+        "width": 390,
+        "height": 3858,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 3667.03125,
+          "width": 390,
+          "height": 191,
+          "top": 3667.03125,
+          "right": 390,
+          "bottom": 3858.03125,
+          "left": 0
+        },
+        "images": [
+          {
+            "src": "/brand/site/696b29a0989d7b0cc487.png",
+            "rect": {
+              "x": 16,
+              "y": 217,
+              "width": 358,
+              "height": 172.484375,
+              "top": 217,
+              "right": 374,
+              "bottom": 389.484375,
+              "left": 16
+            },
+            "objectPosition": "50% 50%",
+            "objectFit": "fill",
+            "parent": {
+              "x": 0,
+              "y": 169,
+              "width": 390,
+              "height": 602.859375,
+              "top": 169,
+              "right": 390,
+              "bottom": 771.859375,
+              "left": 0
+            }
+          },
+          {
+            "src": "/brand/site/860e65833659dfd59b6b.jpg",
+            "rect": {
+              "x": 16,
+              "y": 795.859375,
+              "width": 358,
+              "height": 477.328125,
+              "top": 795.859375,
+              "right": 374,
+              "bottom": 1273.1875,
+              "left": 16
+            },
+            "objectPosition": "50% 20%",
+            "objectFit": "cover",
+            "parent": {
+              "x": 16,
+              "y": 795.859375,
+              "width": 358,
+              "height": 1059.140625,
+              "top": 795.859375,
+              "right": 374,
+              "bottom": 1855,
+              "left": 16
+            }
+          }
+        ],
+        "forms": 0,
+        "details": 1
+      },
+      "actual": {
+        "width": 390,
+        "height": 3858,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 3667.03125,
+          "width": 390,
+          "height": 191,
+          "top": 3667.03125,
+          "right": 390,
+          "bottom": 3858.03125,
+          "left": 0
+        },
+        "images": [
+          {
+            "src": "/brand/site/696b29a0989d7b0cc487.png",
+            "rect": {
+              "x": 16,
+              "y": 217,
+              "width": 358,
+              "height": 172.484375,
+              "top": 217,
+              "right": 374,
+              "bottom": 389.484375,
+              "left": 16
+            },
+            "objectPosition": "50% 50%",
+            "objectFit": "fill",
+            "parent": {
+              "x": 0,
+              "y": 169,
+              "width": 390,
+              "height": 602.859375,
+              "top": 169,
+              "right": 390,
+              "bottom": 771.859375,
+              "left": 0
+            }
+          },
+          {
+            "src": "/brand/site/860e65833659dfd59b6b.jpg",
+            "rect": {
+              "x": 16,
+              "y": 795.859375,
+              "width": 358,
+              "height": 477.328125,
+              "top": 795.859375,
+              "right": 374,
+              "bottom": 1273.1875,
+              "left": 16
+            },
+            "objectPosition": "50% 20%",
+            "objectFit": "cover",
+            "parent": {
+              "x": 16,
+              "y": 795.859375,
+              "width": 358,
+              "height": 1059.140625,
+              "top": 795.859375,
+              "right": 374,
+              "bottom": 1855,
+              "left": 16
+            }
+          }
+        ],
+        "forms": 0,
+        "details": 1
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/home-390-expanded-side-by-side.png"
+    },
+    {
+      "page": "services",
+      "route": "/services",
+      "viewport": {
+        "width": 390
+      },
+      "state": "default",
+      "reference": {
+        "width": 390,
+        "height": 2521,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 2329.609375,
+          "width": 390,
+          "height": 191,
+          "top": 2329.609375,
+          "right": 390,
+          "bottom": 2520.609375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 3
+      },
+      "actual": {
+        "width": 390,
+        "height": 2521,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 2329.609375,
+          "width": 390,
+          "height": 191,
+          "top": 2329.609375,
+          "right": 390,
+          "bottom": 2520.609375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 3
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/services-390-default-side-by-side.png"
+    },
+    {
+      "page": "services",
+      "route": "/services",
+      "viewport": {
+        "width": 390
+      },
+      "state": "expanded",
+      "reference": {
+        "width": 390,
+        "height": 7179,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 6988.28125,
+          "width": 390,
+          "height": 191,
+          "top": 6988.28125,
+          "right": 390,
+          "bottom": 7179.28125,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 3
+      },
+      "actual": {
+        "width": 390,
+        "height": 7179,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 6988.28125,
+          "width": 390,
+          "height": 191,
+          "top": 6988.28125,
+          "right": 390,
+          "bottom": 7179.28125,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 3
+      },
+      "changedIntersectingPixels": 9399,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0.2474186938875614,
+      "sideBySide": ".local/redesign/complete-site/services-390-expanded-side-by-side.png"
+    },
+    {
+      "page": "process",
+      "route": "/process",
+      "viewport": {
+        "width": 390
+      },
+      "state": "default",
+      "reference": {
+        "width": 390,
+        "height": 2441,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 2250.4375,
+          "width": 390,
+          "height": 191,
+          "top": 2250.4375,
+          "right": 390,
+          "bottom": 2441.4375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 0
+      },
+      "actual": {
+        "width": 390,
+        "height": 2441,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 2250.4375,
+          "width": 390,
+          "height": 191,
+          "top": 2250.4375,
+          "right": 390,
+          "bottom": 2441.4375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 0,
+        "details": 0
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/process-390-default-side-by-side.png"
+    },
+    {
+      "page": "onboarding",
+      "route": "/onboarding",
+      "viewport": {
+        "width": 390
+      },
+      "state": "default",
+      "reference": {
+        "width": 390,
+        "height": 3195,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 3003.59375,
+          "width": 390,
+          "height": 191,
+          "top": 3003.59375,
+          "right": 390,
+          "bottom": 3194.59375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 2,
+        "details": 0
+      },
+      "actual": {
+        "width": 390,
+        "height": 3195,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 3003.59375,
+          "width": 390,
+          "height": 191,
+          "top": 3003.59375,
+          "right": 390,
+          "bottom": 3194.59375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 2,
+        "details": 0
+      },
+      "changedIntersectingPixels": 683,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0.06615785883391517,
+      "sideBySide": ".local/redesign/complete-site/onboarding-390-default-side-by-side.png"
+    },
+    {
+      "page": "agentPortal",
+      "route": "/agent-portal",
+      "viewport": {
+        "width": 390
+      },
+      "state": "default",
+      "reference": {
+        "width": 390,
+        "height": 1458,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1266.875,
+          "width": 390,
+          "height": 191,
+          "top": 1266.875,
+          "right": 390,
+          "bottom": 1457.875,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 0
+      },
+      "actual": {
+        "width": 390,
+        "height": 1458,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1266.875,
+          "width": 390,
+          "height": 191,
+          "top": 1266.875,
+          "right": 390,
+          "bottom": 1457.875,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 0
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/agentPortal-390-default-side-by-side.png"
+    },
+    {
+      "page": "contact",
+      "route": "/contact",
+      "viewport": {
+        "width": 390
+      },
+      "state": "default",
+      "reference": {
+        "width": 390,
+        "height": 1991,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1800.09375,
+          "width": 390,
+          "height": 191,
+          "top": 1800.09375,
+          "right": 390,
+          "bottom": 1991.09375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 4
+      },
+      "actual": {
+        "width": 390,
+        "height": 1991,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1800.09375,
+          "width": 390,
+          "height": 191,
+          "top": 1800.09375,
+          "right": 390,
+          "bottom": 1991.09375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 4
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/contact-390-default-side-by-side.png"
+    },
+    {
+      "page": "contact",
+      "route": "/contact",
+      "viewport": {
+        "width": 390
+      },
+      "state": "expanded",
+      "reference": {
+        "width": 390,
+        "height": 2141,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1949.59375,
+          "width": 390,
+          "height": 191,
+          "top": 1949.59375,
+          "right": 390,
+          "bottom": 2140.59375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 4
+      },
+      "actual": {
+        "width": 390,
+        "height": 2141,
+        "header": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 169,
+          "top": 0,
+          "right": 390,
+          "bottom": 169,
+          "left": 0
+        },
+        "footer": {
+          "x": 0,
+          "y": 1949.59375,
+          "width": 390,
+          "height": 191,
+          "top": 1949.59375,
+          "right": 390,
+          "bottom": 2140.59375,
+          "left": 0
+        },
+        "images": [],
+        "forms": 1,
+        "details": 4
+      },
+      "changedIntersectingPixels": 0,
+      "nonoverlapPixels": 0,
+      "meanIntersectingChannelDifference": 0,
+      "sideBySide": ".local/redesign/complete-site/contact-390-expanded-side-by-side.png"
+    }
+  ]
+}

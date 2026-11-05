@@ -1,5 +1,5 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { rm, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -419,6 +419,125 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     ).rejects.toMatchObject({ code: "CLIENT_CONTACT_RESTRICTED" });
     expect(sends).toBe(2);
   });
+  it("rechecks conflicts, facts, recipients and attachment association after slow storage reads before claiming dispatch", async () => {
+    const beforeSends = sends;
+    const store = createObjectStore();
+    for (const [change, code] of [
+      ["conflict", "SOURCE_CONFLICT_REVIEW_REQUIRED"],
+      ["facts", "SOURCE_MATTER_CHANGED"],
+      ["recipient", "CLIENT_CONTACT_RESTRICTED"],
+      ["attachment", "ATTACHMENT_CHANGED"],
+    ] as const) {
+      const matter = await createMatter(owner, {
+        title: "Synthetic send preparation race",
+        propertyAddress: "42 Synthetic Preparation Lane",
+        side: "buyer",
+        packageCode: "essentials",
+        agentId,
+        details: {
+          directContact: "copy_agent",
+          clients: [{ name: "Synthetic Client", email: clientEmail }],
+          contacts: [
+            { name: "Synthetic Lender", role: "lender", email: lenderEmail },
+          ],
+        },
+      });
+      matterIds.push(matter.id);
+      const bytes = Buffer.from("Synthetic attachment evidence only");
+      const objectKey = `send-preparation/${randomUUID()}`;
+      await store.put(objectKey, bytes, "text/plain");
+      const document = await prisma.document.create({
+        data: {
+          matterId: matter.id,
+          name: "synthetic-evidence.txt",
+          mimeType: "text/plain",
+          visibility: "coordinator",
+          createdById: owner.id,
+          versions: {
+            create: {
+              version: 1,
+              objectKey,
+              checksum: createHash("sha256").update(bytes).digest("hex"),
+              size: bytes.length,
+              processingStatus: "complete",
+            },
+          },
+        },
+      });
+      const draft = await service.createDraft(owner, {
+        matterId: matter.id,
+        to: [change === "recipient" ? clientEmail : lenderEmail],
+        subject: "Reviewed synthetic message",
+        body: "Synthetic reviewed content",
+        attachmentIds: [document.id],
+      });
+      const queued = await service.queueSend(owner, draft.id, {
+        revision: draft.revision,
+        confirmed: true,
+      });
+      let read = false;
+      const guarded = createCommunicationJobHandlers(service, {
+        store: {
+          ...store,
+          async get(key) {
+            const result = await store.get(key);
+            if (!read) {
+              read = true;
+              if (change === "attachment") {
+                const other = await createMatter(owner, {
+                  title: "Separate transaction",
+                  propertyAddress: "99 Separate Contract",
+                  side: "buyer",
+                  packageCode: "essentials",
+                });
+                matterIds.push(other.id);
+                await prisma.document.update({
+                  where: { id: document.id },
+                  data: { matterId: other.id },
+                });
+              } else {
+                await prisma.matter.update({
+                  where: { id: matter.id },
+                  data: {
+                    revision: { increment: 1 },
+                    ...(change === "facts"
+                      ? { propertyAddress: "A newly corrected address" }
+                      : {
+                          details: {
+                            ...(matter.details as object),
+                            ...(change === "conflict"
+                              ? {
+                                  sourceConflicts: [
+                                    { key: "fact:property_address" },
+                                  ],
+                                }
+                              : { directContact: "through_agent" }),
+                          },
+                        }),
+                  },
+                });
+              }
+            }
+            return result;
+          },
+        },
+      });
+      await expect(
+        guarded["gmail.send"]({
+          draftId: draft.id,
+          ownerId,
+          sendKey: queued.sendKey!,
+        }),
+      ).rejects.toMatchObject({ code });
+      expect(read).toBe(true);
+      expect(sends).toBe(beforeSends);
+      const retained = await prisma.emailDraft.findUniqueOrThrow({
+        where: { id: draft.id },
+      });
+      expect(retained.status).toBe("queued");
+      expect(retained.details).not.toHaveProperty("attemptStartedAt");
+    }
+  });
   it("imports paginated MIME as untrusted evidence, preserves review before association/sharing, recovers expired history", async () => {
     const before = await prisma.task.count({
       where: { matterId: matterIds[0] },
@@ -432,9 +551,10 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     ).toBe(true);
     const thread = await prisma.emailThread.findUniqueOrThrow({
       where: {
-        ownerId_providerThreadId: {
+        ownerId_providerThreadId_lifecycleKey: {
           ownerId,
           providerThreadId: `thread-${suffix}`,
+          lifecycleKey: "primary",
         },
       },
       include: { messages: true },

@@ -404,6 +404,7 @@ export default function LegacyIntake({
     }
   }
   async function submit() {
+    if(d.packageCode==="essentials"&&!d.documentIds.length){setError("Contract to Close requires an uploaded executed contract. You can save a draft at any point.");return;}
     if (d.packageCode === "full_listing") {
       setError(
         "Full Listing is coming soon. This existing draft remains saved.",

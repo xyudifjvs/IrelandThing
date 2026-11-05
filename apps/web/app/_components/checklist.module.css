@@ -1,3 +1,4 @@
+@import "../(marketing)/_components/complete-site-fonts.css";
 .share {
   padding: 24px;
   margin: 0 0 24px;
@@ -180,4 +181,42 @@
   .linkField input {
     font-size: 16px;
   }
+}
+
+/* Shared client-link/checklist presentation. */
+.page {
+  background: #f9f6f0;
+  color: #141210;
+  font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif;
+}
+.card,
+.share,
+.editor {
+  background: #ffffff;
+  border-color: #e6dccd;
+  border-radius: 0;
+}
+.card h1,
+.card h2,
+.main h1,
+.main h2 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  color: #141210;
+  font-weight: 500;
+}
+.eyebrow,
+.hint,
+.footer {
+  color: #7a6247;
+}
+.primary {
+  background: #141210;
+  border-color: #141210;
+  color: #ffffff;
+  border-radius: 0;
+}
+.secondary {
+  border-color: #a8957c;
+  color: #141210;
+  border-radius: 0;
 }

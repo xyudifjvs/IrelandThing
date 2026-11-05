@@ -1,0 +1,10 @@
+{
+  "mode": "Mocked API contract checks; no external providers or business records",
+  "checks": [
+    "Email-only information request: pending controls locked, confirmed receipt only, same-content repeat does not create another request.",
+    "Agreement request carries structured team/office/type fields and preserves the Howard Hanna restriction.",
+    "Unconfigured booking saves only a call request and does not claim a booked event.",
+    "Failed contact save retains fields and retries the same idempotency key; success truthfully says no email was sent.",
+    "MFA locks original credentials, clears password, and supports Enter verification before role-based portal redirect."
+  ]
+}

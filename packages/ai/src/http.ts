@@ -9,6 +9,7 @@ import {
   requestReview,
   listReviews,
   approveReview,
+  resolveReviewConflicts,
   rejectReview,
 } from "./service";
 export function createAIRouter() {
@@ -61,6 +62,18 @@ export function createAIRouter() {
     asyncHandler(async (req, res) =>
       res.json(
         await approveReview(principal(req), String(req.params.id), req.body),
+      ),
+    ),
+  );
+  router.post(
+    "/reviews/:id/resolve-conflicts",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await resolveReviewConflicts(
+          principal(req),
+          String(req.params.id),
+          req.body,
+        ),
       ),
     ),
   );

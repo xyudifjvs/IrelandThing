@@ -13,6 +13,7 @@ import { CommunicationsService, createCommunicationsService } from "./service";
 export * from "./service";
 export * from "./gateway";
 export * from "./jobs";
+export * from "./reminders";
 export * from "./policy";
 export * from "./merge-fields";
 let shared: CommunicationsService | undefined;

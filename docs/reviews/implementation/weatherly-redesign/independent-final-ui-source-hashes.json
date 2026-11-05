@@ -1,0 +1,87 @@
+{
+  "review": "Independent final UI source review after save/confirm control locking",
+  "capturedAt": "2026-11-05T04:11:28.071023+00:00",
+  "scope": "Source inspection only; authored Contacts/Directory/Dashboard/Marketing/styles excluded; adjacent backend deadline projection checked for UI contract consistency. No full suite or provider operations rerun.",
+  "files": [
+    {
+      "file": "apps/web/app/(portal)/portal/_components/ContactAutofill.tsx",
+      "bytes": 1834,
+      "sha256": "091c7f9b9006e27c855b85e46cbfd11d96e8ee6d672e172a05daf2bbce7f9387"
+    },
+    {
+      "file": "apps/web/app/(portal)/portal/_components/Intake.tsx",
+      "bytes": 29416,
+      "sha256": "16c0e5384ada3e6e9952bb257d5b34f5ae643b8c21a654f373381622db290820"
+    },
+    {
+      "file": "apps/web/app/(workspace)/workspace/_components/ReviewQueue.tsx",
+      "bytes": 16080,
+      "sha256": "4b6784b2ce177890e255f65fe1578e7b353303bc00b41c610864292d5820c11a"
+    },
+    {
+      "file": "apps/web/app/(workspace)/workspace/_components/CommunicationTools.tsx",
+      "bytes": 37675,
+      "sha256": "5d5184fe521098efec33c2994702cda75084231a4934837dfe83ec73382b4988"
+    },
+    {
+      "file": "apps/web/app/(workspace)/workspace/_components/Shell.tsx",
+      "bytes": 7286,
+      "sha256": "e4239accb1eb869db18eef580f09885d45074b8e7e66bd9672070cc34383e564"
+    },
+    {
+      "file": "apps/web/app/_components/ChecklistShare.tsx",
+      "bytes": 5794,
+      "sha256": "574f3492bff566aa293805af47404f47c4b8625850a07e3e6b54feb525cbfffb"
+    },
+    {
+      "file": "apps/web/app/(workspace)/workspace/_components/InitialFileReview.tsx",
+      "bytes": 4022,
+      "sha256": "b082c822eaaeff82b04f98e29673b9f883fd995ccdfeb238f8e830ca4f4e2546"
+    },
+    {
+      "file": "apps/web/app/_components/ChecklistTask.tsx",
+      "bytes": 7255,
+      "sha256": "1dce766c84507214cb6823a7fc0807b3521dfeda20ffd61400fffa6d6d9676d6"
+    },
+    {
+      "file": "apps/web/app/checklist/ClientChecklist.tsx",
+      "bytes": 7644,
+      "sha256": "1786b7470957f84835a6fb2c4eee3784d6d4159d357a0610c9004eae6b32f3d7"
+    },
+    {
+      "file": "apps/web/app/(workspace)/workspace/transactions/[id]/page.tsx",
+      "bytes": 32023,
+      "sha256": "72677eaacfa11ead3a2dce7b2117ba46b719b4e27cc0fb1ba8744e1084ad88a4"
+    },
+    {
+      "file": "apps/web/app/(portal)/portal/transactions/[id]/page.tsx",
+      "bytes": 7410,
+      "sha256": "0cb7e3f8f9712c9427f6556cd336818f480b578c49e6dbc666fa8b4088202df0"
+    },
+    {
+      "file": "apps/web/app/_lib/checklist-audiences.ts",
+      "bytes": 507,
+      "sha256": "b1389164f8612ab033076c717832bc34bb226ce4efb7f58caf3b65948276482c"
+    },
+    {
+      "file": "apps/web/app/_components/useLiveData.tsx",
+      "bytes": 6600,
+      "sha256": "d3e81d265a5714a351acc475d2ecd291f324e8fe3f5223e9ce59add93fbc9a5e"
+    },
+    {
+      "file": "packages/matters/src/deadline-fields.ts",
+      "bytes": 4745,
+      "sha256": "9a8eac1daf04d55d91547360a71e3e92725158209281965999c3a8b6c10c7ac7"
+    },
+    {
+      "file": "packages/matters/src/index.ts",
+      "bytes": 53764,
+      "sha256": "7ab10ee255ed049364fd11b1d6b7a7a6aa1c7476a4de13b483575e1d34424e90"
+    },
+    {
+      "file": "docs/plans/WEATHERLY_OWNER_IMPLEMENTATION.md",
+      "bytes": 17303,
+      "sha256": "265a9906eca23c2baf6555371a3b75ef3a20457e461757a367cce58e927ea930"
+    }
+  ]
+}

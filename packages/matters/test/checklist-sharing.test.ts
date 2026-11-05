@@ -237,7 +237,7 @@ describe("canonical client checklist sharing", () => {
     );
   });
 
-  it("allows only coordinator and current matter agents to manage links", async () => {
+  it("allows coordinator and current agents to manage links while clients remain read-only", async () => {
     const matter = await fixture();
     await expect(
       createChecklistShare(actors.other, matter.id),
@@ -337,6 +337,163 @@ describe("canonical client checklist sharing", () => {
     expect(JSON.stringify(result)).not.toContain("SECRET_");
     expect(JSON.stringify(result)).not.toContain("private-client");
     expect(JSON.stringify(result)).not.toContain(other.id);
+  });
+
+  it("uses one canonical milestone for four visibility combinations and safe short notes/appointments, with all ongoing writes restricted to Ireland", async () => {
+    const matter = await fixture();
+    const token = tokenFrom(
+      await createChecklistShare(actors.owner, matter.id),
+    );
+    const created = [];
+    for (const visibility of ["coordinator", "agent", "client_only", "client"])
+      created.push(
+        await addTask(actors.owner, matter.id, {
+          title: `Milestone ${visibility}`,
+          visibility,
+          note: "Bring identification",
+          appointmentAt: "2026-11-06T10:00:00-05:00",
+          details: { privateContext: "SECRET_INTERNAL_TASK" },
+        }),
+      );
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: {
+        details: {
+          workflow: {
+            definition: {
+              steps: [
+                {
+                  key: "private-template-step",
+                  title: "SECRET_CLIENT_ONLY_TEMPLATE_STEP",
+                  kind: "checklist",
+                  visibility: "client_only",
+                },
+              ],
+            },
+          },
+          fileReview: {
+            status: "confirmed",
+            unresolvedDates: [{ reason: "SECRET_COORDINATOR_REASON" }],
+          },
+          sourceConflicts: [{ key: "SECRET_SOURCE_REVIEW_KEY" }],
+        },
+      },
+    });
+    const privateProjection = await getMatter(actors.agent, matter.id);
+    expect(JSON.stringify(privateProjection)).not.toContain(
+      "SECRET_CLIENT_ONLY_TEMPLATE_STEP",
+    );
+    expect(JSON.stringify(privateProjection)).not.toContain(
+      "SECRET_COORDINATOR_REASON",
+    );
+    expect(JSON.stringify(privateProjection)).not.toContain(
+      "SECRET_SOURCE_REVIEW_KEY",
+    );
+    expect(
+      JSON.stringify(
+        (await listMatters(actors.agent)).find((row) => row.id === matter.id),
+      ),
+    ).not.toContain("SECRET_CLIENT_ONLY_TEMPLATE_STEP");
+    const expected = {
+      coordinator: ["coordinator", "agent", "client_only", "client"],
+      agent: ["agent", "client"],
+      client: ["client_only", "client"],
+    };
+    for (const actor of [actors.owner, actors.agent, actors.client]) {
+      const view = await getMatter(actor, matter.id);
+      expect(
+        view.tasks
+          .filter((t) => t.title.startsWith("Milestone "))
+          .map((t) => t.title),
+      ).toEqual(
+        expected[actor.role as keyof typeof expected].map(
+          (v) => `Milestone ${v}`,
+        ),
+      );
+      const listed = (await listMatters(actor)).find(
+        (m) => m.id === matter.id,
+      )!;
+      expect(
+        listed.tasks
+          .filter((t) => t.title.startsWith("Milestone "))
+          .map((t) => t.title),
+      ).toEqual(
+        expected[actor.role as keyof typeof expected].map(
+          (v) => `Milestone ${v}`,
+        ),
+      );
+      expect(
+        view.tasks.find(
+          (t) =>
+            t.title ===
+            `Milestone ${actor.role === "coordinator" ? "coordinator" : actor.role === "agent" ? "agent" : "client_only"}`,
+        ),
+      ).toMatchObject({
+        note: "Bring identification",
+        appointmentAt: "2026-11-06T10:00:00-05:00",
+      });
+    }
+    const publicView = await getPublicChecklist(token);
+    expect(
+      publicView.tasks
+        .filter((t) => t.title.startsWith("Milestone "))
+        .map((t) => t.title),
+    ).toEqual(["Milestone client_only", "Milestone client"]);
+    expect(publicView.tasks.at(-1)).toMatchObject({
+      note: "Bring identification",
+      appointmentAt: "2026-11-06T10:00:00-05:00",
+    });
+    expect(JSON.stringify(publicView)).not.toContain("SECRET_INTERNAL_TASK");
+    const task = created[3];
+    for (const actor of [actors.agent, actors.client]) {
+      await expect(
+        addTask(actor, matter.id, { title: "Forbidden" }),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        updateTask(actor, matter.id, task.id, {
+          expectedRevision: task.revision,
+          status: "completed",
+          note: "Forbidden",
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        deleteTask(actor, matter.id, task.id, {
+          expectedRevision: task.revision,
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        addDeadline(actor, matter.id, { label: "Forbidden" }),
+      ).rejects.toMatchObject({ status: 403 });
+      if (actor.role === "client")
+        await expect(
+          createChecklistShare(actor, matter.id),
+        ).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(
+      addTask(actors.owner, matter.id, {
+        title: "Too long",
+        note: "x".repeat(1001),
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      addTask(actors.owner, matter.id, {
+        title: "No timezone",
+        appointmentAt: "2026-11-06T10:00:00",
+      }),
+    ).rejects.toBeDefined();
+    await updateTask(actors.owner, matter.id, task.id, {
+      expectedRevision: task.revision,
+      status: "completed",
+      note: "Confirmed by Ireland",
+      appointmentAt: null,
+    });
+    expect(
+      (await getPublicChecklist(token)).tasks.find((t) => t.id === task.id),
+    ).toMatchObject({
+      status: "completed",
+      note: "Confirmed by Ireland",
+      appointmentAt: null,
+    });
   });
 
   it("shares client requests only when both explicit kind and client visibility are selected, using the same live task records", async () => {
@@ -445,6 +602,7 @@ describe("canonical client checklist sharing", () => {
       label: "Walkthrough",
       status: "confirmed",
       date: "2026-11-30",
+      visibility: "client",
     });
     expect(
       (await getPublicChecklist(token)).deadlines.some(
@@ -480,7 +638,7 @@ describe("canonical client checklist sharing", () => {
       await createChecklistShare(actors.owner, matter.id),
     );
     const second = tokenFrom(
-      await createChecklistShare(actors.agent, matter.id),
+      await createChecklistShare(actors.owner, matter.id),
     );
     expect(second).not.toBe(first);
     await expect(getPublicChecklist(first)).rejects.toMatchObject({
@@ -519,7 +677,7 @@ describe("canonical client checklist sharing", () => {
     const matter = await fixture();
     const shares = await Promise.all([
       createChecklistShare(actors.owner, matter.id),
-      createChecklistShare(actors.agent, matter.id),
+      createChecklistShare(actors.owner, matter.id),
     ]);
     expect(shares[0].id).not.toBe(shares[1].id);
     const results = await Promise.allSettled(

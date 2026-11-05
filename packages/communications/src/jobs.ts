@@ -9,7 +9,7 @@ import {
   encryptSecret,
   type Principal,
 } from "@weatherly/platform";
-import { audit } from "@weatherly/matters";
+import { audit, requireMatter } from "@weatherly/matters";
 import {
   createObjectStore,
   uploadDocument,
@@ -19,6 +19,7 @@ import {
 import { CommunicationsService } from "./service";
 import {
   asRecord,
+  assertReviewedMatter,
   textArray,
   recipientPolicy,
   requireResolved,
@@ -130,46 +131,103 @@ export function createCommunicationJobHandlers(
       where: { providerMessageId: message.id },
     });
     const previousDetails = asRecord(previous?.details);
-    let thread = await prisma.emailThread.findUnique({
-      where: {
-        ownerId_providerThreadId: {
-          ownerId: actor.id,
-          providerThreadId: message.threadId,
-        },
-      },
-    });
-    if (!thread) {
+    // Re-imports belong to their original local lifecycle forever. A provider
+    // thread may span multiple contracts, but historical messages never move.
+    let thread = previous
+      ? await prisma.emailThread.findUnique({
+          where: { id: previous.threadId },
+        })
+      : await prisma.emailThread.findFirst({
+          where: { ownerId: actor.id, providerThreadId: message.threadId },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        });
+    if (!previous) {
       const matters = await prisma.matter.findMany({
         where: { stage: { not: "archived" } },
-        select: { id: true, propertyAddress: true },
-        take: 1000,
+        select: { id: true, propertyAddress: true, stage: true },
       });
-      const text = (parsed.subject || "") + " " + (parsed.text || "");
+      const text = (
+        (parsed.subject || "") +
+        " " +
+        (parsed.text || "")
+      ).toLowerCase();
       const candidates = matters
-        .filter((m) =>
-          text.toLowerCase().includes(m.propertyAddress.toLowerCase()),
+        .filter(
+          (m) =>
+            m.propertyAddress.trim() &&
+            text.includes(m.propertyAddress.toLowerCase()),
         )
         .map((m) => m.id);
-      thread = await prisma.emailThread.upsert({
-        where: {
-          ownerId_providerThreadId: {
+      const associated = thread?.matterId
+        ? await prisma.matter.findUnique({ where: { id: thread.matterId } })
+        : null;
+      const replacement = associated
+        ? await prisma.matter.findFirst({
+            where: {
+              details: { path: ["replacesMatterId"], equals: associated.id },
+            },
+            select: { id: true },
+          })
+        : null;
+      const closedLifecycle =
+        associated?.stage === "terminated" || !!replacement;
+      const reviewedCandidates =
+        thread && asRecord(thread.details).associationReviewedAt
+          ? textArray(asRecord(thread.details).candidateMatterIds)
+          : [];
+      const differentCandidate =
+        !!associated &&
+        candidates.some(
+          (id) => id !== associated.id && !reviewedCandidates.includes(id),
+        );
+      if (!thread || closedLifecycle || differentCandidate) {
+        const previousThread = thread;
+        const lifecycleKey = previousThread
+          ? "review:" + previousThread.id
+          : "primary";
+        thread = await prisma.emailThread.upsert({
+          where: {
+            ownerId_providerThreadId_lifecycleKey: {
+              ownerId: actor.id,
+              providerThreadId: message.threadId,
+              lifecycleKey,
+            },
+          },
+          create: {
             ownerId: actor.id,
             providerThreadId: message.threadId,
+            lifecycleKey,
+            subject: (parsed.subject || "(No subject)").slice(0, 998),
+            status:
+              previousThread || candidates.length
+                ? "review_required"
+                : "unassigned",
+            details: {
+              candidateMatterIds: candidates,
+              associationSource: previousThread
+                ? "contract_lifecycle_review"
+                : "property_text_candidate_only",
+              ...(previousThread
+                ? {
+                    previousLifecycleThreadId: previousThread.id,
+                    previousMatterId: previousThread.matterId,
+                    reviewReason: closedLifecycle
+                      ? "terminated_or_replaced_contract"
+                      : "different_matter_candidate",
+                  }
+                : {}),
+            },
           },
-        },
-        create: {
-          ownerId: actor.id,
-          providerThreadId: message.threadId,
-          subject: (parsed.subject || "(No subject)").slice(0, 998),
-          status: candidates.length ? "review_required" : "unassigned",
-          details: {
-            candidateMatterIds: candidates,
-            associationSource: "property_text_candidate_only",
-          },
-        },
-        update: {},
-      });
+          update: {},
+        });
+      }
     }
+    if (!thread)
+      throw new HttpError(
+        409,
+        "EMAIL_THREAD_UNAVAILABLE",
+        "The original local message lifecycle is unavailable; review the source before importing.",
+      );
     const documentIds = textArray(previousDetails.documentIds);
     const descriptors: Array<Record<string, Prisma.InputJsonValue>> = [];
     for (let i = 0; i < parsed.attachments.length; i++) {
@@ -576,66 +634,90 @@ export function createCommunicationJobHandlers(
         "Message must be reviewed again",
       );
     requireResolved(String(snapshot.subject), String(snapshot.body));
-    if (
-      Array.isArray(snapshot.sourceDeadlines) &&
-      snapshot.sourceDeadlines.length
-    ) {
-      const current = await prisma.deadline.findMany({
-        where: { matterId: draft.matterId },
-        select: { id: true, revision: true },
-      });
-      const expected = new Map(
-        snapshot.sourceDeadlines.map((v) => {
-          const d = asRecord(v);
-          return [String(d.id), Number(d.revision)];
-        }),
+    const validateSources = async (
+      db: Prisma.TransactionClient | typeof prisma = prisma,
+      lock = false,
+    ) => {
+      const currentMatter = await requireMatter(
+        actor,
+        draft!.matterId,
+        lock,
+        db,
+      );
+      assertReviewedMatter(currentMatter);
+      if (
+        Array.isArray(snapshot.sourceDeadlines) &&
+        snapshot.sourceDeadlines.length
+      ) {
+        const current = await db.deadline.findMany({
+          where: { matterId: draft!.matterId },
+          select: { id: true, revision: true },
+        });
+        const expected = new Map(
+          snapshot.sourceDeadlines.map((v) => {
+            const d = asRecord(v);
+            return [String(d.id), Number(d.revision)];
+          }),
+        );
+        if (
+          current.length !== expected.size ||
+          current.some((d) => expected.get(d.id) !== d.revision)
+        )
+          throw new HttpError(
+            409,
+            "SOURCE_DEADLINES_CHANGED",
+            "Dates changed after send approval; review a new draft before sending",
+          );
+      }
+      if (Array.isArray(snapshot.sourceTasks) && snapshot.sourceTasks.length) {
+        const current = await db.task.findMany({
+          where: { matterId: draft!.matterId, dueDate: { not: null } },
+          select: { id: true, revision: true },
+        });
+        const expected = new Map(
+          snapshot.sourceTasks.map((v) => {
+            const t = asRecord(v);
+            return [String(t.id), Number(t.revision)];
+          }),
+        );
+        if (
+          current.length !== expected.size ||
+          current.some((t) => expected.get(t.id) !== t.revision)
+        )
+          throw new HttpError(
+            409,
+            "SOURCE_DATES_CHANGED",
+            "Task dates changed after approval; review a new draft",
+          );
+      }
+      const recipients = await recipientPolicy(
+        actor,
+        draft!.matterId,
+        textArray(snapshot.to),
+        textArray(snapshot.cc),
+        db,
       );
       if (
-        current.length !== expected.size ||
-        current.some((d) => expected.get(d.id) !== d.revision)
+        JSON.stringify(recipients.to) !== JSON.stringify(snapshot.to) ||
+        JSON.stringify(recipients.cc) !== JSON.stringify(snapshot.cc)
       )
         throw new HttpError(
           409,
-          "SOURCE_DEADLINES_CHANGED",
-          "Dates changed after send approval; review a new draft before sending",
+          "RECIPIENT_POLICY_CHANGED",
+          "Recipient policy changed after approval; review a new draft",
         );
-    }
-    if (Array.isArray(snapshot.sourceTasks) && snapshot.sourceTasks.length) {
-      const current = await prisma.task.findMany({
-        where: { matterId: draft.matterId, dueDate: { not: null } },
-        select: { id: true, revision: true },
-      });
-      const expected = new Map(
-        snapshot.sourceTasks.map((v) => {
-          const t = asRecord(v);
-          return [String(t.id), Number(t.revision)];
-        }),
-      );
       if (
-        current.length !== expected.size ||
-        current.some((t) => expected.get(t.id) !== t.revision)
+        !Number.isSafeInteger(snapshot.sourceMatterRevision) ||
+        snapshot.sourceMatterRevision !== currentMatter.revision
       )
         throw new HttpError(
           409,
-          "SOURCE_DATES_CHANGED",
-          "Task dates changed after approval; review a new draft",
+          "SOURCE_MATTER_CHANGED",
+          "Transaction facts changed after approval; review a new draft before sending.",
         );
-    }
-    const recipients = await recipientPolicy(
-      actor,
-      draft.matterId,
-      textArray(snapshot.to),
-      textArray(snapshot.cc),
-    );
-    if (
-      JSON.stringify(recipients.to) !== JSON.stringify(snapshot.to) ||
-      JSON.stringify(recipients.cc) !== JSON.stringify(snapshot.cc)
-    )
-      throw new HttpError(
-        409,
-        "RECIPIENT_POLICY_CHANGED",
-        "Recipient policy changed after approval; review a new draft",
-      );
+      return recipients;
+    };
+    const recipients = await validateSources();
     const attachments: {
       filename: string;
       content: Buffer;
@@ -663,6 +745,7 @@ export function createCommunicationJobHandlers(
         contentType: document.mimeType,
       });
     }
+    let replyLocalThreadId: string | undefined;
     let reply: { threadId?: string; inReplyTo?: string; references?: string } =
       {};
     if (snapshot.replyToMessageId) {
@@ -676,6 +759,7 @@ export function createCommunicationJobHandlers(
           "INVALID_REPLY",
           "Reply source no longer belongs to this matter",
         );
+      replyLocalThreadId = original.thread.id;
       const messageId = asRecord(original.details).internetMessageId;
       if (typeof messageId === "string" && /^<[^\r\n<>]+>$/.test(messageId))
         reply = {
@@ -703,23 +787,71 @@ export function createCommunicationJobHandlers(
       disableFileAccess: true,
       disableUrlAccess: true,
     });
-    const claimed = await prisma.emailDraft.updateMany({
-      where: { id: draftId, status: "queued", sendKey },
-      data: {
-        status: "sending",
-        details: {
-          ...asRecord(draft.details),
-          deliveryMessageId: messageId,
-          attemptStartedAt: new Date().toISOString(),
+    // Attachment reads and MIME preparation can await slow storage. Recheck
+    // every mutable source under the matter lock before claiming dispatch.
+    await jobActor(ownerId);
+    await prisma.$transaction(async (tx) => {
+      await validateSources(tx, true);
+      for (const source of Array.isArray(snapshot.attachments)
+        ? snapshot.attachments
+        : []) {
+        const a = asRecord(source);
+        const document = await tx.document.findFirst({
+          where: { id: String(a.documentId), matterId: draft!.matterId },
+          include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+        });
+        if (
+          !document ||
+          document.versions[0]?.id !== a.versionId ||
+          document.versions[0]?.checksum !== a.checksum
+        )
+          throw new HttpError(
+            409,
+            "ATTACHMENT_CHANGED",
+            "Attachment sources changed during preparation; review a new draft.",
+          );
+      }
+      if (snapshot.replyToMessageId) {
+        const original = await tx.emailMessage.findUnique({
+          where: { id: String(snapshot.replyToMessageId) },
+          include: { thread: true },
+        });
+        if (
+          !original ||
+          original.thread.matterId !== draft!.matterId ||
+          original.thread.id !== replyLocalThreadId ||
+          (reply.threadId &&
+            original.thread.providerThreadId !== reply.threadId)
+        )
+          throw new HttpError(
+            409,
+            "INVALID_REPLY",
+            "Reply association changed during preparation; review a new draft.",
+          );
+      }
+      const claimed = await tx.emailDraft.updateMany({
+        where: {
+          id: draftId,
+          revision: draft!.revision,
+          status: "queued",
+          sendKey,
         },
-      },
+        data: {
+          status: "sending",
+          details: {
+            ...asRecord(draft.details),
+            deliveryMessageId: messageId,
+            attemptStartedAt: new Date().toISOString(),
+          },
+        },
+      });
+      if (!claimed.count)
+        throw new HttpError(
+          409,
+          "SEND_ALREADY_CLAIMED",
+          "Another worker claimed this message",
+        );
     });
-    if (!claimed.count)
-      throw new HttpError(
-        409,
-        "SEND_ALREADY_CLAIMED",
-        "Another worker claimed this message",
-      );
     try {
       const sent = await service.request<{ id: string; threadId: string }>(
         ownerId,
@@ -740,22 +872,42 @@ export function createCommunicationJobHandlers(
             revision: { increment: 1 },
           },
         });
-        const thread = await tx.emailThread.upsert({
-          where: {
-            ownerId_providerThreadId: {
+        const replyThread = replyLocalThreadId
+          ? await tx.emailThread.findUnique({
+              where: { id: replyLocalThreadId },
+            })
+          : null;
+        const existingThread =
+          replyThread?.providerThreadId === sent.threadId
+            ? replyThread
+            : await tx.emailThread.findFirst({
+                where: {
+                  ownerId,
+                  providerThreadId: sent.threadId,
+                  matterId: draft!.matterId,
+                },
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              });
+        const thread =
+          existingThread ||
+          (await tx.emailThread.upsert({
+            where: {
+              ownerId_providerThreadId_lifecycleKey: {
+                ownerId,
+                providerThreadId: sent.threadId,
+                lifecycleKey: "matter:" + draft!.matterId,
+              },
+            },
+            create: {
               ownerId,
               providerThreadId: sent.threadId,
+              lifecycleKey: "matter:" + draft!.matterId,
+              matterId: draft!.matterId,
+              subject: String(snapshot.subject),
+              status: "assigned",
             },
-          },
-          create: {
-            ownerId,
-            providerThreadId: sent.threadId,
-            matterId: draft!.matterId,
-            subject: String(snapshot.subject),
-            status: "assigned",
-          },
-          update: {},
-        });
+            update: {},
+          }));
         await tx.emailMessage.upsert({
           where: { providerMessageId: sent.id },
           create: {

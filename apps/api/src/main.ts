@@ -20,6 +20,7 @@ import {
   createBillingRouter,
   stripeWebhook,
   billingConfigured,
+  queueTerminatedServiceCheckouts,
 } from "@weatherly/billing";
 import { createAIRouter, aiConfigured } from "@weatherly/ai";
 import {
@@ -31,6 +32,7 @@ import {
 } from "@weatherly/assistant";
 import {
   createCommunicationsRouter,
+  createPrivateReminderRouter,
   listMessages,
   connectionStatus,
   sendSystemEmail,
@@ -54,6 +56,7 @@ import { createDotloopRouter, dotloopConfigured } from "@weatherly/dotloop";
 import { createDocumentsRouter } from "@weatherly/documents";
 import { createIntakeRouter } from "@weatherly/intake";
 import { createOnboardingRouter, calendlyWebhook } from "@weatherly/onboarding";
+import { createContactsRouter } from "../../../packages/contacts/src/index";
 const app = express();
 configureNetworkBoundary(app);
 app.disable("x-powered-by");
@@ -74,7 +77,10 @@ app.get("/health", async (_req, res) => {
 });
 const auth = createAuth({ sendSystemEmail });
 registerAssistantMessages(listMessages);
-registerMatterChangeHook(refreshTemplateDrafts);
+registerMatterChangeHook(async (tx, actor, matterId) => {
+  await refreshTemplateDrafts(tx, actor, matterId);
+  await queueTerminatedServiceCheckouts(tx, actor, matterId);
+});
 app.post("/api/auth/sign-in/email", requestLimiter("sign-in", 5));
 app.post(
   "/api/auth/request-password-reset",
@@ -150,6 +156,7 @@ app.use(
 app.use("/api/v1/operations", createOperationsRouter());
 app.use("/api/v1", createIdentityRouter(auth));
 app.use("/api/v1/matters", createMattersRouter());
+app.use("/api/v1/contacts", createContactsRouter());
 app.use("/api/v1/documents", createDocumentsRouter());
 app.use("/api/v1/intakes", createIntakeRouter());
 app.use("/api/v1/intake", createIntakeRouter());
@@ -158,6 +165,7 @@ app.use("/api/v1/billing", createBillingRouter());
 app.use("/api/v1/ai", createAIRouter());
 app.use("/api/v1/assistant", createAssistantRouter());
 app.use("/api/v1/communications", createCommunicationsRouter());
+app.use("/api/v1/reminders", createPrivateReminderRouter());
 app.use("/api/v1/workflows", createWorkflowsRouter());
 app.use("/api/v1/dotloop", createDotloopRouter());
 app.get(

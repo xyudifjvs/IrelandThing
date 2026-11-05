@@ -7,11 +7,12 @@ import {
   createCommunicationsService,
   createCommunicationJobHandlers,
   refreshTemplateDrafts,
+  createPrivateReminderService,
 } from "@weatherly/communications";
 import { registerMatterChangeHook } from "@weatherly/matters";
 import { syncDotloop } from "@weatherly/dotloop";
-import { processReview } from "@weatherly/ai";
-import { recordIntakeGift } from "@weatherly/billing";
+import { processReview, prepareIntakeReview } from "@weatherly/ai";
+import { recordIntakeGift, queueTerminatedServiceCheckouts, expireTerminatedServiceCheckout } from "@weatherly/billing";
 import {
   claimJob,
   executeJob,
@@ -19,12 +20,19 @@ import {
   type JobRegistry,
 } from "../../../packages/platform/src/jobs";
 const id = workerIdentity();
-registerMatterChangeHook(refreshTemplateDrafts);
+registerMatterChangeHook(async (tx, actor, matterId) => {
+  await refreshTemplateDrafts(tx, actor, matterId);
+  await queueTerminatedServiceCheckouts(tx, actor, matterId);
+});
 let stopping = false;
 let lastPoll = Date.now();
 let lastHeartbeat = 0;
 let lastCleanup = 0;
+let lastReminderCheck = 0;
+const privateReminders = createPrivateReminderService();
 const handlers: JobRegistry = {
+  "billing.expire_checkout": (payload) => expireTerminatedServiceCheckout(payload),
+  "reminder.digest": (payload) => privateReminders.handleDigest(payload),
   "dotloop.sync": async (payload) => {
     const { linkId } = z.object({ linkId: z.string() }).parse(payload);
     await syncDotloop(linkId);
@@ -39,6 +47,7 @@ const handlers: JobRegistry = {
       .object({ matterId: z.string(), submissionId: z.string() })
       .parse(payload);
     await recordIntakeGift(input.matterId, input.submissionId);
+    await prepareIntakeReview(input.matterId, input.submissionId);
   },
 };
 const health = createServer(async (req, res) => {
@@ -86,6 +95,10 @@ while (!stopping) {
         where: { lastSeenAt: { lt: old } },
       });
       lastCleanup = lastPoll;
+    }
+    if (lastPoll - lastReminderCheck >= 60000) {
+      await privateReminders.enqueueScheduled();
+      lastReminderCheck = lastPoll;
     }
     if (job) await executeJob(id, job, handlers);
     else await delay(1000);

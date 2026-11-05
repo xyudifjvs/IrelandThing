@@ -1,3 +1,19 @@
+import { fileReviewPending } from "./file-review";
+import {
+  deadlineDetails,
+  deadlineProjection,
+  projectDeadlineFields,
+  audienceAllows,
+} from "./deadline-fields";
+export { fileReviewPending } from "./file-review";
+import {
+  taskVisibility,
+  taskNote,
+  taskAppointment,
+  taskDetails,
+  projectTaskFields,
+  agentMatterDetails,
+} from "./task-fields";
 import {
   applyInitialWorkflow,
   recalculateWorkflow,
@@ -66,6 +82,7 @@ export const matterInput = z
       });
   });
 const stages = [
+  "pending_review",
   "listing",
   "under_contract",
   "closing",
@@ -95,8 +112,17 @@ export async function requireMatter(
   if (!matter) throw new HttpError(404, "MATTER_NOT_FOUND", "Matter not found");
   if (write) {
     assertCoordinator(actor);
-    if (db !== prisma)
+    if (db !== prisma) {
       await db.$queryRaw`SELECT "id" FROM "Matter" WHERE "id" = ${id} FOR UPDATE`;
+      // A competing writer may have committed while this lock was waiting.
+      // Validate the authorized, current row rather than the pre-lock snapshot.
+      const current = await db.matter.findFirst({
+        where: { id, ...matterScope(actor) },
+      });
+      if (!current)
+        throw new HttpError(404, "MATTER_NOT_FOUND", "Matter not found");
+      return current;
+    }
   }
   return matter;
 }
@@ -122,7 +148,13 @@ export async function audit(
 }
 export async function listMatters(
   actor: Principal,
-  query: { q?: string; stage?: string; cursor?: string; limit?: number } = {},
+  query: {
+    q?: string;
+    stage?: string;
+    cursor?: string;
+    limit?: number;
+    order?: "id";
+  } = {},
 ) {
   const limit = z
     .number()
@@ -147,61 +179,77 @@ export async function listMatters(
         query.stage ? { stage: query.stage } : {},
       ],
     },
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    // Internal portfolio scans require an immutable ordering. Keep the normal
+    // workspace order while allowing a complete scan to survive ordinary edits.
+    orderBy:
+      query.order === "id"
+        ? [{ id: "asc" }]
+        : [{ updatedAt: "desc" }, { id: "desc" }],
     ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     take: limit,
     include: {
       tasks: {
         orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-        where:
-          actor.role === "coordinator"
-            ? {}
-            : {
-                visibility:
-                  actor.role === "client"
-                    ? "client"
-                    : { in: ["agent", "client"] },
-              },
       },
       deadlines: true,
     },
   });
-  const projected = rows.map((matter) => ({
-    ...matter,
-    tasks: approvedWorkflowTaskDates(
-      matter.tasks,
+  const projected = rows.map((matter) => {
+    const dates = deadlineProjection(
       matter.deadlines,
+      matter.tasks,
       matter.details,
-    ),
-    deadlines:
-      actor.role === "coordinator"
-        ? matter.deadlines
-        : matter.deadlines.filter(
-            (deadline) => deadline.status === "confirmed",
-          ),
-  }));
+      actor.role,
+    );
+    return {
+      ...matter,
+      tasks:
+        actor.role !== "coordinator" && fileReviewPending(matter)
+          ? []
+          : approvedWorkflowTaskDates(
+              matter.tasks,
+              matter.deadlines,
+              matter.details,
+            )
+              .filter((task) => audienceAllows(task.visibility, actor.role))
+              .map((task) => projectTaskFields(dates.task(task))),
+      deadlines:
+        actor.role !== "coordinator" && fileReviewPending(matter)
+          ? []
+          : dates.deadlines,
+    };
+  });
   return actor.role === "client"
-    ? projected.map((m) => ({
-        id: m.id,
-        title: m.title,
-        propertyAddress: m.propertyAddress,
-        side: m.side,
-        stage: m.stage,
-        revision: m.revision,
-        createdAt: m.createdAt,
-        updatedAt: m.updatedAt,
-        tasks: m.tasks.map(({ details: _, ...t }, position) => ({
-          ...t,
-          position,
-        })),
-        deadlines: m.deadlines.map(
-          ({ details: _, sourceDocumentId: __, ...d }) => d,
-        ),
-      }))
+    ? projected
+        .filter((m) => !fileReviewPending(m))
+        .map((m) => ({
+          id: m.id,
+          title: m.title,
+          propertyAddress: m.propertyAddress,
+          side: m.side,
+          stage: m.stage,
+          revision: m.revision,
+          createdAt: m.createdAt,
+          updatedAt: m.updatedAt,
+          tasks: m.tasks.map(({ details: _, ...t }, position) => ({
+            ...t,
+            position,
+          })),
+          deadlines: m.deadlines.map(
+            ({ details: _, sourceDocumentId: __, ...d }) => d,
+          ),
+        }))
     : actor.role === "agent"
       ? projected.map((matter) => ({
           ...matter,
-          tasks: matter.tasks.map((task, position) => ({ ...task, position })),
+          details: agentMatterDetails(matter.details),
+          tasks: matter.tasks.map(({ details: _, ...task }, position) => ({
+            ...task,
+            position,
+          })),
+          deadlines: matter.deadlines.map(
+            ({ details: _, sourceDocumentId: __, ...deadline }) => deadline,
+          ),
         }))
       : projected;
 }
@@ -218,7 +266,6 @@ export async function getMatter(actor: Principal, id: string) {
     where: { id },
     include: {
       tasks: {
-        where: v,
         orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       },
       deadlines: { orderBy: { createdAt: "asc" } },
@@ -241,15 +288,28 @@ export async function getMatter(actor: Principal, id: string) {
       },
     },
   });
-  matter.tasks = approvedWorkflowTaskDates(
-    matter.tasks,
+  if (actor.role === "client" && fileReviewPending(matter))
+    throw new HttpError(404, "MATTER_NOT_FOUND", "Matter not found");
+  const dates = deadlineProjection(
     matter.deadlines,
+    matter.tasks,
     matter.details,
+    actor.role,
   );
-  if (actor.role !== "coordinator")
-    matter.deadlines = matter.deadlines.filter(
-      (deadline) => deadline.status === "confirmed",
-    );
+  matter.tasks =
+    actor.role !== "coordinator" && fileReviewPending(matter)
+      ? []
+      : approvedWorkflowTaskDates(
+          matter.tasks,
+          matter.deadlines,
+          matter.details,
+        )
+          .filter((task) => audienceAllows(task.visibility, actor.role))
+          .map((task) => projectTaskFields(dates.task(task)));
+  matter.deadlines =
+    actor.role !== "coordinator" && fileReviewPending(matter)
+      ? []
+      : dates.deadlines;
   if (actor.role === "client")
     return {
       id: matter.id,
@@ -260,10 +320,13 @@ export async function getMatter(actor: Principal, id: string) {
       revision: matter.revision,
       createdAt: matter.createdAt,
       updatedAt: matter.updatedAt,
-      tasks: matter.tasks.map(({ details: _, ...t }, position) => ({
-        ...t,
-        position,
-      })),
+      tasks: matter.tasks.map((task, position) => {
+        const { details: _, ...t } = projectTaskFields(task);
+        return {
+          ...t,
+          position,
+        };
+      }),
       deadlines: matter.deadlines
         .filter((d) => d.status === "confirmed")
         .map(({ details: _, sourceDocumentId: __, ...d }) => d),
@@ -273,7 +336,14 @@ export async function getMatter(actor: Principal, id: string) {
   return actor.role === "agent"
     ? {
         ...matter,
-        tasks: matter.tasks.map((task, position) => ({ ...task, position })),
+        details: agentMatterDetails(matter.details),
+        tasks: matter.tasks.map(({ details: _, ...task }, position) => ({
+          ...task,
+          position,
+        })),
+        deadlines: matter.deadlines.map(
+          ({ details: _, sourceDocumentId: __, ...deadline }) => deadline,
+        ),
       }
     : matter;
 }
@@ -287,6 +357,15 @@ export async function createMatter(actor: Principal, input: unknown) {
       "Full Listing is coming soon and cannot be created as a new service.",
     );
   return prisma.$transaction(async (tx) => {
+    const service = await tx.catalogItem.findUnique({
+      where: { code: data.packageCode },
+    });
+    if (!service?.approved)
+      throw new HttpError(
+        409,
+        "CATALOG_UNAPPROVED",
+        "Review the designated service before creating a new file.",
+      );
     if (data.agentId) {
       const agent = await tx.user.findFirst({
         where: { id: data.agentId, role: "agent" },
@@ -299,7 +378,19 @@ export async function createMatter(actor: Principal, input: unknown) {
         ...data,
         stage:
           data.packageCode === "full_listing" ? "listing" : "under_contract",
-        details: data.details as Prisma.InputJsonValue,
+        details: {
+          ...data.details,
+          serviceSnapshot: {
+            code: service.code,
+            name: service.name,
+            priceCents: service.priceCents,
+            currency: service.currency,
+            revision: service.revision,
+            dueAtClosing: true,
+            noFeeIfTerminatedBeforeClosing: true,
+            capturedAt: new Date().toISOString(),
+          },
+        } as Prisma.InputJsonValue,
       },
     });
     await applyInitialWorkflow(tx, actor, matter.id);
@@ -327,6 +418,7 @@ export async function updateMatter(
   return prisma.$transaction(async (tx) => {
     const old = await requireMatter(actor, id, true, tx);
     const allowed: Record<string, readonly string[]> = {
+      pending_review: ["terminated", "archived"],
       listing: ["under_contract", "terminated", "archived"],
       under_contract: ["closing", "terminated", "archived"],
       closing: ["closed", "under_contract", "terminated"],
@@ -334,6 +426,12 @@ export async function updateMatter(
       terminated: ["archived"],
       archived: [],
     };
+    if (fileReviewPending(old) && data.stage === "under_contract")
+      throw new HttpError(
+        409,
+        "FILE_REVIEW_REQUIRED",
+        "Confirm the initial file review before opening an active timeline.",
+      );
     if (
       data.stage &&
       data.stage !== old.stage &&
@@ -350,6 +448,37 @@ export async function updateMatter(
     )
       throw new HttpError(422, "INVALID_AGENT", "Assign an existing agent");
     const { expectedRevision, ...patch } = data;
+    const priorDetails = json.parse(old.details);
+    if (patch.details) {
+      if (priorDetails.serviceSnapshot !== undefined)
+        patch.details.serviceSnapshot = priorDetails.serviceSnapshot;
+      else delete patch.details.serviceSnapshot;
+    }
+    if (data.stage === "terminated" && old.stage !== "terminated") {
+      // Closed files cannot enter this path. Preserve the original lifecycle
+      // decision so later archival does not make a canceled checkout payable.
+      patch.details = {
+        ...priorDetails,
+        ...(patch.details || {}),
+        termination: {
+          beforeClosing: [
+            "pending_review",
+            "listing",
+            "under_contract",
+            "closing",
+          ].includes(old.stage),
+          fromStage: old.stage,
+          at: new Date().toISOString(),
+          byId: actor.id,
+        },
+      };
+    } else if (patch.details && priorDetails.termination) {
+      // Ordinary detail edits retain the recorded termination history.
+      patch.details = {
+        ...patch.details,
+        termination: priorDetails.termination,
+      };
+    }
     const result = await tx.matter.updateMany({
       where: { id, revision: expectedRevision },
       data: {
@@ -386,9 +515,11 @@ const taskInput = z
         "not_applicable",
       ])
       .default("pending"),
-    visibility: z.enum(["coordinator", "agent", "client"]).default("agent"),
+    visibility: taskVisibility.default("agent"),
     dueDate: dateOnly.nullable().optional(),
-    details: json.default({}),
+    note: taskNote.optional(),
+    appointmentAt: taskAppointment.optional(),
+    details: taskDetails.default({}),
   })
   .strict();
 const deadlineInput = z
@@ -399,7 +530,8 @@ const deadlineInput = z
       .enum(["unknown", "proposed", "confirmed", "rejected"])
       .default("unknown"),
     sourceDocumentId: z.string().nullable().optional(),
-    details: json.default({}),
+    visibility: taskVisibility.optional(),
+    details: deadlineDetails.default({}),
   })
   .strict();
 const noteInput = z
@@ -415,7 +547,8 @@ export async function addTask(
   matterId: string,
   input: unknown,
 ) {
-  const data = taskInput.parse(input);
+  assertCoordinator(actor);
+  const { note, appointmentAt, ...data } = taskInput.parse(input);
   return prisma.$transaction(async (tx) => {
     await requireMatter(actor, matterId, true, tx);
     const last = await tx.task.aggregate({
@@ -427,7 +560,11 @@ export async function addTask(
         ...data,
         matterId,
         position: (last._max.position ?? -1) + 1,
-        details: data.details as Prisma.InputJsonValue,
+        details: {
+          ...data.details,
+          ...(note !== undefined ? { note } : {}),
+          ...(appointmentAt !== undefined ? { appointmentAt } : {}),
+        } as Prisma.InputJsonValue,
       },
     });
     await audit(tx, actor, "task.created", "Task", row.id, matterId);
@@ -436,7 +573,7 @@ export async function addTask(
       data: { revision: { increment: 1 } },
     });
     await matterChanged(tx, actor, matterId);
-    return row;
+    return projectTaskFields(row);
   });
 }
 export async function addDeadline(
@@ -444,9 +581,9 @@ export async function addDeadline(
   matterId: string,
   input: unknown,
 ) {
-  const data = deadlineInput.parse(input);
+  const { visibility, details, ...data } = deadlineInput.parse(input);
   return prisma.$transaction(async (tx) => {
-    await requireMatter(actor, matterId, true, tx);
+    const matter = await requireMatter(actor, matterId, true, tx);
     if (
       data.sourceDocumentId &&
       !(await tx.document.findFirst({
@@ -462,11 +599,17 @@ export async function addDeadline(
       data: {
         ...data,
         matterId,
-        details: data.details as Prisma.InputJsonValue,
+        details: {
+          ...details,
+          visibility: visibility ?? details.visibility ?? "coordinator",
+        } as Prisma.InputJsonValue,
       },
     });
     await audit(tx, actor, "deadline.created", "Deadline", row.id, matterId, {
-      value: data as Prisma.InputJsonValue,
+      value: {
+        ...data,
+        visibility: visibility ?? details.visibility ?? "coordinator",
+      } as Prisma.InputJsonValue,
     });
     await tx.matter.update({
       where: { id: matterId },
@@ -474,7 +617,11 @@ export async function addDeadline(
     });
     await recalculateWorkflow(tx, actor, matterId);
     await matterChanged(tx, actor, matterId);
-    return row;
+    return projectDeadlineFields(
+      row,
+      await tx.task.findMany({ where: { matterId } }),
+      matter.details,
+    );
   });
 }
 export async function addNote(
@@ -492,6 +639,69 @@ export async function addNote(
     return row;
   });
 }
+async function resolveDateFollowup(
+  tx: Prisma.TransactionClient,
+  actor: Principal,
+  matterId: string,
+  deadlineId: string,
+) {
+  const deadline = await tx.deadline.findUnique({ where: { id: deadlineId } });
+  if (!deadline || deadline.status !== "confirmed" || !deadline.date) return;
+  const done = await tx.task.updateMany({
+    where: {
+      matterId,
+      kind: "unresolved_date",
+      details: { path: ["deadlineId"], equals: deadlineId },
+      status: { not: "completed" },
+    },
+    data: { status: "completed", revision: { increment: 1 } },
+  });
+  const matter = await tx.matter.findUniqueOrThrow({ where: { id: matterId } });
+  const details =
+    matter.details &&
+    typeof matter.details === "object" &&
+    !Array.isArray(matter.details)
+      ? matter.details
+      : {};
+  const fileReview =
+    details.fileReview &&
+    typeof details.fileReview === "object" &&
+    !Array.isArray(details.fileReview)
+      ? details.fileReview
+      : {};
+  if (Array.isArray(fileReview.unresolvedDates))
+    await tx.matter.update({
+      where: { id: matterId },
+      data: {
+        details: {
+          ...details,
+          fileReview: {
+            ...fileReview,
+            unresolvedDates: fileReview.unresolvedDates.filter(
+              (item) =>
+                !(
+                  item &&
+                  typeof item === "object" &&
+                  !Array.isArray(item) &&
+                  item.deadlineId === deadlineId
+                ),
+            ),
+          },
+        },
+      },
+    });
+  if (done.count)
+    await audit(
+      tx,
+      actor,
+      "deadline.unresolved_followup_resolved",
+      "Deadline",
+      deadlineId,
+      matterId,
+      { date: deadline.date, taskCount: done.count },
+    );
+}
+
 async function updateChild(
   actor: Principal,
   matterId: string,
@@ -517,10 +727,12 @@ async function updateChild(
                 "not_applicable",
               ])
               .optional(),
-            visibility: z.enum(["coordinator", "agent", "client"]).optional(),
+            visibility: taskVisibility.optional(),
             dueDate: dateOnly.nullable().optional(),
+            note: taskNote.optional(),
+            appointmentAt: taskAppointment.optional(),
             position: z.number().int().min(0).max(1000000).optional(),
-            details: json.optional(),
+            details: taskDetails.optional(),
           })
           .strict()
       : kind === "deadline"
@@ -532,7 +744,8 @@ async function updateChild(
                 .enum(["unknown", "proposed", "confirmed", "rejected"])
                 .optional(),
               sourceDocumentId: z.string().nullable().optional(),
-              details: json.optional(),
+              visibility: taskVisibility.optional(),
+              details: deadlineDetails.optional(),
             })
             .strict()
         : z
@@ -587,6 +800,24 @@ async function updateChild(
       return { deleted: true };
     }
     const patch: Record<string, unknown> = { ...data };
+    if (kind === "task" && ("note" in data || "appointmentAt" in data)) {
+      const previous =
+        old.details &&
+        typeof old.details === "object" &&
+        !Array.isArray(old.details)
+          ? old.details
+          : {};
+      patch.details = {
+        ...previous,
+        ...("details" in data ? data.details : {}),
+        ...("note" in data ? { note: data.note } : {}),
+        ...("appointmentAt" in data
+          ? { appointmentAt: data.appointmentAt }
+          : {}),
+      };
+      delete patch.note;
+      delete patch.appointmentAt;
+    }
     if (kind === "task" && "position" in data) {
       if (old.revision !== expectedRevision)
         throw new HttpError(
@@ -609,7 +840,10 @@ async function updateChild(
           });
       }
     }
-    if (kind === "deadline" && "date" in data) {
+    if (
+      kind === "deadline" &&
+      ("date" in data || "visibility" in data || "details" in data)
+    ) {
       patch.details = {
         ...(old.details &&
         typeof old.details === "object" &&
@@ -617,8 +851,10 @@ async function updateChild(
           ? old.details
           : {}),
         ...("details" in data ? data.details : {}),
-        manualOverride: true,
+        ...("visibility" in data ? { visibility: data.visibility } : {}),
+        ...("date" in data ? { manualOverride: true } : {}),
       };
+      delete patch.visibility;
     }
     const changed = await delegate.updateMany({
       where: { id, matterId, revision: expectedRevision },
@@ -638,10 +874,21 @@ async function updateChild(
         where: { id: matterId },
         data: { revision: { increment: 1 } },
       });
-      if (kind === "deadline") await recalculateWorkflow(tx, actor, matterId);
+      if (kind === "deadline") {
+        await recalculateWorkflow(tx, actor, matterId);
+        await resolveDateFollowup(tx, actor, matterId, id);
+      }
       await matterChanged(tx, actor, matterId);
     }
-    return delegate.findUniqueOrThrow({ where: { id } });
+    const updated = await delegate.findUniqueOrThrow({ where: { id } });
+    if (kind === "deadline")
+      return projectDeadlineFields(
+        await tx.deadline.findUniqueOrThrow({ where: { id } }),
+        await tx.task.findMany({ where: { matterId } }),
+        (await tx.matter.findUniqueOrThrow({ where: { id: matterId } }))
+          .details,
+      );
+    return kind === "task" ? projectTaskFields(updated) : updated;
   });
 }
 /** Reorder the complete canonical task set without overwriting a concurrent edit. */
@@ -702,9 +949,365 @@ export async function reorderTasks(
   });
 }
 
+type UnresolvedAcknowledgement = {
+  proposalId?: string;
+  deadlineId?: string;
+  label: string;
+};
+async function pendingFileReview(
+  tx: Prisma.TransactionClient,
+  matter: Awaited<ReturnType<typeof requireMatter>>,
+) {
+  const proposals = await tx.aIProposal.findMany({
+    where: {
+      matterId: matter.id,
+      kind: "contract",
+      status: { in: ["queued", "processing", "pending", "resolved"] },
+    },
+  });
+  const dates = await tx.deadline.findMany({
+    where: { matterId: matter.id, status: { in: ["unknown", "proposed"] } },
+  });
+  const acknowledgements: UnresolvedAcknowledgement[] = dates.map((date) => ({
+    deadlineId: date.id,
+    label: date.label,
+  }));
+  for (const proposal of proposals.filter(
+    (p) => p.status === "pending" || p.status === "resolved",
+  )) {
+    const result = proposal.result as {
+      deadlines?: { label?: string; date?: unknown }[];
+      timingRules?: { label?: string }[];
+      conflicts?: { kind?: string; field?: string }[];
+    };
+    const labels = new Set(
+      [
+        // An applicable finding with no proposed date still needs an explicit
+        // unresolved disposition and follow-up before the file is published.
+        ...(result.deadlines || []).map((d) => d.label),
+        ...(result.timingRules || []).map((rule) => rule.label),
+      ].filter((label): label is string => !!label),
+    );
+    const resolvedLabels =
+      proposal.status === "resolved"
+        ? new Set(
+            (result.conflicts || [])
+              .filter((conflict) => conflict.kind === "deadline")
+              .map((conflict) => conflict.field),
+          )
+        : new Set<string>();
+    for (const label of labels)
+      if (!resolvedLabels.has(label))
+        acknowledgements.push({ proposalId: proposal.id, label });
+  }
+  const details =
+    matter.details &&
+    typeof matter.details === "object" &&
+    !Array.isArray(matter.details)
+      ? matter.details
+      : {};
+  const conflicts = Array.isArray(details.sourceConflicts)
+    ? details.sourceConflicts
+    : [];
+  const processing = proposals
+    .filter((p) => p.status === "queued" || p.status === "processing")
+    .map((p) => p.id);
+  return {
+    matterId: matter.id,
+    expectedRevision: matter.revision,
+    pending: fileReviewPending(matter),
+    acknowledgements,
+    blockers: [
+      ...(conflicts.length
+        ? [
+            {
+              code: "SOURCE_CONFLICT_REVIEW_REQUIRED",
+              message:
+                "Choose or correct source conflicts before confirming the file.",
+            },
+          ]
+        : []),
+      ...(processing.length
+        ? [
+            {
+              code: "DATE_REVIEW_PROCESSING",
+              message:
+                "Wait for source extraction to finish before confirming the file.",
+              proposalIds: processing,
+            },
+          ]
+        : []),
+    ],
+  };
+}
+export async function getFileReview(actor: Principal, matterId: string) {
+  assertCoordinator(actor);
+  return prisma.$transaction(async (tx) =>
+    pendingFileReview(tx, await requireMatter(actor, matterId, false, tx)),
+  );
+}
+/** Ireland may retain an explicitly acknowledged date as unresolved; never invent one. */
+export async function confirmFile(
+  actor: Principal,
+  matterId: string,
+  input: unknown,
+) {
+  assertCoordinator(actor);
+  const data = z
+    .object({
+      expectedRevision: revision,
+      acknowledgedUnresolved: z
+        .array(
+          z
+            .object({
+              proposalId: z.string().optional(),
+              deadlineId: z.string().optional(),
+              label: z.string().min(1).max(200),
+              reason: z.string().min(1).max(1000),
+            })
+            .strict(),
+        )
+        .max(200)
+        .default([]),
+    })
+    .strict()
+    .parse(input);
+  return prisma.$transaction(async (tx) => {
+    const matter = await requireMatter(actor, matterId, true, tx);
+    if (!fileReviewPending(matter) || matter.stage !== "pending_review")
+      throw new HttpError(
+        409,
+        "FILE_ALREADY_CONFIRMED",
+        "This file is not awaiting initial review.",
+      );
+    const state = await pendingFileReview(tx, matter);
+    if (state.blockers.length)
+      throw new HttpError(
+        409,
+        state.blockers[0].code,
+        state.blockers[0].message,
+      );
+    const matches = (
+      expected: UnresolvedAcknowledgement,
+      supplied: (typeof data.acknowledgedUnresolved)[number],
+    ) =>
+      expected.label === supplied.label &&
+      expected.proposalId === supplied.proposalId &&
+      expected.deadlineId === supplied.deadlineId;
+    if (
+      state.acknowledgements.some(
+        (expected) =>
+          !data.acknowledgedUnresolved.some((supplied) =>
+            matches(expected, supplied),
+          ),
+      )
+    )
+      throw new HttpError(
+        409,
+        "DATE_REVIEW_REQUIRED",
+        "Approve the remaining dates or explicitly acknowledge each unresolved date with a reason.",
+      );
+    if (
+      data.acknowledgedUnresolved.some(
+        (supplied) =>
+          !state.acknowledgements.some((expected) =>
+            matches(expected, supplied),
+          ),
+      )
+    )
+      throw new HttpError(
+        422,
+        "INVALID_UNRESOLVED_ACKNOWLEDGEMENT",
+        "Acknowledge only unresolved dates returned by the current file review.",
+      );
+    const details =
+      matter.details &&
+      typeof matter.details === "object" &&
+      !Array.isArray(matter.details)
+        ? matter.details
+        : {};
+    const unresolved: ((typeof data.acknowledgedUnresolved)[number] & {
+      deadlineId: string;
+    })[] = [];
+    for (const acknowledgement of data.acknowledgedUnresolved) {
+      const existing = acknowledgement.deadlineId
+        ? await tx.deadline.findFirst({
+            where: { id: acknowledgement.deadlineId, matterId },
+          })
+        : await tx.deadline.findFirst({
+            where: { matterId, label: acknowledgement.label },
+          });
+      const previous =
+        existing?.details &&
+        typeof existing.details === "object" &&
+        !Array.isArray(existing.details)
+          ? existing.details
+          : {};
+      const evidence = {
+        ...previous,
+        visibility: previous.visibility ?? "coordinator",
+        ...(existing
+          ? {
+              unresolvedPriorDate: existing.date,
+              unresolvedPriorStatus: existing.status,
+            }
+          : {}),
+        fileReviewUnresolved: true,
+        reason: acknowledgement.reason,
+        ...(acknowledgement.proposalId
+          ? { sourceProposalId: acknowledgement.proposalId }
+          : {}),
+        acknowledgedById: actor.id,
+        acknowledgedAt: new Date().toISOString(),
+        manualOverride: true,
+      };
+      const date = existing
+        ? await tx.deadline.update({
+            where: { id: existing.id },
+            data: {
+              date: null,
+              status: "unknown",
+              details: evidence,
+              revision: { increment: 1 },
+            },
+          })
+        : await tx.deadline.create({
+            data: {
+              matterId,
+              label: acknowledgement.label,
+              date: null,
+              status: "unknown",
+              details: evidence,
+            },
+          });
+      await audit(
+        tx,
+        actor,
+        "deadline.initial_review_left_unresolved",
+        "Deadline",
+        date.id,
+        matterId,
+        {
+          before: existing ? JSON.parse(JSON.stringify(existing)) : null,
+          acknowledgement,
+        },
+      );
+      if (!unresolved.some((item) => item.deadlineId === date.id)) {
+        unresolved.push({ ...acknowledgement, deadlineId: date.id });
+        await tx.task.create({
+          data: {
+            matterId,
+            title: "Resolve date: " + acknowledgement.label,
+            kind: "unresolved_date",
+            visibility: "coordinator",
+            details: {
+              deadlineId: date.id,
+              reason: acknowledgement.reason,
+              ...(acknowledgement.proposalId
+                ? { sourceProposalId: acknowledgement.proposalId }
+                : {}),
+            },
+          },
+        });
+      }
+    }
+    const proposalIds = [
+      ...new Set(
+        data.acknowledgedUnresolved.flatMap((item) =>
+          item.proposalId ? [item.proposalId] : [],
+        ),
+      ),
+    ];
+    for (const proposalId of proposalIds) {
+      const proposal = await tx.aIProposal.findUniqueOrThrow({
+        where: { id: proposalId },
+      });
+      await tx.aIProposal.update({
+        where: { id: proposalId },
+        data: {
+          status: "acknowledged_unresolved",
+          reviewedById: actor.id,
+          reviewedAt: new Date(),
+          result: {
+            ...(proposal.result as Record<string, Prisma.InputJsonValue>),
+            acknowledgedUnresolved: data.acknowledgedUnresolved.filter(
+              (item) => item.proposalId === proposalId,
+            ),
+          },
+        },
+      });
+    }
+    const fileReview =
+      details.fileReview &&
+      typeof details.fileReview === "object" &&
+      !Array.isArray(details.fileReview)
+        ? details.fileReview
+        : {};
+    const changed = await tx.matter.updateMany({
+      where: { id: matterId, revision: data.expectedRevision },
+      data: {
+        stage: "under_contract",
+        details: {
+          ...details,
+          fileReview: {
+            ...fileReview,
+            status: "confirmed",
+            reviewedById: actor.id,
+            reviewedAt: new Date().toISOString(),
+            unresolvedDates: unresolved,
+          },
+        },
+        revision: { increment: 1 },
+      },
+    });
+    if (!changed.count)
+      throw new HttpError(
+        409,
+        "REVISION_CONFLICT",
+        "The file changed. Review its current version before confirming.",
+      );
+    await applyInitialWorkflow(tx, actor, matterId);
+    await tx.task.updateMany({
+      where: { matterId, kind: "manual_review" },
+      data: { status: "completed", revision: { increment: 1 } },
+    });
+    await audit(
+      tx,
+      actor,
+      "matter.initial_file_confirmed",
+      "Matter",
+      matterId,
+      matterId,
+      {
+        beforeRevision: matter.revision,
+        acknowledgedUnresolved: data.acknowledgedUnresolved,
+      },
+    );
+    await matterChanged(tx, actor, matterId);
+    return tx.matter.findUniqueOrThrow({
+      where: { id: matterId },
+      include: { tasks: true, deadlines: true },
+    });
+  });
+}
+
 export function createMattersRouter() {
   const router = Router();
   router.use(checklistPrivacyHeaders);
+  router.get(
+    "/:id/file-review",
+    asyncHandler(async (req, res) =>
+      res.json(await getFileReview(principal(req), String(req.params.id))),
+    ),
+  );
+  router.post(
+    "/:id/confirm-file",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await confirmFile(principal(req), String(req.params.id), req.body),
+      ),
+    ),
+  );
   registerChecklistShareRoutes(router);
   router.post(
     "/:id/tasks/reorder",
@@ -923,6 +1526,53 @@ export async function applyReviewedFacts(
     .parse(input);
   const apply = async (tx: Prisma.TransactionClient) => {
     const matter = await requireMatter(actor, matterId, true, tx);
+    const labels = data.deadlines.map((deadline) =>
+      deadline.label.replace(/\s+/g, " ").trim().toLowerCase(),
+    );
+    const selectedDates = new Map<string, string>();
+    for (const [index, label] of labels.entries()) {
+      if (
+        selectedDates.has(label) &&
+        selectedDates.get(label) !== data.deadlines[index].date
+      )
+        throw new HttpError(
+          422,
+          "SOURCE_CONFLICT_REVIEW_REQUIRED",
+          "Choose one value per deadline; conflicting source dates cannot be applied together.",
+        );
+      selectedDates.set(label, data.deadlines[index].date);
+    }
+    const currentDetails =
+      matter.details &&
+      typeof matter.details === "object" &&
+      !Array.isArray(matter.details)
+        ? matter.details
+        : {};
+    const markers = Array.isArray(currentDetails.sourceConflicts)
+      ? currentDetails.sourceConflicts
+      : [];
+    if (
+      markers.some(
+        (marker) =>
+          marker &&
+          typeof marker === "object" &&
+          !Array.isArray(marker) &&
+          ((marker.kind === "fact" &&
+            typeof marker.field === "string" &&
+            data.facts &&
+            Object.hasOwn(data.facts, marker.field)) ||
+            (marker.kind === "deadline" &&
+              typeof marker.label === "string" &&
+              labels.includes(
+                marker.label.replace(/\s+/g, " ").trim().toLowerCase(),
+              ))),
+      )
+    )
+      throw new HttpError(
+        409,
+        "SOURCE_CONFLICT_REVIEW_REQUIRED",
+        "Resolve the flagged source conflict before applying an authoritative value.",
+      );
     const changed = await tx.matter.updateMany({
       where: { id: matterId, revision: data.expectedRevision },
       data: { revision: { increment: 1 } },
@@ -1011,7 +1661,7 @@ export async function applyReviewedFacts(
             date: proposed.date,
             status: "confirmed",
             sourceDocumentId: doc.id,
-            details,
+            details: { ...details, visibility: "coordinator" },
           },
         });
       }
@@ -1031,17 +1681,34 @@ export async function applyReviewedFacts(
       );
     }
     await recalculateWorkflow(tx, actor, matterId, { approvedDeadlineIds });
+    for (const deadlineId of approvedDeadlineIds)
+      await resolveDateFollowup(tx, actor, matterId, deadlineId);
     await matterChanged(tx, actor, matterId);
     if (data.facts) {
+      const latest = await tx.matter.findUniqueOrThrow({
+        where: { id: matterId },
+      });
       const previous =
-        matter.details &&
-        typeof matter.details === "object" &&
-        !Array.isArray(matter.details)
-          ? matter.details
+        latest.details &&
+        typeof latest.details === "object" &&
+        !Array.isArray(latest.details)
+          ? latest.details
           : {};
       await tx.matter.update({
         where: { id: matterId },
-        data: { details: { ...previous, confirmedFacts: data.facts } },
+        data: {
+          details: {
+            ...previous,
+            confirmedFacts: {
+              ...(previous.confirmedFacts &&
+              typeof previous.confirmedFacts === "object" &&
+              !Array.isArray(previous.confirmedFacts)
+                ? previous.confirmedFacts
+                : {}),
+              ...data.facts,
+            },
+          },
+        },
       });
     }
     await audit(

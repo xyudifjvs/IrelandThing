@@ -1,6 +1,9 @@
 import { publicMetadata } from "../_lib/seo";
-export const metadata = publicMetadata("/");
-import { About } from "./_components/Marketing";
+import ReferenceSitePage from "./_components/ReferenceSitePage";
+export const metadata = {
+  ...publicMetadata("/"),
+  title: { absolute: "About Me · Weatherly Transaction Co." },
+};
 export default function Page() {
-  return <About />;
+  return <ReferenceSitePage page="home" />;
 }

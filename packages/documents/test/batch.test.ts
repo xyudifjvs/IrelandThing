@@ -239,7 +239,7 @@ describe("independent batch upload backend checks", () => {
     const common = { matterId, visibility: "agent", category: "other" };
     const first = await upload(
       server,
-      agent,
+      coordinator,
       "first-contract.pdf",
       firstBytes,
       { ...common, uploadRequestId: firstToken },
@@ -247,7 +247,7 @@ describe("independent batch upload backend checks", () => {
     expect(first.status, first.text).toBe(201);
     const rejected = await upload(
       server,
-      agent,
+      coordinator,
       "forged.pdf",
       Buffer.from("not PDF"),
       common,
@@ -255,7 +255,7 @@ describe("independent batch upload backend checks", () => {
     expect(rejected.status, rejected.text).toBe(415);
     const failure = await upload(
       server,
-      agent,
+      coordinator,
       "second-contract.pdf",
       secondBytes,
       { ...common, uploadRequestId: secondToken },
@@ -274,7 +274,7 @@ describe("independent batch upload backend checks", () => {
     ).toBe(false);
     const retry = await upload(
       server,
-      agent,
+      coordinator,
       "second-contract.pdf",
       secondBytes,
       { ...common, uploadRequestId: secondToken },
@@ -296,7 +296,7 @@ describe("independent batch upload backend checks", () => {
         include: { versions: true },
       });
       expect(persisted.matterId).toBe(matterId);
-      expect(persisted.createdById).toBe(agent.id);
+      expect(persisted.createdById).toBe(coordinator.id);
       expect(persisted.versions).toHaveLength(1);
       expect(persisted.versions[0].checksum).toBe(
         createHash("sha256").update(original).digest("hex"),
@@ -309,7 +309,7 @@ describe("independent batch upload backend checks", () => {
         where: { entityId: document.id, action: "document.uploaded" },
       });
       expect(audit).toHaveLength(1);
-      expect(audit[0].actorId).toBe(agent.id);
+      expect(audit[0].actorId).toBe(coordinator.id);
       expect(audit[0].matterId).toBe(matterId);
     }
     const mcpProjection = await queryStoredRecords(agent, {
@@ -325,7 +325,7 @@ describe("independent batch upload backend checks", () => {
   it("preserves original Unicode filenames and serves the exact original bytes after a fresh router", async () => {
     const name = "Éva O’Connor – closing 日本語.pdf";
     const bytes = pdf("Original file bytes");
-    const result = await upload(app(), agent, name, bytes, { matterId });
+    const result = await upload(app(), coordinator, name, bytes, { matterId });
     expect(result.status, result.text).toBe(201);
     expect(result.body.name).toBe(name);
     const download = await request(app(createObjectStore()))
@@ -338,7 +338,7 @@ describe("independent batch upload backend checks", () => {
     );
     expect(download.headers["cache-control"]).toBe("private, no-store");
     const boundaryName = `${"a".repeat(251)}.pdf`;
-    const boundary = await upload(app(), agent, boundaryName, bytes, {
+    const boundary = await upload(app(), coordinator, boundaryName, bytes, {
       matterId,
     });
     expect(boundary.status, boundary.text).toBe(201);
@@ -357,8 +357,8 @@ describe("independent batch upload backend checks", () => {
       uploadRequestId: token,
     };
     const [first, replay] = await Promise.all([
-      upload(server, agent, "idempotent.pdf", bytes, fields),
-      upload(server, agent, "idempotent.pdf", bytes, fields),
+      upload(server, coordinator, "idempotent.pdf", bytes, fields),
+      upload(server, coordinator, "idempotent.pdf", bytes, fields),
     ]);
     expect(first.status, first.text).toBe(201);
     expect(replay.status, replay.text).toBe(201);
@@ -375,16 +375,20 @@ describe("independent batch upload backend checks", () => {
     ).toBe(1);
     const mismatch = await upload(
       server,
-      agent,
+      coordinator,
       "idempotent.pdf",
       pdf("Changed bytes"),
       fields,
     );
     expect(mismatch.status, mismatch.text).toBe(409);
-    const moved = await upload(server, coordinator, "idempotent.pdf", bytes, {
-      ...fields,
-      matterId: otherMatterId,
-    });
+    const { matterId: _matter, ...intakeFields } = fields;
+    const moved = await upload(
+      server,
+      agent,
+      "idempotent.pdf",
+      bytes,
+      intakeFields,
+    );
     // Tokens are actor-scoped: another authorized actor may use the same token.
     expect(moved.status, moved.text).toBe(201);
     const changedMatter = await upload(
@@ -392,21 +396,27 @@ describe("independent batch upload backend checks", () => {
       coordinator,
       "idempotent.pdf",
       bytes,
-      fields,
+      { ...fields, matterId: otherMatterId },
     );
     expect(changedMatter.status, changedMatter.text).toBe(409);
     const changedName = await upload(
       server,
-      agent,
+      coordinator,
       "different-name.pdf",
       bytes,
       fields,
     );
     expect(changedName.status, changedName.text).toBe(409);
-    const changedScope = await upload(server, agent, "idempotent.pdf", bytes, {
-      ...fields,
-      category: "contract",
-    });
+    const changedScope = await upload(
+      server,
+      coordinator,
+      "idempotent.pdf",
+      bytes,
+      {
+        ...fields,
+        category: "contract",
+      },
+    );
     expect(changedScope.status, changedScope.text).toBe(409);
   });
 
@@ -489,7 +499,9 @@ describe("independent batch upload backend checks", () => {
       ["script.pdf", Buffer.from("not PDF"), 415],
       ["huge.pdf", Buffer.alloc(20 * 1024 * 1024 + 1, 65), 413],
     ] as const) {
-      const result = await upload(server, agent, name, data, { matterId });
+      const result = await upload(server, coordinator, name, data, {
+        matterId,
+      });
       expect(result.status, `${name}: ${result.text}`).toBe(expected);
       expect(result.body.error.message).not.toBe(
         "This action could not be completed. Please try again.",
@@ -497,7 +509,7 @@ describe("independent batch upload backend checks", () => {
     }
     const extra = await request(server)
       .post("/documents")
-      .set("x-review-actor", agent.id)
+      .set("x-review-actor", coordinator.id)
       .field("matterId", matterId)
       .attach("file", bytes, "one.pdf")
       .attach("file", bytes, "two.pdf");
@@ -509,7 +521,7 @@ describe("independent batch upload backend checks", () => {
     ]) {
       const incomplete = await request(server)
         .post("/documents")
-        .set("x-review-actor", agent.id)
+        .set("x-review-actor", coordinator.id)
         .set("Content-Type", contentType)
         .send("--unfinished\r\n");
       expect(incomplete.status, incomplete.text).toBe(422);
@@ -519,7 +531,7 @@ describe("independent batch upload backend checks", () => {
     expect(
       await prisma.document.count({
         where: {
-          createdById: agent.id,
+          createdById: coordinator.id,
           name: {
             in: [
               "empty.pdf",
@@ -539,8 +551,10 @@ describe("independent batch upload backend checks", () => {
     const server = app();
     const original = pdf("Original immutable version");
     const updated = pdf("Updated immutable version");
-    const doc = await upload(server, agent, "version-history.pdf", original, {
-      matterId,
+    const doc = await upload(server, agent, "version-history.pdf", original);
+    await prisma.document.update({
+      where: { id: doc.body.id },
+      data: { matterId },
     });
     expect(doc.status, doc.text).toBe(201);
     const url = `/documents/${doc.body.id}/versions`;
@@ -552,7 +566,7 @@ describe("independent batch upload backend checks", () => {
     };
     const version = await upload(
       server,
-      agent,
+      coordinator,
       "amendment-v2.pdf",
       updated,
       fields,
@@ -561,7 +575,7 @@ describe("independent batch upload backend checks", () => {
     expect(version.status, version.text).toBe(201);
     const replay = await upload(
       server,
-      agent,
+      coordinator,
       "amendment-v2.pdf",
       updated,
       fields,
@@ -572,7 +586,7 @@ describe("independent batch upload backend checks", () => {
     expect(version.body.versions[0].originalName).toBe("amendment-v2.pdf");
     const extra = await request(server)
       .post(url)
-      .set("x-review-actor", agent.id)
+      .set("x-review-actor", coordinator.id)
       .attach("file", updated, "a.pdf")
       .attach("file", updated, "b.pdf");
     expect(extra.status, extra.text).toBe(422);
@@ -597,7 +611,7 @@ describe("independent batch upload backend checks", () => {
     expect(latest.headers["content-disposition"]).toContain("amendment-v2.pdf");
     const wrongEndpoint = await upload(
       server,
-      agent,
+      coordinator,
       "amendment-v2.pdf",
       updated,
       fields,
@@ -616,12 +630,144 @@ describe("independent batch upload backend checks", () => {
       url,
     );
     expect(blocked.status).toBe(403);
-    expect(blocked.body.error.code).toBe("SHARED_VERSION_REQUIRES_REVIEW");
+    expect(blocked.body.error.code).toBe("TRANSACTION_READ_ONLY");
     expect(
       await prisma.documentVersion.count({
         where: { documentId: doc.body.id },
       }),
     ).toBe(2);
+  });
+
+  it("keeps ongoing agent documents read-only before object storage while preserving coordinator writes and unassigned intake versions", async () => {
+    let writes = 0;
+    const counted: ObjectStore = {
+      ...store,
+      async put(key, bytes, mime) {
+        writes++;
+        await store.put(key, bytes, mime);
+      },
+    };
+    const server = app(counted),
+      bytes = pdf("Role boundary"),
+      next = pdf("Coordinator revision");
+    const intake = await upload(server, agent, "agent-intake.pdf", bytes);
+    expect(intake.status, intake.text).toBe(201);
+    const intakeVersion = await upload(
+      server,
+      agent,
+      "agent-intake-v2.pdf",
+      next,
+      {},
+      `/documents/${intake.body.id}/versions`,
+    );
+    expect(intakeVersion.status, intakeVersion.text).toBe(201);
+    expect(intakeVersion.body.id).toBe(intake.body.id);
+    await prisma.document.update({
+      where: { id: intake.body.id },
+      data: { matterId },
+    });
+    writes = 0;
+    const deniedCreate = await upload(
+      server,
+      agent,
+      "no-ongoing-create.pdf",
+      bytes,
+      { matterId },
+    );
+    expect(deniedCreate.status).toBe(403);
+    const deniedVersion = await upload(
+      server,
+      agent,
+      "no-ongoing-version.pdf",
+      bytes,
+      {},
+      `/documents/${intake.body.id}/versions`,
+    );
+    expect(deniedVersion.status).toBe(403);
+    expect(deniedVersion.body.error.code).toBe("TRANSACTION_READ_ONLY");
+    expect(writes).toBe(0);
+    const allowedCreate = await upload(
+      server,
+      coordinator,
+      "owner-create.pdf",
+      bytes,
+      { matterId, visibility: "agent" },
+    );
+    expect(allowedCreate.status, allowedCreate.text).toBe(201);
+    const allowedVersion = await upload(
+      server,
+      coordinator,
+      "owner-version.pdf",
+      bytes,
+      {},
+      `/documents/${intake.body.id}/versions`,
+    );
+    expect(allowedVersion.status, allowedVersion.text).toBe(201);
+    const download = await request(server)
+      .get(`/documents/${intake.body.id}/download`)
+      .set("x-review-actor", agent.id);
+    expect(download.status).toBe(200);
+    expect(download.body).toEqual(bytes);
+    const privateDoc = await upload(
+      server,
+      coordinator,
+      "owner-private.pdf",
+      bytes,
+      { matterId, visibility: "coordinator" },
+    );
+    writes = 0;
+    const privateProbe = await upload(
+      server,
+      agent,
+      "private-probe.pdf",
+      bytes,
+      {},
+      `/documents/${privateDoc.body.id}/versions`,
+    );
+    expect(privateProbe.status).toBe(404);
+    expect(writes).toBe(0);
+  });
+
+  it("rejects an agent intake version if the source was assigned during storage and removes the uncommitted object", async () => {
+    const original = pdf("Original intake before assignment"),
+      replacement = pdf("Version racing assignment");
+    const created = await upload(app(), agent, "race-intake.pdf", original);
+    expect(created.status, created.text).toBe(201);
+    let attemptedKey = "",
+      removedKey = "";
+    const racing: ObjectStore = {
+      ...store,
+      async put(key, bytes, mime) {
+        attemptedKey = key;
+        await store.put(key, bytes, mime);
+        await prisma.document.update({
+          where: { id: created.body.id },
+          data: { matterId },
+        });
+      },
+      async remove(key) {
+        removedKey = key;
+        await store.remove(key);
+      },
+    };
+    const result = await upload(
+      app(racing),
+      agent,
+      "racing-version.pdf",
+      replacement,
+      { uploadRequestId: randomUUID() },
+      `/documents/${created.body.id}/versions`,
+    );
+    expect(result.status, result.text).toBe(409);
+    expect(removedKey).toBe(attemptedKey);
+    await expect(store.get(attemptedKey)).rejects.toBeDefined();
+    const saved = await prisma.document.findUniqueOrThrow({
+      where: { id: created.body.id },
+      include: { versions: true },
+    });
+    expect(saved.matterId).toBe(matterId);
+    expect(saved.versions).toHaveLength(1);
+    expect(await store.get(saved.versions[0].objectKey)).toEqual(original);
   });
 
   it("persists an explicit primary signed agreement plus supporting files and rejects unsafe evidence", async () => {
@@ -744,14 +890,14 @@ describe("independent batch upload backend checks", () => {
     const filesBefore = await readdir(objectDirectory, { recursive: true });
     const first = await upload(
       server,
-      agent,
+      coordinator,
       "storage-cleanup.pdf",
       bytes,
       fields,
     );
     const repeated = await upload(
       server,
-      agent,
+      coordinator,
       "storage-cleanup.pdf",
       bytes,
       fields,

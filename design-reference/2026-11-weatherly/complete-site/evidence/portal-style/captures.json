@@ -1,0 +1,85 @@
+{
+  "scope": "Authenticated local synthetic records; website style alignment only. No source design exists for authenticated portal/workspace. Read-only capture; no transaction mutation.",
+  "captures": [
+    {
+      "role": "agent",
+      "view": "overview",
+      "path": "/portal",
+      "viewport": 1280,
+      "file": ".local/redesign/portal-style/portal-overview-1280.png",
+      "width": 1280,
+      "height": 5081,
+      "font": "\"Cormorant Garamond\", Georgia, serif"
+    },
+    {
+      "role": "agent",
+      "view": "transaction",
+      "path": "/portal/transactions/cmw2xz9ev000ffexzhkxf1aea",
+      "viewport": 1280,
+      "file": ".local/redesign/portal-style/portal-transaction-1280.png",
+      "width": 1280,
+      "height": 4160,
+      "font": "\"Cormorant Garamond\", Georgia, serif"
+    },
+    {
+      "role": "agent",
+      "view": "overview",
+      "path": "/portal",
+      "viewport": 390,
+      "file": ".local/redesign/portal-style/portal-overview-390.png",
+      "width": 390,
+      "height": 9183,
+      "font": "\"Cormorant Garamond\", Georgia, serif"
+    },
+    {
+      "role": "agent",
+      "view": "transaction",
+      "path": "/portal/transactions/cmw2xz9ev000ffexzhkxf1aea",
+      "viewport": 390,
+      "file": ".local/redesign/portal-style/portal-transaction-390.png",
+      "width": 390,
+      "height": 5475,
+      "font": "\"Cormorant Garamond\", Georgia, serif"
+    },
+    {
+      "role": "coordinator",
+      "view": "overview",
+      "path": "/workspace",
+      "viewport": 1280,
+      "file": ".local/redesign/portal-style/workspace-overview-1280.png",
+      "width": 1280,
+      "height": 2203,
+      "font": "\"Cormorant Garamond\", Georgia, serif"
+    },
+    {
+      "role": "coordinator",
+      "view": "transaction",
+      "path": "/workspace/transactions/cmw300qsu001wpfxzec8osazu",
+      "viewport": 1280,
+      "file": ".local/redesign/portal-style/workspace-transaction-1280.png",
+      "width": 1280,
+      "height": 6541,
+      "font": "\"Cormorant Garamond\", Georgia, serif"
+    },
+    {
+      "role": "coordinator",
+      "view": "overview",
+      "path": "/workspace",
+      "viewport": 390,
+      "file": ".local/redesign/portal-style/workspace-overview-390.png",
+      "width": 390,
+      "height": 4270,
+      "font": "\"Cormorant Garamond\", Georgia, serif"
+    },
+    {
+      "role": "coordinator",
+      "view": "transaction",
+      "path": "/workspace/transactions/cmw300qsu001wpfxzec8osazu",
+      "viewport": 390,
+      "file": ".local/redesign/portal-style/workspace-transaction-390.png",
+      "width": 390,
+      "height": 8685,
+      "font": "\"Cormorant Garamond\", Georgia, serif"
+    }
+  ]
+}

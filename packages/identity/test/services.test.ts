@@ -452,7 +452,7 @@ describe("real PostgreSQL services and Better Auth", () => {
       (await prisma.matter.findUniqueOrThrow({ where: { id: m.id } })).revision,
     ).toBe(accepted.revision + 1);
   });
-  it("prevents an uploader from publishing a new client-shared version without coordinator review", async () => {
+  it("keeps agent document versions read-only and permits coordinator-reviewed shared versions", async () => {
     const matter = await createMatter(owner, {
       title: "Synthetic shared version",
       propertyAddress: "Synthetic Sharing Lane",
@@ -464,7 +464,7 @@ describe("real PostgreSQL services and Better Auth", () => {
     const bytes = pdf();
     const store = createObjectStore();
     const doc = await uploadDocument(
-      agent,
+      owner,
       { matterId: matter.id, visibility: "agent" },
       { originalname: "shared.pdf", buffer: bytes, size: bytes.length },
       store,
@@ -487,7 +487,7 @@ describe("real PostgreSQL services and Better Auth", () => {
       ),
     ).rejects.toMatchObject({
       status: 403,
-      code: "SHARED_VERSION_REQUIRES_REVIEW",
+      code: "TRANSACTION_READ_ONLY",
     });
     expect(
       await prisma.documentVersion.count({ where: { documentId: doc.id } }),

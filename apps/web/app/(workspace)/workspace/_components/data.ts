@@ -15,6 +15,8 @@ export type Task = {
   visibility?: string;
   kind?: string;
   position?: number;
+  note?: string;
+  appointmentAt?: string | null;
 };
 export type Person = {
   id: string;
@@ -67,6 +69,9 @@ export type Matter = {
     status: string;
     revision?: number;
     sourceDocumentId?: string;
+    visibility?: string;
+    linkedToTask?: boolean;
+    inheritedVisibility?: string;
   }[];
 };
 export type Session = {
@@ -181,12 +186,13 @@ export async function mutate<T>(path: string, body: unknown, method = "POST") {
 }
 
 /** Load every authorized page before showing a complete calendar or portal list. */
-export function useAllMatters() {
+export function useAllMatters(enabled = true) {
   const [data, setData] = useState<Matter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const request = useRef(0);
   const refresh = useCallback(async () => {
+    if(!enabled){setData([]);setLoading(false);setError("");return;}
     const token = ++request.current;
     setLoading(true);
     setError("");
@@ -223,7 +229,7 @@ export function useAllMatters() {
     } finally {
       if (token === request.current) setLoading(false);
     }
-  }, []);
+  }, [enabled]);
   useEffect(() => {
     void refresh();
     return () => {
@@ -240,5 +246,7 @@ export function serviceName(m: Matter) {
     "name" in snapshot &&
     typeof snapshot.name === "string"
     ? snapshot.name
-    : label(m.packageCode);
+    : ({ essentials: "Contract to Close", complete: "Contract to Close + Compliance", full_listing: "Full Listing" }[m.packageCode || ""] || label(m.packageCode));
 }
+
+export function appointment(value:string|null|undefined){return value?new Date(value).toLocaleString('en-US',{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}):'';}

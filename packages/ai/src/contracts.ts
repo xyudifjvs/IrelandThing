@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { factField, timingRule, extractedConflict } from "./findings";
 export const extractionSchema = z
   .object({
     summary: z.string(),
@@ -14,24 +15,15 @@ export const extractionSchema = z
     ),
     facts: z.array(
       z.object({
-        field: z.enum([
-          "buyer_name",
-          "seller_name",
-          "property_address",
-          "purchase_price",
-          "earnest_money",
-          "effective_date",
-          "closing_date",
-          "financing",
-          "inspection_period",
-          "other",
-        ]),
+        field: factField,
         value: z.string(),
         sourceQuote: z.string(),
         page: z.number().int().positive().nullable(),
         confidence: z.enum(["high", "medium", "low"]),
       }),
     ),
+    timingRules: z.array(timingRule).max(80).default([]),
+    conflicts: z.array(extractedConflict).max(80).default([]),
     warnings: z.array(z.string()),
   })
   .strict();

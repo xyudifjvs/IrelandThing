@@ -20,6 +20,7 @@ import {
   label,
   serviceName,
   date,
+  appointment,
   type Matter,
   type Session,
 } from "../../../../(workspace)/workspace/_components/data";
@@ -47,7 +48,7 @@ function TransactionDetail({ id }: { id: string }) {
     actorId: session.data?.user?.id,
     authorized:
       !!q.data &&
-      ["agent", "coordinator"].includes(session.data?.user?.role || ""),
+      session.data?.user?.role === "coordinator",
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -90,6 +91,8 @@ function TransactionDetail({ id }: { id: string }) {
         </div>
       )}
       <LiveStatus query={q} />
+      {m.stage==="pending_review"&&<p className={s.notice}>Received—awaiting Ireland’s review. Your timeline will appear after Ireland confirms the file.</p>}
+      {m.stage==="terminated"&&!client&&<p><Link href={`/portal/intake?replaces=${m.id}&side=${m.side}&package=${m.packageCode==="complete"?"complete":"essentials"}`}>Start a linked replacement transaction</Link></p>}
       {!client && <SavedIntakeDetails value={m.details?.referenceIntake} />}
       <div className={s.columns}>
         <div>
@@ -133,6 +136,8 @@ function TransactionDetail({ id }: { id: string }) {
                     <small>
                       {date(t.dueDate)} · {label(t.status)}
                     </small>
+                    {t.note&&<p>{t.note}</p>}
+                    {t.appointmentAt&&<small>{appointment(t.appointmentAt)}</small>}
                   </div>
                 </div>
               ))
@@ -145,21 +150,16 @@ function TransactionDetail({ id }: { id: string }) {
             uploads={documentUploads}
             coordinator={session.data?.user?.role === "coordinator"}
             actorId={session.data?.user?.id}
-            canUpload={["agent", "coordinator"].includes(
-              session.data?.user?.role || "",
-            )}
+            canUpload={session.data?.user?.role === "coordinator"}
           />
         </div>
         <aside>
-          {["agent", "coordinator"].includes(
-            session.data?.user?.role || "",
-          ) && <ChecklistShare matterId={id} tasks={m.tasks || []} />}
+          {["agent", "coordinator"].includes(session.data?.user?.role || "") && m.stage !== "pending_review" && <ChecklistShare matterId={id} tasks={m.tasks || []} />}
           <section className={s.card}>
             <p className={s.eyebrow}>Your coordinator</p>
             <h2>Questions about this file?</h2>
             <p>
-              Contact Ireland with questions about your documents or upcoming
-              dates.
+              This transaction timeline is read-only. Contact Ireland with questions about your documents or upcoming dates.
             </p>
             <Link className={s.secondary} href="/contact">
               Contact Ireland
@@ -169,7 +169,7 @@ function TransactionDetail({ id }: { id: string }) {
             <section className={s.card} style={{ marginTop: 23 }}>
               <p className={s.eyebrow}>Your service</p>
               <h2>{serviceName(m)}</h2>
-              <p>Ireland will confirm when your service fee is due.</p>
+              <p>Your service fee is due at closing.</p>
               <p className={s.hint}>
                 When online payment is available, Ireland can prepare a payment
                 link. Check your shared messages or contact her for payment

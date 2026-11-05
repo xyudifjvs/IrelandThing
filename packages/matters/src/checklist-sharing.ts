@@ -12,6 +12,9 @@ import {
 } from "@weatherly/platform";
 import { audit, requireMatter } from "./index";
 import { approvedWorkflowTaskDates } from "./rules";
+import { sharedTaskFields } from "./task-fields";
+import { audienceAllows, deadlineProjection } from "./deadline-fields";
+import { fileReviewPending } from "./file-review";
 
 /** Apply before authentication/rate limiting as well when mounting these routes. */
 export const checklistPrivacyHeaders: RequestHandler = (_req, res, next) => {
@@ -171,7 +174,13 @@ export async function createChecklistShare(
   const token = newToken();
   const url = clientUrl(token);
   return prisma.$transaction(async (tx) => {
-    await requireShareManager(actor, matterId, tx);
+    const initial = await requireShareManager(actor, matterId, tx);
+    if (fileReviewPending(initial))
+      throw new HttpError(
+        409,
+        "FILE_REVIEW_REQUIRED",
+        "Ireland must confirm this file before a client checklist link can be created.",
+      );
     await tx.$queryRaw`SELECT "id" FROM "Matter" WHERE "id" = ${matterId} FOR UPDATE`;
     await requireShareManager(actor, matterId, tx);
     const row = await tx.checklistShare.upsert({
@@ -262,7 +271,6 @@ export async function getPublicChecklist(token: string) {
           stage: true,
           details: true,
           tasks: {
-            where: { visibility: "client" },
             orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
             select: {
               id: true,
@@ -270,6 +278,7 @@ export async function getPublicChecklist(token: string) {
               status: true,
               dueDate: true,
               kind: true,
+              visibility: true,
               details: true,
             },
           },
@@ -285,16 +294,19 @@ export async function getPublicChecklist(token: string) {
           },
         },
       });
-      if (!matter) throw unavailable();
+      if (!matter || fileReviewPending(matter)) throw unavailable();
       const { tasks, deadlines, details, ...summary } = matter;
-      const approvedTasks = approvedWorkflowTaskDates(
-        tasks,
-        deadlines,
-        details,
-      );
+      const dates = deadlineProjection(deadlines, tasks, details, "client");
+      const approvedTasks = approvedWorkflowTaskDates(tasks, deadlines, details)
+        .filter((task) => audienceAllows(task.visibility, "client"))
+        .map(dates.task);
       const sharedTasks = approvedTasks.map(
-        ({ kind: _kind, details: _details, ...task }, position) => ({
+        (
+          { kind: _kind, visibility: _visibility, details: _details, ...task },
+          position,
+        ) => ({
           ...task,
+          ...sharedTaskFields(_details),
           position,
         }),
       );
@@ -308,7 +320,7 @@ export async function getPublicChecklist(token: string) {
         matter: summary,
         tasks: sharedTasks,
         clientRequests: sharedTasks.filter((task) => requestIds.has(task.id)),
-        deadlines: deadlines
+        deadlines: dates.deadlines
           .filter(
             (deadline) => deadline.status === "confirmed" && deadline.date,
           )

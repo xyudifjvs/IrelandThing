@@ -1,10 +1,11 @@
+@import "../../../(marketing)/_components/complete-site-fonts.css";
 .shell {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
   background: #f5f3ed;
   color: #29241f;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif;
   font-size: 14px;
 }
 .sidebar {
@@ -25,7 +26,7 @@
   color: #493d30;
 }
 .brandTop {
-  font-family: Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 23px;
   letter-spacing: 3px;
 }
@@ -95,7 +96,7 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-family: Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   color: #7a6148;
 }
 .user strong {
@@ -167,7 +168,7 @@
 }
 .heading h1,
 .title {
-  font-family: Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 35px;
   font-weight: 400;
   letter-spacing: -0.6px;
@@ -251,7 +252,7 @@
   stroke-width: 1.3;
 }
 .statValue {
-  font-family: Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 31px;
   margin: 2px 0 9px;
 }
@@ -285,7 +286,7 @@
   padding: 22px 24px 18px;
 }
 .sectionHead h2 {
-  font-family: Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 21px;
   font-weight: 400;
   margin: 0;
@@ -332,7 +333,7 @@
   background: #e0e5d9;
 }
 .stage strong {
-  font-family: Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 27px;
   font-weight: 400;
   display: block;
@@ -625,7 +626,7 @@
   margin-bottom: 25px;
 }
 .detailHeader h1 {
-  font-family: Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-weight: 400;
   font-size: 30px;
   margin: 0 0 9px;
@@ -677,7 +678,7 @@
   background: #fffdf8;
 }
 .integrationCard h3 {
-  font-family: Georgia, serif;
+  font-family: "Cormorant Garamond", Georgia, serif;
   font-size: 21px;
   font-weight: 400;
   margin: 0 0 9px;
@@ -1036,4 +1037,121 @@
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+}
+
+/* Shared identity from the complete supplied website; application layout and states stay intact. */
+.shell {
+  background: #f9f6f0;
+  color: #141210;
+  font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif;
+}
+.sidebar {
+  background: #141210;
+  border-color: #141210;
+}
+.brand,
+.brandTop,
+.brandSub,
+.user strong {
+  color: #ffffff;
+}
+.brandTop {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.nav a,
+.bottom a {
+  color: #cbbfaf;
+  border-radius: 0;
+}
+.navLabel,
+.user small {
+  color: #a89c8c;
+}
+.nav a:hover,
+.bottom a:hover {
+  background: #302a24;
+  color: #ffffff;
+}
+.nav .active {
+  background: #f2ebe0;
+  color: #141210;
+}
+.topbar {
+  background: #f9f6f0;
+  border-color: #e6dccd;
+}
+.content {
+  color: #141210;
+}
+.heading h1,
+.detailHeader h1,
+.section h2,
+.integrationCard h3 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 500;
+  color: #141210;
+}
+.section,
+.integrationCard,
+.stat {
+  background: #ffffff;
+  border-color: #e6dccd;
+  border-radius: 0;
+  box-shadow: none;
+}
+.sectionHead {
+  border-color: #e6dccd;
+}
+.fieldHint,
+.subtitle,
+.muted,
+.tiny,
+.eyebrow {
+  color: #7a6247;
+}
+.button {
+  background: #141210;
+  border-color: #141210;
+  color: #ffffff;
+  border-radius: 0;
+}
+.buttonSecondary {
+  background: transparent;
+  border-color: #a8957c;
+  color: #141210;
+  border-radius: 0;
+}
+.buttonSmall {
+  background: #ffffff;
+  border-color: #e6dccd;
+  color: #6b5a45;
+  border-radius: 0;
+}
+.input,
+.textarea,
+.select {
+  background: #f9f6f0;
+  border-color: #e6dccd;
+  color: #141210;
+  border-radius: 0;
+}
+.notice {
+  background: #f2ebe0;
+  border-color: #e6dccd;
+  color: #3d3730;
+  border-radius: 0;
+}
+.table th {
+  color: #7a6247;
+  background: #f9f6f0;
+}
+.table td,
+.table th {
+  border-color: #e6dccd;
+}
+.avatar {
+  background: #f2ebe0;
+  color: #6b5a45;
 }

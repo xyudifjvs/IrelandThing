@@ -1,6 +1,8 @@
 "use client";
+import {agentCanSee,clientCanSee,audienceVisibility} from "../../../../_lib/checklist-audiences";
+import InitialFileReview from "../../_components/InitialFileReview";
 import SavedIntakeDetails from "../../../../_components/SavedIntakeDetails";
-import { use, useState } from "react";
+import { use, useState, type ComponentProps } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -58,6 +60,8 @@ function TransactionDetail({ id }: { id: string }) {
   const [clientRequest, setClientRequest] = useState(false);
   const [taskVisibility, setTaskVisibility] = useState("agent");
   const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskNoteValue,setTaskNoteValue]=useState("");
+  const [taskAppointmentValue,setTaskAppointmentValue]=useState("");
   const [person, setPerson] = useState({ userId: "", role: "client" });
   const [notice, setNotice] = useState("");
   async function act(key: string, fn: () => Promise<unknown>) {
@@ -105,6 +109,7 @@ function TransactionDetail({ id }: { id: string }) {
         <ArrowLeft />
         All transactions
       </Link>
+      {m.stage==='terminated'&&<p><Link href={`/workspace/new?replaces=${m.id}&side=${m.side}&package=${m.packageCode==='complete'?'complete':'essentials'}`}>Start a linked replacement transaction</Link></p>}
       <div className={s.detailHeader}>
         <div className={s.split}>
           <div>
@@ -124,7 +129,7 @@ function TransactionDetail({ id }: { id: string }) {
             <select
               className={s.select}
               value={m.stage}
-              disabled={!!busy}
+              disabled={!!busy || m.stage === "pending_review"}
               onChange={(e) =>
                 void act("stage", () =>
                   mutate(
@@ -136,6 +141,7 @@ function TransactionDetail({ id }: { id: string }) {
               }
             >
               {[
+                "pending_review",
                 "listing",
                 "under_contract",
                 "closing",
@@ -167,7 +173,9 @@ function TransactionDetail({ id }: { id: string }) {
       )}
       {notice && <div className={s.notice}>{notice}</div>}
       <LiveStatus query={q} />
-      <SavedIntakeDetails value={m.details?.referenceIntake} />
+      {m.stage==='pending_review'&&<InitialFileReview matter={m} refresh={q.refresh} uploads={documentUploads} actorId={session.data?.user?.id}/>}
+      {m.stage!=="pending_review"&&<SavedIntakeDetails value={m.details?.referenceIntake} />}
+      {Array.isArray((m.details?.fileReview as {unresolvedDates?:unknown[]}|undefined)?.unresolvedDates)&&<div className={s.notice}>{((m.details!.fileReview as {unresolvedDates:{deadlineId:string;label:string;reason:string}[]}).unresolvedDates).filter(item=>m.deadlines?.some(d=>d.id===item.deadlineId&&d.status!=="confirmed")).map(item=><p key={item.deadlineId}><strong>Unresolved: {item.label}</strong> · {item.reason}</p>)}</div>}
       <div className={s.tabs} role="tablist" aria-label="Transaction sections">
         {[
           "Checklist",
@@ -245,20 +253,23 @@ function TransactionDetail({ id }: { id: string }) {
                       No checklist steps yet. Add the first step below.
                     </div>
                   )}
-                  <form
+                  <BusyForm busy={!!busy}
                     className={cs.addForm}
                     onSubmit={(e) => {
                       e.preventDefault();
                       void act("task", async () => {
                         await mutate(`/api/v1/matters/${id}/tasks`, {
                           title: task,
-                          visibility: clientRequest ? "client" : taskVisibility,
+                          visibility: taskVisibility,
                           dueDate: taskDueDate || undefined,
                           kind: clientRequest ? "client_request" : "custom",
+                          note:taskNoteValue,
+                          appointmentAt:taskAppointmentValue?new Date(taskAppointmentValue).toISOString():null,
                         });
                         setTask("");
                         setTaskDueDate("");
                         setClientRequest(false);
+                        setTaskNoteValue("");setTaskAppointmentValue("");
                       });
                     }}
                   >
@@ -275,20 +286,7 @@ function TransactionDetail({ id }: { id: string }) {
                       />
                     </label>
                     <div className={cs.editorFields}>
-                      <label>
-                        Who can see this step
-                        <select
-                          className={s.select}
-                          disabled={clientRequest}
-                          aria-label="New step visibility"
-                          value={taskVisibility}
-                          onChange={(e) => setTaskVisibility(e.target.value)}
-                        >
-                          <option value="agent">Agent only</option>
-                          <option value="client">Clients & agent</option>
-                          <option value="coordinator">Coordinator only</option>
-                        </select>
-                      </label>
+                      <fieldset style={{border:0,padding:0,margin:0}}><legend>Visible to</legend><label><input type="checkbox" aria-label="New step visible to agent" checked={agentCanSee(taskVisibility)} onChange={e=>setTaskVisibility(audienceVisibility(e.target.checked,clientCanSee(taskVisibility)))}/> Agent</label><label><input type="checkbox" aria-label="New step visible to client" checked={clientCanSee(taskVisibility)} onChange={e=>{setTaskVisibility(audienceVisibility(agentCanSee(taskVisibility),e.target.checked));if(!e.target.checked)setClientRequest(false);}}/> Client link</label></fieldset>
                       <label>
                         Due date (optional)
                         <input
@@ -304,10 +302,11 @@ function TransactionDetail({ id }: { id: string }) {
                       <input
                         type="checkbox"
                         checked={clientRequest}
-                        onChange={(e) => setClientRequest(e.target.checked)}
+                        onChange={(e) => {setClientRequest(e.target.checked);if(e.target.checked)setTaskVisibility(audienceVisibility(agentCanSee(taskVisibility),true));}}
                       />{" "}
-                      Ask the client to do this (shared on client view)
+                      Display as read-only client instructions
                     </label>
+                    <label>Short note<textarea aria-label="New step note" className={s.input} maxLength={1000} value={taskNoteValue} onChange={e=>setTaskNoteValue(e.target.value)}/></label><label>Appointment (your local time)<input className={s.input} aria-label="New step appointment" type="datetime-local" value={taskAppointmentValue} onChange={e=>setTaskAppointmentValue(e.target.value)}/></label>
                     <button
                       className={s.buttonSmall}
                       disabled={!!busy || !task.trim()}
@@ -315,7 +314,7 @@ function TransactionDetail({ id }: { id: string }) {
                       <Plus size={13} />
                       Add
                     </button>
-                  </form>
+                  </BusyForm>
                 </div>
               </section>
               <section className={s.section}>
@@ -370,7 +369,7 @@ function TransactionDetail({ id }: { id: string }) {
                     >
                       Add a deadline
                     </summary>
-                    <form
+                    <BusyForm busy={!!busy}
                       className={s.formGrid}
                       style={{ marginTop: 18 }}
                       onSubmit={(e) => {
@@ -382,6 +381,7 @@ function TransactionDetail({ id }: { id: string }) {
                             label: String(f.get("label")),
                             date: f.get("date") ? String(f.get("date")) : null,
                             status: f.get("date") ? "confirmed" : "unknown",
+                            visibility: audienceVisibility(f.get("visibleAgent") === "on", f.get("visibleClient") === "on"),
                             details: { source: "coordinator" },
                           });
                           form.reset();
@@ -404,7 +404,8 @@ function TransactionDetail({ id }: { id: string }) {
                       <button className={s.buttonSmall} disabled={!!busy}>
                         Add deadline
                       </button>
-                    </form>
+                      <fieldset style={{border:0,padding:0,margin:0}}><legend>Visible to</legend><label><input type="checkbox" name="visibleAgent"/> Agent</label><label><input type="checkbox" name="visibleClient"/> Client link</label><p className={s.fieldHint}>New dates stay private until you choose an audience.</p></fieldset>
+                    </BusyForm>
                   </details>
                 </div>
               </section>
@@ -534,7 +535,7 @@ function TransactionDetail({ id }: { id: string }) {
                     <small>{date(n.createdAt)}</small>
                   </div>
                 ))}
-                <form
+                <BusyForm busy={!!busy}
                   style={{ marginTop: 20 }}
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -564,7 +565,7 @@ function TransactionDetail({ id }: { id: string }) {
                   >
                     {busy === "note" ? "Saving…" : "Save private note"}
                   </button>
-                </form>
+                </BusyForm>
               </div>
             </section>
           )}
@@ -611,7 +612,7 @@ function TransactionDetail({ id }: { id: string }) {
                 >
                   Grant portal access
                 </summary>
-                <form
+                <BusyForm busy={!!busy}
                   onSubmit={(e) => {
                     e.preventDefault();
                     void act("person", async () => {
@@ -650,7 +651,7 @@ function TransactionDetail({ id }: { id: string }) {
                   <button className={s.buttonSmall} disabled={!!busy}>
                     Add to this file
                   </button>
-                </form>
+                </BusyForm>
               </details>
             </div>
           </section>
@@ -692,12 +693,14 @@ function DeadlineEditor({
     value: string;
     status: string;
     revision?: number;
+    visibility?: string;
   } | null>(null);
   const value = draft?.value ?? d.date?.slice(0, 10) ?? "";
   const status = draft?.status ?? d.status;
+  const visibility = draft?.visibility ?? d.visibility ?? "client";
   const conflict = !!draft && draft.revision !== d.revision;
   return (
-    <form
+    <BusyForm busy={!!busy}
       className={s.taskLine}
       style={{ alignItems: "flex-start", flexWrap: "wrap" }}
       onSubmit={(e) => {
@@ -709,6 +712,7 @@ function DeadlineEditor({
               expectedRevision: draft?.revision ?? d.revision,
               date: value || null,
               status: value ? status : "unknown",
+              ...(draft?.visibility !== undefined ? { visibility: draft.visibility } : {}),
             },
             "PATCH",
           );
@@ -741,11 +745,13 @@ function DeadlineEditor({
           className={s.input}
           type="date"
           value={value}
+          disabled={busy}
           onChange={(e) =>
             setDraft({
               value: e.target.value,
               status,
               revision: draft?.revision ?? d.revision,
+              ...(draft?.visibility !== undefined ? {visibility:draft.visibility} : {}),
             })
           }
         />
@@ -755,11 +761,13 @@ function DeadlineEditor({
         <select
           className={s.select}
           value={status}
+          disabled={busy}
           onChange={(e) =>
             setDraft({
               value,
               status: e.target.value,
               revision: draft?.revision ?? d.revision,
+              ...(draft?.visibility !== undefined ? {visibility:draft.visibility} : {}),
             })
           }
         >
@@ -768,6 +776,7 @@ function DeadlineEditor({
           ))}
         </select>
       </label>
+      <fieldset disabled={busy} style={{border:0,padding:0,margin:0}}><legend>Visible to</legend><label><input type="checkbox" aria-label={`Show ${d.label} date to agent`} checked={agentCanSee(visibility)} onChange={e=>setDraft({value,status,revision:draft?.revision??d.revision,visibility:audienceVisibility(e.target.checked,clientCanSee(visibility))})}/> Agent</label><label><input type="checkbox" aria-label={`Show ${d.label} date to client`} checked={clientCanSee(visibility)} onChange={e=>setDraft({value,status,revision:draft?.revision??d.revision,visibility:audienceVisibility(agentCanSee(visibility),e.target.checked)})}/> Client link</label>{d.linkedToTask&&<p className={s.fieldHint}>This date also follows its milestone’s audience. Sharing the date cannot reveal a hidden milestone.</p>}</fieldset>
       <button
         className={s.buttonSmall}
         style={{ marginTop: 23 }}
@@ -783,6 +792,11 @@ function DeadlineEditor({
           </button>
         </p>
       )}
-    </form>
+    </BusyForm>
   );
+}
+
+/** Keep the visible inputs equal to the snapshot being saved. */
+function BusyForm({busy,children,...props}:ComponentProps<"form">&{busy:boolean}){
+  return <form {...props}><fieldset disabled={busy} style={{display:"contents"}}>{children}</fieldset></form>;
 }

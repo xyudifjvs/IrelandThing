@@ -18,13 +18,16 @@ const inquiryInput = z
   .object({
     requestId: z.uuid().optional(),
     website: z.string().max(0, "Leave this field empty").optional(),
-    name: z.string().trim().min(1).max(150),
+    name: z.string().trim().max(150).default(""),
     email: z.email().toLowerCase(),
     kind: z.enum(["contact", "meeting", "information"]),
     payload: z
       .object({
         phone: z.string().max(60).optional(),
         brokerage: z.string().max(250).optional(),
+        team: z.string().trim().max(250).optional(),
+        officeAddress: z.string().trim().max(1000).optional(),
+        requestType: z.enum(["service_agreement"]).optional(),
         message: z.string().max(10000).optional(),
         meetingTime: z.iso.datetime({ offset: true }).optional(),
         timezone: z.string().max(100).optional(),
@@ -33,6 +36,8 @@ const inquiryInput = z
   })
   .strict()
   .superRefine((v, c) => {
+    if((v.kind !== "information" || v.payload.requestType === "service_agreement") && !v.name)c.addIssue({code:"custom",path:["name"],message:"Enter your name."});
+    if(v.kind!=="contact" && v.payload.brokerage && !/^howard\s+hanna\b/i.test(v.payload.brokerage.trim()))c.addIssue({code:"custom",path:["payload","brokerage"],message:"Weatherly serves Howard Hanna agents only."});
     if (v.kind === "meeting" && (!v.payload.meetingTime || !v.payload.timezone))
       c.addIssue({
         code: "custom",

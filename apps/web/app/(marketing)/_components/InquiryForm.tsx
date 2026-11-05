@@ -42,7 +42,7 @@ export default function InquiryForm({
             kind,
             payload: {
               phone: String(f.get("phone") || ""),
-              brokerage: String(f.get("brokerage") || ""),
+              brokerage: "Howard Hanna",
               message: String(f.get("message") || ""),
               ...(f.get("meetingTime")
                 ? {
@@ -80,6 +80,9 @@ export default function InquiryForm({
           <input name="website" autoComplete="off" tabIndex={-1} />
         </label>
       </div>
+      <p className={s.notice}>
+        Agent services are available only to Howard Hanna agents.
+      </p>
       <label className={s.field}>
         Your name
         <input
@@ -107,8 +110,13 @@ export default function InquiryForm({
             <input name="phone" type="tel" className={s.input} />
           </label>
           <label className={s.field}>
-            Brokerage (optional)
-            <input name="brokerage" className={s.input} />
+            Brokerage
+            <input
+              name="brokerage"
+              value="Howard Hanna"
+              readOnly
+              className={s.input}
+            />
           </label>
         </div>
       )}

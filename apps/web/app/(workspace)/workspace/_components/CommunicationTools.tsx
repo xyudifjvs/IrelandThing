@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Mail, Send, Save, Link2, RefreshCw, Plus } from "lucide-react";
 import {
   api,
@@ -17,6 +17,7 @@ type Template = {
   name: string;
   side: string;
   phase: string;
+  serviceGroup?: string | null;
   subject: string;
   body: string;
   revision: number;
@@ -88,8 +89,7 @@ export function GmailConnection() {
         {!available && (
           <div className={s.notice}>
             Configure approved Google OAuth credentials and the real sending
-            mailbox before connecting. ireland@ireland.com is a placeholder and
-            cannot be used.
+            mailbox before connecting. The approved transaction mailbox is ireland@weatherlytc.com; account activation is still required.
           </div>
         )}
         {error && (
@@ -136,7 +136,9 @@ export function GmailConnection() {
     </section>
   );
 }
+const templateGroups=[['buyer_ctc','Buyer · Contract to Close'],['seller_ctc','Seller · Contract to Close'],['buyer_compliance','Buyer · Contract to Close + Compliance'],['seller_compliance','Seller · Contract to Close + Compliance']] as const;
 export function Templates() {
+  const [selectedGroup,setSelectedGroup]=useState('buyer_ctc');
   const q = useData<Template[]>("/api/v1/communications/templates");
   const [selected, setSelected] = useState<Template | null>(null);
   const [creating, setCreating] = useState(false),
@@ -166,11 +168,12 @@ export function Templates() {
         </button>
       </div>
       <div className={s.sectionBody}>
+        <p className={s.fieldHint}>Four groups are ready for Ireland’s Excel templates. No sample message content has been installed. Existing saved templates are preserved.</p><div className={s.formRow}>{templateGroups.map(([value,name])=><button className={selectedGroup===value?s.buttonSmall:s.buttonSecondary} key={value} onClick={()=>{setSelectedGroup(value);setSelected(null);setCreating(false);}}>{name}</button>)}{q.data?.some(t=>!t.serviceGroup)&&<button className={s.buttonSecondary} onClick={()=>setSelectedGroup('legacy')}>Existing unassigned templates</button>}</div>
         {q.error && <p className={s.error}>{q.error}</p>}
         {q.loading ? (
           <div className={s.loading}>Loading templates…</div>
         ) : (
-          q.data?.map((t) => (
+          q.data?.filter(t=>selectedGroup==="legacy"?!t.serviceGroup:t.serviceGroup===selectedGroup).map((t) => (
             <button
               className={s.message}
               key={t.id}
@@ -189,10 +192,9 @@ export function Templates() {
             </button>
           ))
         )}
-        {!q.loading && !q.data?.length && !creating && (
+        {!q.loading && !q.data?.some(t=>selectedGroup==='legacy'?!t.serviceGroup:t.serviceGroup===selectedGroup) && !creating && (
           <p className={s.tiny}>
-            No approved templates yet. Create one with your preferred
-            communication language.
+            No templates in this group yet. Ireland’s workbook will supply the wording.
           </p>
         )}
         {selected || creating ? (
@@ -205,9 +207,11 @@ export function Templates() {
               setBusy(true);
               setError("");
               setMessage("");
+              const group=String(f.get("serviceGroup")||"");
               const values = {
+                serviceGroup:group||null,
                 name: String(f.get("name")),
-                side: String(f.get("side")),
+                side:group?(group.startsWith("buyer_")?"buyer":"seller"):selected?.side||"buyer",
                 phase: String(f.get("phase")),
                 subject: String(f.get("subject")),
                 body: String(f.get("body")),
@@ -243,18 +247,7 @@ export function Templates() {
                   defaultValue={selected?.name}
                 />
               </label>
-              <label className={s.field}>
-                Who it’s for
-                <select
-                  className={s.select}
-                  name="side"
-                  defaultValue={selected?.side || "both"}
-                >
-                  <option value="both">Both sides</option>
-                  <option value="buyer">Buyer side</option>
-                  <option value="seller">Seller side</option>
-                </select>
-              </label>
+              <label className={s.field}>Template group<select className={s.select} name="serviceGroup" defaultValue={selected?.serviceGroup||(selected?'':selectedGroup==='legacy'?'':selectedGroup)} required={!selected}><option value="">Existing template · unassigned</option>{templateGroups.map(([value,name])=><option value={value} key={value}>{name}</option>)}</select></label>
               <label className={s.field}>
                 Transaction phase
                 <input
@@ -356,13 +349,15 @@ export function Composer() {
     [subject, setSubject] = useState(""),
     [body, setBody] = useState(""),
     [attachments, setAttachments] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false),
+  const [busy, setBusyState] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [dirty, setDirty] = useState(true),
     [confirmed, setConfirmed] = useState(false),
     [template, setTemplate] = useState(""),
     [recipientName, setRecipientName] = useState("");
+  const busyRef = useRef(false);
+  function setBusy(value:boolean){busyRef.current=value;setBusyState(value);}
   const connected = integrations.data?.some(
     (i) => i.provider === "gmail" && i.status === "connected",
   );
@@ -379,7 +374,7 @@ export function Composer() {
           body: string;
         }>
       ).detail;
-      if (!value?.matterId) return;
+      if (!value?.matterId || busyRef.current) return;
       setMatter(value.matterId);
       setDraft(null);
       setTemplate("");
@@ -430,6 +425,7 @@ export function Composer() {
     setError("");
   }
   async function save() {
+    if(busyRef.current)return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -462,9 +458,7 @@ export function Composer() {
         draft ? { expectedRevision: draft.revision, ...values } : values,
         draft ? "PATCH" : "POST",
       );
-      setDraft(saved);
-      setDirty(false);
-      setConfirmed(false);
+      loadDraft(saved);
       await drafts.refresh();
       setMessage(
         "Draft saved. Review the recipients, message and attachments before sending.",
@@ -487,7 +481,7 @@ export function Composer() {
         </div>
         <Mail size={19} strokeWidth={1.3} />
       </div>
-      <div className={s.sectionBody}>
+      <div className={s.sectionBody}><fieldset disabled={busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
         <div className={s.formGrid}>
           <MatterPicker
             value={matter}
@@ -561,7 +555,7 @@ export function Composer() {
                   <option value="">Choose a template</option>
                   {templates.data
                     ?.filter(
-                      (t) => t.side === "both" || t.side === detail.data?.side,
+                      (t) => (t.side === "both" || t.side === detail.data?.side) && (!t.serviceGroup||t.serviceGroup===`${detail.data?.side}_${detail.data?.packageCode==="complete"?"compliance":"ctc"}`),
                     )
                     .map((t) => (
                       <option key={t.id} value={t.id}>
@@ -963,7 +957,7 @@ export function Composer() {
             drafts; sending stays disabled until the connection is authorized.
           </div>
         )}
-      </div>
+      </fieldset>      </div>
     </section>
   );
 }

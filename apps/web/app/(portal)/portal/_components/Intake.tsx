@@ -1,4 +1,7 @@
 "use client";
+import { createPortal } from "react-dom";
+import ContactAutofill,{type AutofillField} from "./ContactAutofill";
+import {businessContactSnapshot,type BusinessContact} from "../../../(workspace)/workspace/_components/BusinessContactPicker";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import LegacyIntake from "./LegacyIntake";
@@ -83,6 +86,9 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
     id: string;
     matterId: string;
   } | null>(null);
+  const [autofill,setAutofill]=useState<{host:HTMLElement;group:string;query:string;fields:AutofillField[]}|null>(null);
+  useEffect(()=>setAutofill(null),[step,variant,generation]);
+  const replacementRef=useRef<string|undefined>(undefined);
   const busyRef = useRef(false);
   const revisionConflict = useRef(false),
     saveChain = useRef<Promise<unknown>>(Promise.resolve()),
@@ -119,7 +125,7 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
           throw Error(
             "This draft changed in another tab. Reopen its saved version before saving again.",
           );
-        const payload = normalizeReference(value, code),
+        const payload = {...normalizeReference(value, code),...(replacementRef.current?{replacesMatterId:replacementRef.current}:{})},
           current = draft.current;
         try {
           const next = current
@@ -207,6 +213,7 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
     const el = root.current;
     if (!Object.keys(ref.current.fields).length) {
       const q = new URLSearchParams(location.search);
+      replacementRef.current=q.get("replaces")||undefined;
       const side = q.get("side") === "seller" ? "seller" : "buyer";
       const requested = q.get("variant");
       const desired =
@@ -249,12 +256,12 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
         );
     }
     const contractCard = el.querySelector("#contractDocs")!.closest(".card")!;
-    if (!contractCard.querySelector("[data-contract-location]")) {
+    if (variant.endsWith("compliance") && !contractCard.querySelector("[data-contract-location]")) {
       const location = document.createElement("div");
       location.className = "field";
       location.dataset.contractLocation = "";
       location.innerHTML =
-        '<label class="lbl" for="contractLocation">Executed contract location</label><input type="text" id="contractLocation" name="contractLocation" placeholder="Dotloop loop, shared folder or other location"><p class="hint">Upload the executed contract above, or tell Ireland where she can find it. Required before final submission when no contract is uploaded.</p>';
+        '<label class="lbl" for="contractLocation">Dotloop transaction name</label><input type="text" id="contractLocation" name="contractLocation" placeholder="If different from the property address"><p class="hint">For Compliance, upload the executed contract or identify the Dotloop transaction by name or property address. No document URL is needed. A Dotloop reference does not confirm retrieval.</p>';
       contractCard.append(location);
     }
     setFields(el, fields);
@@ -380,13 +387,11 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
   async function submit() {
     check();
     const value = snapshot();
-    if (
-      !(value.uploads.contractDocs || []).length &&
-      !String(value.fields.contractLocation || "").trim()
-    )
-      throw Error(
-        "Upload the executed contract or tell Ireland where she can find it before submitting. You can save a draft at any point.",
-      );
+    const uploaded=Boolean(value.uploads.contractDocs?.length);
+    const compliance=value.variant.endsWith('compliance');
+    const loopNamed=Boolean(String(value.fields.contractLocation||value.fields.transactionName||'').trim());
+    const loopAtProperty=value.fields.docsDotloop===true&&['a_num','a_street','a_city','a_state','a_zip'].some(k=>String(value.fields[k]||'').trim());
+    if(!uploaded&&(!compliance||!loopNamed&&!loopAtProperty))throw Error(compliance?'Upload the executed contract or identify its transaction loop by name or property address. Save a draft at any point.':'Contract to Close requires an uploaded executed contract. Save a draft at any point.');
     const current = await persist();
     const result = await mutate<{
       submission: { id: string };
@@ -435,6 +440,8 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
           if (x.value === "cash") x.checked = false;
         });
     }
+    if(!el.name)return;
+    if(autofill&&autofill.fields.some(f=>f.name===el.name))setAutofill({...autofill,query:autofill.fields.slice(0,2).some(f=>f.name===el.name)?el.value:autofill.query,fields:autofill.fields.map(f=>({...f,current:root.current?.querySelector<HTMLInputElement>(`[name="${f.name}"]`)?.value||''}))});
     changed();
     const value = snapshot();
     if (el.name === "service" || el.name === "side") {
@@ -450,6 +457,23 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
       return;
     }
     syncConditions(root.current!);
+  }
+  function suggest(event:React.FocusEvent<HTMLDivElement>){
+    if(actor?.role!=='coordinator'||busyRef.current||receipt||!(event.target instanceof HTMLInputElement))return;
+    const input=event.target;if(input.closest('[data-business-suggestion]'))return;
+    const groups:Record<string,string[]>={co:['co_brokerage','co_name','co_email','co_phone'],t:['t_co','t_contact','t_email','t_phone'],l:['l_co','l_officer','l_email','l_phone']};
+    const group=Object.keys(groups).find(key=>groups[key].slice(0,2).includes(input.name));if(!group)return;
+    const labels=['Company','Contact name','Email','Phone'];
+    const props=['company','name','email','phone'] as const;
+    setAutofill({host:input.closest<HTMLElement>('.field')!,group,query:input.value,fields:groups[group].map((name,i)=>({name,label:labels[i],current:(root.current?.querySelector<HTMLInputElement>(`[name="${name}"]`)?.value)||'',incoming:(contact:BusinessContact)=>i===0?contact.company||(['title_company','lender'].includes(contact.kind)?contact.name:''):contact[props[i]]}))});
+  }
+  async function applyContact(contact:BusinessContact,values:Record<string,string>){
+    if(!autofill||busyRef.current||receipt)return;
+    const latest=autofill.fields.map(f=>({...f,current:root.current?.querySelector<HTMLInputElement>(`[name="${f.name}"]`)?.value||''}));
+    if(latest.some((f,i)=>f.current!==autofill.fields[i].current)){setAutofill({...autofill,fields:latest});setError('Contact fields changed. Review the current values before applying the saved contact.');return;}
+    for(const [name,value] of Object.entries(values)){const input=root.current?.querySelector<HTMLInputElement>(`[name="${name}"]`);if(input)input.value=value;}
+    ref.current.fields['directory_'+autofill.group]=JSON.stringify({...businessContactSnapshot(contact),appliedFields:Object.keys(values)});changed();
+    await run(async()=>{await persist();await mutate(`/api/v1/contacts/${contact.id}/usage`,{expectedRevision:contact.revision});});setAutofill(null);
   }
   function click(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as Element,
@@ -579,6 +603,7 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
       return;
     }
     draft.current = savedDraft;
+    replacementRef.current=typeof savedDraft.payload.replacesMatterId==="string"?savedDraft.payload.replacesMatterId:undefined;
     ref.current = structuredClone(savedDraft.payload.referenceIntake);
     packageRef.current = ref.current.variant.endsWith("compliance")
       ? "complete"
@@ -744,6 +769,7 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
             if ((e.target as HTMLInputElement).type === "file") input(e);
           }}
           onInput={input}
+          onFocusCapture={suggest}
           onClick={click}
           onSubmit={(e) => e.preventDefault()}
           onDragEnter={(e) => {
@@ -774,6 +800,7 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
           dangerouslySetInnerHTML={{ __html: referenceTemplates[variant] }}
         />
       </fieldset>
+      {autofill&&actor?.role==="coordinator"&&createPortal(<ContactAutofill key={JSON.stringify(autofill.fields.map(f=>[f.name,f.current]))} fields={autofill.fields} query={autofill.query} busy={busy} onApply={applyContact}/>,autofill.host)}
     </div>
   );
 }

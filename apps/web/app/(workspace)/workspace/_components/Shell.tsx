@@ -14,6 +14,7 @@ import {
   HelpCircle,
   Plus,
   LogOut,
+  ContactRound,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import RouteFocus from "./RouteFocus";
@@ -22,6 +23,11 @@ import s from "./workspace.module.css";
 const nav = [
   { href: "/workspace", label: "Overview", icon: LayoutDashboard },
   { href: "/workspace/transactions", label: "Transactions", icon: FolderOpen },
+  {
+    href: "/workspace/contacts",
+    label: "Business contacts",
+    icon: ContactRound,
+  },
   { href: "/workspace/inbox", label: "Inbox", icon: Inbox },
   { href: "/workspace/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/workspace/onboarding", label: "Onboarding", icon: HelpCircle },
@@ -52,6 +58,8 @@ export default function Shell({ children }: { children: ReactNode }) {
       : pathname.includes("new")
         ? "New transaction"
         : "Transaction workspace");
+  if (!user || user.role !== "coordinator")
+    return <main className={s.content}><h1>{session.loading ? "Opening your workspace…" : "Ireland’s workspace"}</h1>{!session.loading && <><p>{user ? "Your shared transactions are available in your portal." : "Sign in to open the coordinator workspace."}</p><Link href={user ? "/portal" : "/login"}>{user ? "Open your portal" : "Sign in"}</Link></>}{session.error && <p role="alert">{session.error}<button onClick={()=>void session.refresh()}>Retry</button></p>}</main>;
   return (
     <div className={s.shell}>
       <aside className={s.sidebar}>
@@ -61,29 +69,35 @@ export default function Shell({ children }: { children: ReactNode }) {
         </Link>
         <nav className={s.nav} aria-label="Workspace">
           <div className={s.navLabel}>Your workspace</div>
-          {nav.map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              title={n.label}
-              aria-label={n.label}
-              aria-current={
-                pathname === n.href ||
-                (n.href !== "/workspace" && pathname.startsWith(n.href))
-                  ? "page"
-                  : undefined
-              }
-              className={
-                pathname === n.href ||
-                (n.href != "/workspace" && pathname.startsWith(n.href))
-                  ? s.active
-                  : ""
-              }
-            >
-              <n.icon />
-              {n.label}
-            </Link>
-          ))}
+          {nav
+            .filter(
+              (n) =>
+                n.href !== "/workspace/contacts" ||
+                user?.role === "coordinator",
+            )
+            .map((n) => (
+              <Link
+                key={n.href}
+                href={n.href}
+                title={n.label}
+                aria-label={n.label}
+                aria-current={
+                  pathname === n.href ||
+                  (n.href !== "/workspace" && pathname.startsWith(n.href))
+                    ? "page"
+                    : undefined
+                }
+                className={
+                  pathname === n.href ||
+                  (n.href != "/workspace" && pathname.startsWith(n.href))
+                    ? s.active
+                    : ""
+                }
+              >
+                <n.icon />
+                {n.label}
+              </Link>
+            ))}
           <div className={s.navLabel}>Quick actions</div>
           <Link href="/workspace/new" title="New transaction">
             <Plus />

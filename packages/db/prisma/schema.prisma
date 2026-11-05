@@ -23,6 +23,32 @@ model User {
   matters          Matter[]            @relation("AgentMatters")
   participations   MatterParticipant[]
   checklistShares  ChecklistShare[]
+  businessContacts BusinessContact[]
+}
+
+// Private coordinator address book. Matters store copied snapshots, never a
+// relation that silently replaces historical contact information on reads.
+model BusinessContact {
+  id          String    @id @default(cuid())
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  kind        String
+  name        String
+  company     String    @default("")
+  email       String    @default("")
+  phone       String    @default("")
+  identityKey String
+  favorite    Boolean   @default(false)
+  revision    Int       @default(1)
+  usageCount  Int       @default(0)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([ownerId, identityKey])
+  @@index([ownerId, kind])
+  @@index([ownerId, favorite])
+  @@index([ownerId, lastUsedAt])
 }
 
 model Session {
@@ -384,6 +410,8 @@ model EmailThread {
   id               String         @id @default(cuid())
   ownerId          String
   providerThreadId String
+  lifecycleKey     String         @default("primary")
+  createdAt        DateTime       @default(now())
   matterId         String?
   subject          String
   status           String         @default("unassigned")
@@ -392,7 +420,7 @@ model EmailThread {
   updatedAt        DateTime       @updatedAt
   messages         EmailMessage[]
 
-  @@unique([ownerId, providerThreadId])
+  @@unique([ownerId, providerThreadId, lifecycleKey])
   @@index([matterId])
 }
 
@@ -435,6 +463,7 @@ model EmailDraft {
 }
 
 model CommunicationTemplate {
+  serviceGroup String?
   id        String   @id @default(cuid())
   name      String
   side      String

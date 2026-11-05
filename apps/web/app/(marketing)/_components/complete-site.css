@@ -1,0 +1,78 @@
+@import "./complete-site-fonts.css";
+.weatherly-complete-site {
+  color: #141210;
+  font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: normal;
+}
+.weatherly-complete-site,
+.weatherly-complete-site * {
+  box-sizing: content-box;
+}
+.weatherly-complete-site a {
+  color: #7a6247;
+}
+.weatherly-complete-site a:hover {
+  color: #141210;
+}
+.weatherly-complete-site summary {
+  list-style: none;
+}
+.weatherly-complete-site summary::-webkit-details-marker {
+  display: none;
+}
+.weatherly-complete-site input,
+.weatherly-complete-site textarea,
+.weatherly-complete-site button {
+  color: inherit;
+}
+.weatherly-site-message {
+  padding: 12px 14px;
+  margin: 8px 0 0;
+  font:
+    13px/1.6 "Montserrat",
+    sans-serif;
+  background: #f2ebe0;
+  border: 1px solid #e6dccd;
+}
+.weatherly-site-message small,
+.weatherly-site-message a {
+  display: block;
+}
+.weatherly-site-operation {
+  display: grid;
+  gap: 12px;
+  font:
+    13px/1.6 "Montserrat",
+    sans-serif;
+}
+.weatherly-site-operation fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+.weatherly-site-operation label {
+  display: grid;
+  gap: 6px;
+}
+.weatherly-site-operation input:not([type="checkbox"]) {
+  border: 1px solid #e6dccd;
+  background: #fff;
+  padding: 10px;
+  font: inherit;
+  min-width: 0;
+}
+.weatherly-site-operation button {
+  background: #141210;
+  color: #fff;
+  border: 0;
+  padding: 12px 18px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.weatherly-complete-site button {
+  box-sizing: border-box;
+}

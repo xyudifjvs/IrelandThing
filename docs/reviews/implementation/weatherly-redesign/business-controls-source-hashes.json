@@ -1,0 +1,31 @@
+{
+  "capturedAt": "2026-11-05T04:07:08.353126+00:00",
+  "baseCommit": "a9a10c1908c30e7a6ca44c8423e995dc4d58a97a",
+  "scope": "See independent-business-controls-review.md; full-file hashes identify content, not certification of unrelated code in shared files.",
+  "sha256": {
+    "packages/contacts/src/index.ts": "6fc8b288910ea0985341115d6ceed7c90bca1a18e143721de79ce51438db8d31",
+    "packages/contacts/src/transaction-sources.ts": "a7c88e1a7809c0975fa8bd07a8e449bd6bc95997aa978287f441731bc7871ed1",
+    "packages/communications/src/contact-fields.ts": "f5786b1762cad312e656d8dda0709e0d9e8a11eba397c60cbca3568c7b197a84",
+    "packages/communications/src/merge-fields.ts": "069e15709098c79c62ebea14b2632e4f8de2d57128f6088d92af4377fb22248c",
+    "packages/communications/src/reminders.ts": "7ad64ac225a41706302f43b9fa61106c5740a057b6f8ed02cf43492d1634955a",
+    "packages/communications/src/service.ts": "2b94fe5010f1eb4cde97c346507fd4988dd7086b989b1bdb34d7526f7af86dcf",
+    "packages/billing/src/termination.ts": "adef7854c035f4a9f83b5f99e7d5fb63b894c447c1c62fb3a43476bfe2ab107b",
+    "packages/billing/src/service.ts": "2d8f933be133ba8feec2ca8848f2db99178055e11fbb38919d5b3bf48f199322",
+    "packages/billing/src/account.ts": "5ae3bedc2a14b0fe6795d238cc588347e058a3f21531b7b204b25038518a4014",
+    "packages/matters/src/index.ts": "7ab10ee255ed049364fd11b1d6b7a7a6aa1c7476a4de13b483575e1d34424e90",
+    "apps/api/src/main.ts": "4604ea6dad4d2e67de405215d7bd57e47193baf40fc7e5a3ebc342d4194f721e",
+    "apps/worker/src/main.ts": "1c874e1e69a2fa50fc562b0225f136e3b0fcadb934c07f4d0635ac591806359f",
+    "packages/db/prisma/migrations/20261105020000_business_contacts/migration.sql": "ebc65a0a158361aa3b659dde96d2e895a479ac192aadded4ed4ba0780f8124da",
+    "packages/db/prisma/migrations/20261105030000_template_groups/migration.sql": "c2d08c703db171b03062988241182e3322b7dcb8e05e90133d555716b673e9e2",
+    "packages/billing/test/termination.test.ts": "2db03f596b56d57e55b9630f8140cf7f2e52c66b9c1786c7c54f7d6cba2969ba",
+    "packages/billing/test/service-catalog.test.ts": "667db44cb76b04de168efede9ca07b2e0f30bb6cb5f31082d40876717e47e1c8",
+    "packages/contacts/test/directory.test.ts": "cd2327bdd0388eceff5d1265ad658037eb30822fd8f9bee4bbeef19c9d5d5fba",
+    "packages/contacts/test/source-conflicts.test.ts": "cb6ef7d0b2fc7db559d916566127f2b3640718467264230d7602be82365ee397",
+    "packages/communications/test/reminders.test.ts": "2efefcb0f41cbea43ef9e1ee934056be2988a19d1eddf14efe27e111d1e9a422",
+    "packages/communications/test/contact-fields.test.ts": "a4db6c0258a2cf97564afb9b21575078b37f593527eaf915c220c18a8b155bea",
+    "packages/identity/test/services.test.ts": "e83426f13984ae155dfaaa666b0f4f49767e99dc2650c84a018eb09623814258",
+    "packages/matters/src/deadline-fields.ts": "9a8eac1daf04d55d91547360a71e3e92725158209281965999c3a8b6c10c7ac7",
+    "packages/matters/src/task-fields.ts": "cc2f932c5372b1a051f13d38ea0f602375e474b475164b227a320866238588c2",
+    "packages/matters/src/checklist-sharing.ts": "c5ed6f961402b06e43d0a84076996ecd8b54caeef6333f9b59d85d6020425011"
+  }
+}

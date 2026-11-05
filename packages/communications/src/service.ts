@@ -28,6 +28,7 @@ import {
 } from "./gateway";
 import {
   asRecord,
+  assertReviewedMatter,
   textArray,
   draftInput,
   recipientArray,
@@ -815,7 +816,8 @@ export class CommunicationsService {
       .parse(input);
     const old = await prisma.emailDraft.findUnique({ where: { id } });
     if (!old) throw new HttpError(404, "DRAFT_NOT_FOUND", "Draft not found");
-    await requireMatter(actor, old.matterId, true);
+    const currentMatter=await requireMatter(actor, old.matterId, true);
+    assertReviewedMatter(currentMatter);
     const sendKey = `gmail-draft:${id}:${expectedRevision}`;
     if (
       old.sendKey === sendKey &&
@@ -874,6 +876,7 @@ export class CommunicationsService {
       approvedById: actor.id,
       approvedAt: new Date().toISOString(),
       approvedRevision: expectedRevision,
+      sourceMatterRevision: currentMatter.revision,
       sourceTasks: asRecord(old.details).templateId
         ? await prisma.task.findMany({
             where: { matterId: old.matterId, dueDate: { not: null } },
@@ -1036,6 +1039,7 @@ export class CommunicationsService {
       .object({
         name: z.string().min(1).max(150),
         side: z.enum(["buyer", "seller", "both"]),
+        serviceGroup:z.enum(["buyer_ctc","seller_ctc","buyer_compliance","seller_compliance"]).nullable().optional(),
         phase: z.string().min(1).max(100),
         subject: z
           .string()
@@ -1048,6 +1052,7 @@ export class CommunicationsService {
     const parsed = id
       ? schema.extend({ expectedRevision: revision }).parse(input)
       : { ...schema.parse(input), expectedRevision: undefined };
+    if(parsed.serviceGroup&&!parsed.serviceGroup.startsWith(parsed.side+"_"))throw new HttpError(422,"TEMPLATE_GROUP_SIDE_MISMATCH","Select the buyer or seller group matching this template.");
     validateMerge(parsed.subject);
     validateMerge(parsed.body);
     return prisma.$transaction(async (tx) => {
@@ -1106,6 +1111,7 @@ export class CommunicationsService {
       .strict()
       .parse(input);
     const matter = await requireMatter(actor, matterId, false, db);
+    if(!allowUnresolved)assertReviewedMatter(matter);
     const template = await db.communicationTemplate.findUnique({
       where: { id },
     });
@@ -1117,6 +1123,7 @@ export class CommunicationsService {
         "TEMPLATE_SIDE_MISMATCH",
         "Template does not match the represented side",
       );
+    if(template.serviceGroup && template.serviceGroup !== `${matter.side}_${matter.packageCode === "complete"?"compliance":"ctc"}`)throw new HttpError(422,"TEMPLATE_GROUP_MISMATCH","Select the template group matching this transaction’s side and designated package.");
     const fields = await mergeFields(actor, matterId, db);
     const computed: Record<string, string> = {};
     for (const f of fields) if (f.value !== null) computed[f.key] = f.value;

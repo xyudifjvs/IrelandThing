@@ -14,6 +14,7 @@ import {
 import { getMatter } from "@weatherly/matters";
 import { queryStoredRecords } from "../../assistant/src/records";
 import { saveIntakeDraft, submitIntake } from "../src/index";
+import { completedReference } from "./reference-fixture";
 
 const runId = randomUUID();
 const actors = ["agent", "agent"].map((role, index): Principal => ({
@@ -181,16 +182,8 @@ describe("durable intake document batch submissions", () => {
       expectedRevision: 1,
       payload: {
         ...savedPayload,
-        referenceIntake: {
-          version: 1,
-          variant: "buyer-compliance",
-          fields: {
-            contractLocation:
-              "Dotloop: synthetic loop / executed contract folder",
-          },
-          uploads: {},
-          fileNames: {},
-        },
+        contractSource: "dotloop",
+        dotloopLoopId: "synthetic-legacy-loop",
       },
     });
     input.expectedRevision = saved.revision;
@@ -199,6 +192,21 @@ describe("durable intake document batch submissions", () => {
     expect(result.matter.title).toBe("Untitled transaction");
     expect(result.matter.propertyAddress).toBe("");
     expect(result.matter.agentId).toBe(agent.id);
+    expect(result.matter.stage).toBe("pending_review");
+    expect(result.matter.details).toMatchObject({
+      fileReview: { status: "pending" },
+    });
+    expect(result.matter.details).not.toHaveProperty("workflow");
+    const initialDates = await prisma.deadline.findMany({
+      where: { matterId: result.matter.id },
+    });
+    expect(initialDates).toHaveLength(3);
+    for (const date of initialDates)
+      expect(date).toMatchObject({
+        status: "unknown",
+        date: null,
+        details: { visibility: "coordinator", reviewRequired: true },
+      });
     expect(result.submission.snapshot).toMatchObject({
       serviceSnapshot: {
         code: "complete",
@@ -217,7 +225,7 @@ describe("durable intake document batch submissions", () => {
       expect.arrayContaining([
         "Obtain property address",
         "Complete client contact information",
-        "Obtain executed contract",
+        "Import executed contract from Dotloop",
         "Obtain title company details",
         "Obtain lender details",
       ]),
@@ -436,6 +444,7 @@ describe("durable intake document batch submissions", () => {
       version: 1,
       variant: "seller-compliance",
       fields: {
+        ...completedReference("seller-compliance").fields,
         service: "ctcc",
         side: "seller",
         a_num: "1420",
@@ -548,11 +557,9 @@ describe("durable intake document batch submissions", () => {
     await prisma.matterParticipant.create({
       data: { matterId: result.matter.id, userId: outsider.id, role: "client" },
     });
-    const clientView = await getMatter(
-      { ...outsider, role: "client" },
-      result.matter.id,
-    );
-    expect(clientView).not.toHaveProperty("details");
+    await expect(
+      getMatter({ ...outsider, role: "client" }, result.matter.id),
+    ).rejects.toMatchObject({ status: 404 });
     await expect(
       queryStoredRecords(
         { ...outsider, role: "client" },
@@ -595,6 +602,7 @@ describe("durable intake document batch submissions", () => {
               version: 1,
               variant: "buyer-compliance",
               fields: {
+                ...completedReference("buyer-compliance").fields,
                 contractLocation:
                   "Synthetic external executed-contract location",
               },
@@ -635,6 +643,7 @@ describe("durable intake document batch submissions", () => {
             version: 1,
             variant: "buyer-compliance",
             fields: {
+              ...completedReference("buyer-compliance").fields,
               contractLocation: "Synthetic external executed-contract location",
             },
             uploads: { hoaFiles: [unfinished.id] },
@@ -673,6 +682,8 @@ describe("durable intake document batch submissions", () => {
             version: 1,
             variant: "buyer-compliance",
             fields: {
+              ...completedReference("buyer-compliance").fields,
+              docsDotloop: false,
               hoa: "yes",
               hoaDocs: "upload",
               contractLocation: "Dotloop: synthetic executed contract folder",
@@ -764,4 +775,351 @@ describe("durable intake document batch submissions", () => {
     expect(replay.submission).toEqual(historical);
     expect(replay.matter.details).toEqual({ priceCents: 62500 });
   });
+
+  it("requires a plain-service upload while allowing an identified compliance loop without a deep URL", async () => {
+    const initial = {
+      ...payload([], {}),
+      packageCode: "essentials",
+      propertyAddress: "1420 Synthetic Loop Road",
+      referenceIntake: {
+        version: 1,
+        variant: "buyer",
+        fields: {
+          ...completedReference("buyer").fields,
+          docsDotloop: true,
+        },
+        uploads: {},
+        fileNames: {},
+      },
+    };
+    const created = await prisma.intakeDraft.create({
+      data: { userId: agent.id, payload: initial },
+    });
+    draftIds.push(created.id);
+    const saved = await saveIntakeDraft(agent, created.id, {
+      expectedRevision: 1,
+      payload: initial,
+    });
+    await expect(
+      submitIntake(agent, created.id, {
+        expectedRevision: saved.revision,
+        idempotencyKey: `submit-${created.id}`,
+      }),
+    ).rejects.toMatchObject({ code: "CONTRACT_UPLOAD_REQUIRED", status: 422 });
+    expect(
+      (
+        await prisma.intakeDraft.findUniqueOrThrow({
+          where: { id: created.id },
+        })
+      ).status,
+    ).toBe("draft");
+    const compliance = {
+      ...initial,
+      packageCode: "complete",
+      referenceIntake: {
+        ...initial.referenceIntake,
+        variant: "buyer-compliance",
+        fields: { ...initial.referenceIntake.fields, service: "ctcc" },
+      },
+    };
+    const updated = await saveIntakeDraft(agent, created.id, {
+      expectedRevision: saved.revision,
+      payload: compliance,
+    });
+    const result = await submitIntake(agent, created.id, {
+      expectedRevision: updated.revision,
+      idempotencyKey: `submit-${created.id}`,
+    });
+    matterIds.push(result.matter.id);
+    expect(result.submission.snapshot).toMatchObject({
+      serviceSnapshot: {
+        code: "complete",
+        priceCents: 51500,
+        dueAtClosing: true,
+      },
+      referenceIntake: { fields: { docsDotloop: true } },
+    });
+    expect(
+      await prisma.paymentOrder.count({
+        where: { matterId: result.matter.id },
+      }),
+    ).toBe(0);
+    expect(
+      (
+        await prisma.task.findMany({ where: { matterId: result.matter.id } })
+      ).map((task) => task.title),
+    ).toContain(
+      "Locate executed contract in identified transaction loop; verify account access",
+    );
+  });
+
+  it("links a new replacement intake to an authorized terminated transaction without changing its history or reusing files", async () => {
+    const old = await prisma.matter.create({
+      data: {
+        title: "Original terminated contract",
+        propertyAddress: "1420 Synthetic Replacement Road",
+        side: "buyer",
+        packageCode: "complete",
+        stage: "terminated",
+        agentId: agent.id,
+        details: { originalHistory: "Preserve exactly" },
+      },
+    });
+    matterIds.push(old.id);
+    const oldDocument = await upload(
+      agent,
+      "old-executed-contract.pdf",
+      "contract",
+    );
+    await prisma.document.update({
+      where: { id: oldDocument.id },
+      data: { matterId: old.id },
+    });
+    const before = await prisma.matter.findUniqueOrThrow({
+      where: { id: old.id },
+    });
+    const beforeDocs = await prisma.document.findMany({
+      where: { matterId: old.id },
+    });
+    const makeReplacement = async (patch: Record<string, unknown> = {}) => {
+      const created = await prisma.intakeDraft.create({
+        data: {
+          userId: agent.id,
+          payload: {
+            ...payload([], {}),
+            propertyAddress: " 1420   Synthetic Replacement Road ",
+            replacesMatterId: old.id,
+            referenceIntake: {
+              version: 1,
+              variant: "buyer-compliance",
+              fields: {
+                ...completedReference("buyer-compliance").fields,
+                docsDotloop: true,
+                transactionName: "New replacement contract",
+              },
+              uploads: {},
+              fileNames: {},
+            },
+            ...patch,
+          },
+        },
+      });
+      draftIds.push(created.id);
+      return created;
+    };
+    for (const patch of [
+      {
+        side: "seller",
+        referenceIntake: {
+          version: 1,
+          variant: "seller-compliance",
+          fields: {
+            ...completedReference("seller-compliance").fields,
+            contractLocation: "New loop",
+          },
+          uploads: {},
+          fileNames: {},
+        },
+      },
+      { propertyAddress: "Other property" },
+    ]) {
+      const invalid = await makeReplacement(patch);
+      await expect(
+        submitIntake(agent, invalid.id, {
+          expectedRevision: 1,
+          idempotencyKey: `replacement-${invalid.id}`,
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_REPLACEMENT" });
+    }
+    const reused = await makeReplacement({ documentIds: [oldDocument.id] });
+    await expect(
+      submitIntake(agent, reused.id, {
+        expectedRevision: 1,
+        idempotencyKey: `replacement-${reused.id}`,
+      }),
+    ).rejects.toMatchObject({ code: "DOCUMENT_ALREADY_ASSIGNED" });
+    const fresh = await makeReplacement({ propertyAddress: "" });
+    const result = await submitIntake(agent, fresh.id, {
+      expectedRevision: 1,
+      idempotencyKey: `replacement-${fresh.id}`,
+    });
+    matterIds.push(result.matter.id);
+    expect(result.matter.id).not.toBe(old.id);
+    expect(result.matter).toMatchObject({
+      stage: "pending_review",
+      propertyAddress: "",
+      details: { replacesMatterId: old.id, fileReview: { status: "pending" } },
+    });
+    expect(result.submission.snapshot).toMatchObject({
+      replacesMatterId: old.id,
+    });
+    expect(
+      await prisma.matter.findUniqueOrThrow({ where: { id: old.id } }),
+    ).toEqual(before);
+    expect(
+      await prisma.document.findMany({ where: { matterId: old.id } }),
+    ).toEqual(beforeDocs);
+    const outsiderDraft = await prisma.intakeDraft.create({
+      data: {
+        userId: outsider.id,
+        payload: {
+          ...payload([], {}),
+          replacesMatterId: old.id,
+          referenceIntake: {
+            version: 1,
+            variant: "buyer-compliance",
+            fields: {
+              ...completedReference("buyer-compliance").fields,
+              contractLocation: "Other loop",
+            },
+            uploads: {},
+            fileNames: {},
+          },
+        },
+      },
+    });
+    draftIds.push(outsiderDraft.id);
+    await expect(
+      submitIntake(outsider, outsiderDraft.id, {
+        expectedRevision: 1,
+        idempotencyKey: `replacement-${outsiderDraft.id}`,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    const active = await prisma.matter.create({
+      data: {
+        title: "Active source",
+        propertyAddress: "1420 Synthetic Replacement Road",
+        side: "buyer",
+        packageCode: "complete",
+        agentId: agent.id,
+      },
+    });
+    matterIds.push(active.id);
+    const activeDraft = await makeReplacement({ replacesMatterId: active.id });
+    await expect(
+      submitIntake(agent, activeDraft.id, {
+        expectedRevision: 1,
+        idempotencyKey: `replacement-${activeDraft.id}`,
+      }),
+    ).rejects.toMatchObject({ code: "REPLACEMENT_REQUIRES_TERMINATED" });
+  });
+
+  it.each([
+    "buyer",
+    "seller",
+    "buyer-compliance",
+    "seller-compliance",
+  ] as const)(
+    "saves partial %s drafts and creates one pending-review receipt only after all active answers are complete",
+    async (variant) => {
+      const reference = completedReference(variant);
+      const compliance = variant.endsWith("-compliance");
+      const contract =
+        !compliance || variant === "seller-compliance"
+          ? await upload(agent, `complete-${variant}.pdf`, "contract")
+          : null;
+      if (contract) {
+        reference.uploads.contractDocs = [contract.id];
+        reference.fileNames[contract.id] = contract.name;
+      }
+      // Deliberately retained invalid hidden values must survive the final snapshot.
+      reference.fields.co_email = "inactive invalid co-op email";
+      reference.fields.t_email = "inactive invalid title email";
+      reference.fields.l_email = "inactive invalid lender email";
+      reference.fields.c1_email = "inactive invalid additional email";
+      reference.fields.hoaDate = "inactive invalid date";
+      const body = {
+        ...payload(contract ? [contract.id] : [], {}),
+        side: variant.startsWith("seller") ? "seller" : "buyer",
+        packageCode: compliance ? "complete" : "essentials",
+        propertyAddress: "1420 Synthetic Lane, Columbus, OH 43215",
+        clients: [
+          {
+            name: "Synthetic Client",
+            email: "synthetic-client@example.test",
+            phone: "555-0100",
+          },
+        ],
+        title: {
+          choice: variant.startsWith("seller") ? "mls" : "listing_agent",
+        },
+        broker: { pre1978: false, ownChecklist: false },
+        referenceIntake: reference,
+      };
+      const created = await prisma.intakeDraft.create({
+        data: {
+          userId: agent.id,
+          payload: {
+            ...body,
+            referenceIntake: {
+              ...reference,
+              fields: { service: reference.fields.service },
+            },
+          },
+        },
+      });
+      draftIds.push(created.id);
+      const invalidPartial = {
+        ...body,
+        referenceIntake: {
+          ...reference,
+          fields: {
+            service: reference.fields.service,
+            b1_email: "partly typed invalid email",
+          },
+        },
+      };
+      const savedPartial = await saveIntakeDraft(agent, created.id, {
+        expectedRevision: 1,
+        payload: invalidPartial,
+      });
+      expect(savedPartial.payload).toEqual(invalidPartial);
+      const incomplete = await saveIntakeDraft(agent, created.id, {
+        expectedRevision: savedPartial.revision,
+        payload: {
+          ...body,
+          referenceIntake: {
+            ...reference,
+            fields: { service: reference.fields.service },
+          },
+        },
+      });
+      await expect(
+        submitIntake(agent, created.id, {
+          expectedRevision: incomplete.revision,
+          idempotencyKey: `complete-${created.id}`,
+        }),
+      ).rejects.toMatchObject({
+        code:
+          compliance && !contract ? "CONTRACT_REQUIRED" : "INTAKE_INCOMPLETE",
+        status: 422,
+      });
+      expect(
+        await prisma.intakeSubmission.count({ where: { draftId: created.id } }),
+      ).toBe(0);
+      const complete = await saveIntakeDraft(agent, created.id, {
+        expectedRevision: incomplete.revision,
+        payload: body,
+      });
+      const input = {
+        expectedRevision: complete.revision,
+        idempotencyKey: `complete-${created.id}`,
+      };
+      const result = await submitIntake(agent, created.id, input);
+      matterIds.push(result.matter.id);
+      expect(result.matter).toMatchObject({
+        stage: "pending_review",
+        details: {
+          fileReview: { status: "pending" },
+          referenceIntake: reference,
+        },
+      });
+      expect(result.submission.snapshot).toMatchObject({
+        referenceIntake: reference,
+      });
+      expect((await submitIntake(agent, created.id, input)).submission.id).toBe(
+        result.submission.id,
+      );
+    },
+  );
 });

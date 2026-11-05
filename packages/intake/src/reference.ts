@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dateOnly } from "@weatherly/matters";
+import { HttpError } from "@weatherly/platform";
 
 const safeKey = z
   .string()
@@ -48,9 +49,17 @@ export const referenceIntake = z
         continue;
       }
       if (!answer) continue;
-      if (name.endsWith("_email") && !z.email().safeParse(answer).success)
+      if (
+        referenceFieldActive(name, value) &&
+        name.endsWith("_email") &&
+        !z.email().safeParse(answer).success
+      )
         issue(["fields", name], "Enter a valid email address");
-      if (name === "hoaDate" && !dateOnly.safeParse(answer).success)
+      if (
+        name === "hoaDate" &&
+        referenceFieldActive(name, value) &&
+        !dateOnly.safeParse(answer).success
+      )
         issue(["fields", name], "Enter a real HOA delivery date (YYYY-MM-DD)");
       if (!["notes", "utilNotes"].includes(name) && answer.length > 2000)
         issue(["fields", name], "Use at most 2,000 characters for this answer");
@@ -78,6 +87,234 @@ export const referenceIntake = z
   });
 
 export type ReferenceIntake = z.infer<typeof referenceIntake>;
+
+function referenceFieldActive(name: string, value: ReferenceIntake) {
+  const f = value.fields;
+  if (/^c\d+_/.test(name)) return f.addl === "yes";
+  if (name.startsWith("co_")) return f.coop === "type";
+  if (name.startsWith("t_")) return f.title === "have";
+  if (name.startsWith("l_")) return f.cash === "no" && f.lender === "have";
+  if (name === "hoaDate")
+    return (
+      f.hoa === "yes" &&
+      ["upload", "mls"].includes(String(f.hoaDocs)) &&
+      f.hoaSent === "yes"
+    );
+  return true;
+}
+
+/** Only final submission calls this; draft storage keeps every partial answer. */
+export function referenceCompletionIssues(reference: ReferenceIntake) {
+  const f = reference.fields;
+  const text = (name: string) =>
+    typeof f[name] === "string" ? f[name].trim() : "";
+  const seller = reference.variant.startsWith("seller");
+  const issues: { field: string; message: string }[] = [];
+  const required = (name: string, label: string) => {
+    if (!text(name)) issues.push({ field: name, message: label });
+  };
+  const choice = (name: string, values: readonly string[], label: string) => {
+    if (!values.includes(text(name)))
+      issues.push({ field: name, message: label });
+  };
+  const people = (prefix: string) => [
+    ...new Set(
+      Object.keys(f).flatMap((name) => {
+        const match = new RegExp(
+          `^${prefix}(\\d+)_(?:name|email|phone|rel)$`,
+        ).exec(name);
+        return match ? [match[1]] : [];
+      }),
+    ),
+  ];
+  choice(
+    "service",
+    [reference.variant.endsWith("-compliance") ? "ctcc" : "ctc"],
+    "Service selection",
+  );
+  choice(
+    "side",
+    [seller ? "seller" : "buyer"],
+    "Buyer or seller representation",
+  );
+  for (const [name, label] of [
+    ["a_num", "Property street number"],
+    ["a_street", "Property street name"],
+    ["a_city", "Property city"],
+    ["a_state", "Property state"],
+    ["a_zip", "Property ZIP code"],
+  ])
+    required(name, label);
+  choice("cash", ["yes", "no"], "Cash purchase: yes or no");
+  if (seller)
+    choice("occ", ["Vacant", "Occupied"], "Vacant or occupied property");
+  const clients = people("b");
+  if (clients.length > 12)
+    issues.push({
+      field: "b1_name",
+      message: "At most 12 buyer or seller contacts",
+    });
+  if (!clients.length)
+    issues.push({
+      field: "b1_name",
+      message: "At least one buyer or seller contact",
+    });
+  for (const i of clients)
+    for (const [field, label] of [
+      ["name", "name"],
+      ["email", "email"],
+      ["phone", "phone"],
+    ])
+      required(
+        `b${i}_${field}`,
+        `${seller ? "Seller" : "Buyer"} ${i} ${label}`,
+      );
+  if (clients.length > 1) {
+    choice(
+      "buyerRel",
+      [
+        "Married",
+        "Engaged / partners",
+        "Siblings",
+        "Parent / child",
+        "Friends",
+        "Business partners",
+        "other",
+      ],
+      "Relationship between clients",
+    );
+    if (f.buyerRel === "other")
+      required("buyerRelOther", "Other client relationship");
+  }
+  choice(
+    "coop",
+    ["contract", "type"],
+    "Co-op contact confirmation or manual details",
+  );
+  if (f.coop === "type")
+    for (const [name, label] of [
+      ["co_brokerage", "Co-op brokerage"],
+      ["co_name", "Co-op agent name"],
+      ["co_phone", "Co-op phone"],
+      ["co_email", "Co-op email"],
+    ])
+      required(name, label);
+  choice("addl", ["yes", "no"], "Additional contacts: yes or no");
+  if (f.addl === "yes") {
+    const contacts = people("c");
+    if (contacts.length > 12)
+      issues.push({
+        field: "c1_name",
+        message: "At most 12 additional contacts",
+      });
+    if (!contacts.length)
+      issues.push({
+        field: "c1_name",
+        message: "At least one additional contact",
+      });
+    for (const i of contacts) {
+      required(`c${i}_name`, `Additional contact ${i} name`);
+      if (!text(`c${i}_email`) && !text(`c${i}_phone`))
+        issues.push({
+          field: `c${i}_email`,
+          message: `Additional contact ${i} email or phone`,
+        });
+    }
+  }
+  choice(
+    "title",
+    seller ? ["have", "mls"] : ["have", "mls", "unsure"],
+    "Title company details or supplied lookup choice",
+  );
+  const manual = (prefix: string, person: string, label: string) => {
+    if (!text(`${prefix}_co`) && !text(person))
+      issues.push({
+        field: `${prefix}_co`,
+        message: `${label} company or contact name`,
+      });
+    if (!text(`${prefix}_email`) && !text(`${prefix}_phone`))
+      issues.push({
+        field: `${prefix}_email`,
+        message: `${label} email or phone`,
+      });
+  };
+  if (f.title === "have") manual("t", "t_contact", "Title");
+  choice(
+    "lender",
+    f.cash === "yes"
+      ? ["cash"]
+      : seller
+        ? ["have", "preapproval", "buyersagent"]
+        : ["have", "preapproval", "deciding"],
+    f.cash === "yes"
+      ? "Lender: N/A – cash"
+      : "Lender details or supplied help choice",
+  );
+  if (f.cash === "no" && f.lender === "have")
+    manual("l", "l_officer", "Lender");
+  required(
+    "fee",
+    seller ? "Seller broker fee amount" : "Buyer broker fee amount",
+  );
+  if (seller) required("listcomm", "Listing commission");
+  else
+    choice(
+      "emd",
+      ["yes", "no"],
+      "Deduct earnest money from commission: yes or no",
+    );
+  choice("hoa", ["yes", "no"], "HOA: yes or no");
+  if (f.hoa === "yes") {
+    choice(
+      "hoaDocs",
+      ["upload", "mls", "request"],
+      "HOA document source or request help",
+    );
+    if (f.hoaDocs === "upload" && !reference.uploads.hoaFiles?.length)
+      issues.push({
+        field: "hoaFiles",
+        message: "Upload HOA documents or select a different source",
+      });
+    if (["upload", "mls"].includes(String(f.hoaDocs))) {
+      choice("hoaSent", ["yes", "no"], "HOA documents sent: yes or no");
+      if (f.hoaSent === "yes")
+        required("hoaDate", "HOA document delivery date");
+    }
+  }
+  if (!seller) {
+    choice("mls", ["yes", "no"], "MLS closing instructions: yes or no");
+    if (f.mls === "yes") required("mls_sell", "MLS selling agent name");
+  }
+  choice("gift", ["yes", "no"], "Closing gift: yes or no");
+  if (f.gift === "yes") {
+    choice("tier", ["Classic", "Signature", "Luxury"], "Gift tier request");
+    choice(
+      "giftOpt",
+      ["Gift Option 1", "Gift Option 2"],
+      "Gift option request",
+    );
+    if (f.giftAgree !== true && f.giftAgree !== "on")
+      issues.push({
+        field: "giftAgree",
+        message: "Gift policy acknowledgment",
+      });
+  }
+  return issues;
+}
+export function assertReferenceComplete(reference: ReferenceIntake) {
+  const issues = referenceCompletionIssues(reference);
+  if (issues.length)
+    throw new HttpError(
+      422,
+      "INTAKE_INCOMPLETE",
+      `Complete the active intake answers: ${issues
+        .slice(0, 10)
+        .map((issue) => issue.message)
+        .join(
+          "; ",
+        )}${issues.length > 10 ? `; and ${issues.length - 10} more.` : "."}`,
+    );
+}
 
 export function referenceDocumentIds(reference?: ReferenceIntake) {
   return [...new Set(Object.values(reference?.uploads || {}).flat())];
@@ -131,9 +368,15 @@ export function referenceFollowups(reference: ReferenceIntake) {
   } else if (!fields.hoa) add("Confirm HOA applicability", "hoa");
   if (!seller && fields.mls === "yes")
     add("Review MLS closing agent instructions", "mls_sell");
-  if (fields.docsDotloop === true || fields.docsDotloop === "on")
+  if (
+    reference.variant.endsWith("-compliance") &&
+    (fields.docsDotloop === true ||
+      fields.docsDotloop === "on" ||
+      (typeof fields.contractLocation === "string" &&
+        fields.contractLocation.trim()))
+  )
     add(
-      "Review requested contract documents in Dotloop; verify account access",
+      "Locate executed contract in identified transaction loop; verify account access",
       "docsDotloop",
       "compliance",
     );

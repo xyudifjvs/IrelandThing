@@ -7,11 +7,12 @@ import {
   principal,
   type Principal,
 } from "@weatherly/platform";
-import { audit, revision, applyInitialWorkflow } from "@weatherly/matters";
+import { audit, revision, requireMatter } from "@weatherly/matters";
 import {
   referenceIntake,
   referenceDocumentIds,
   referenceFollowups,
+  assertReferenceComplete,
 } from "./reference";
 export { referenceIntake } from "./reference";
 const optionalEmail = z.union([z.email(), z.literal("")]).optional();
@@ -85,6 +86,7 @@ export const intakePayload = z
       })
       .strict(),
     linkedMatterId: z.string().optional(),
+    replacesMatterId: z.string().trim().min(1).max(200).optional(),
     referenceIntake: referenceIntake.optional(),
   })
   .strict()
@@ -203,7 +205,7 @@ export const intakePayload = z
       err(["gift"], "Remove gift details when no gift is requested");
   });
 export type IntakePayload = z.infer<typeof intakePayload>;
-/** Drafts remain partial; these confirmed minimums apply only to a new submission. */
+/** Drafts remain partial. New reference submissions answer their active questions. */
 export function assertSubmissionReady(data: IntakePayload) {
   if (data.packageCode === "full_listing")
     throw new HttpError(
@@ -215,16 +217,39 @@ export function assertSubmissionReady(data: IntakePayload) {
   const hasContract = reference
     ? Boolean(reference.uploads.contractDocs?.length)
     : data.contractSource === "upload" && Boolean(data.documentIds.length);
-  const hasLocation = reference
+  if (hasContract) {
+    if (reference) assertReferenceComplete(reference);
+    return;
+  }
+  if (data.packageCode === "essentials")
+    throw new HttpError(
+      422,
+      "CONTRACT_UPLOAD_REQUIRED",
+      "Contract to Close requires an uploaded executed contract. You can save your draft at any time.",
+    );
+  const statedLocation = reference
     ? typeof reference.fields.contractLocation === "string" &&
       Boolean(reference.fields.contractLocation.trim())
     : data.contractSource === "dotloop" && Boolean(data.dotloopLoopId?.trim());
-  if (!hasContract && !hasLocation)
+  const loopSelected =
+    reference?.fields.docsDotloop === true ||
+    reference?.fields.docsDotloop === "on";
+  const transactionName = reference?.fields.transactionName;
+  const identifiedLoop =
+    loopSelected &&
+    ((typeof transactionName === "string" && Boolean(transactionName.trim())) ||
+      Boolean(data.propertyAddress.trim()) ||
+      (typeof reference?.fields.a_num === "string" &&
+        Boolean(reference.fields.a_num.trim()) &&
+        typeof reference.fields.a_street === "string" &&
+        Boolean(reference.fields.a_street.trim())));
+  if (!statedLocation && !identifiedLoop)
     throw new HttpError(
       422,
       "CONTRACT_REQUIRED",
-      "Upload the executed contract or tell Ireland exactly where she can locate it.",
+      "Upload the executed contract or identify the transaction loop where Ireland can find it by transaction name or property address.",
     );
+  if (reference) assertReferenceComplete(reference);
 }
 
 async function draftFor(
@@ -334,14 +359,49 @@ export async function submitIntake(
         );
       const snapshot = {
         ...data,
+        fileReview: { status: "pending" },
         serviceSnapshot: {
           code: catalog.code,
           name: catalog.name,
           revision: catalog.revision,
           priceCents: catalog.priceCents,
           currency: catalog.currency,
+          dueAtClosing: true,
+          noFeeIfTerminatedBeforeClosing: true,
         },
       };
+      if (data.replacesMatterId) {
+        // A replacement is a separate submitted record. Lock and re-read the
+        // authorized source without modifying its history or documents.
+        await requireMatter(actor, data.replacesMatterId, false, tx);
+        await tx.$queryRaw`SELECT id FROM "Matter" WHERE id=${data.replacesMatterId} FOR SHARE`;
+        const replaced = await requireMatter(
+          actor,
+          data.replacesMatterId,
+          false,
+          tx,
+        );
+        const addressKey = (value: string) =>
+          value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+        if (replaced.stage !== "terminated")
+          throw new HttpError(
+            409,
+            "REPLACEMENT_REQUIRES_TERMINATED",
+            "A replacement intake must reference an authorized terminated transaction.",
+          );
+        if (
+          replaced.side !== data.side ||
+          (data.propertyAddress &&
+            replaced.propertyAddress &&
+            addressKey(replaced.propertyAddress) !==
+              addressKey(data.propertyAddress))
+        )
+          throw new HttpError(
+            422,
+            "INVALID_REPLACEMENT",
+            "A replacement must keep the represented side and, when supplied, the same property address.",
+          );
+      }
       if (data.linkedMatterId) {
         const linked = await tx.matter.findFirst({
           where: {
@@ -414,8 +474,7 @@ export async function submitIntake(
           propertyAddress: data.propertyAddress,
           side: data.side,
           packageCode: data.packageCode,
-          stage:
-            data.packageCode === "full_listing" ? "listing" : "under_contract",
+          stage: "pending_review",
           agentId: draft.userId,
           details: snapshot as Prisma.InputJsonValue,
         },
@@ -510,6 +569,8 @@ export async function submitIntake(
             visibility: "agent",
             details: { intakeDraftId: id, referenceField: followup.field },
           });
+      if (data.replacesMatterId)
+        add("Review replacement contract and prior transaction history");
       await tx.task.createMany({
         data: tasks.map((task) => ({ ...task, matterId: matter.id })),
       });
@@ -518,10 +579,14 @@ export async function submitIntake(
           matterId: matter.id,
           label,
           status: "unknown",
-          details: { source: "intake", reviewRequired: true },
+          details: {
+            source: "intake",
+            reviewRequired: true,
+            visibility: "coordinator",
+          },
         })),
       });
-      await applyInitialWorkflow(tx, actor, matter.id);
+      // Ireland confirms the saved intake before the matter workflow becomes active.
       const submission = await tx.intakeSubmission.create({
         data: {
           draftId: id,

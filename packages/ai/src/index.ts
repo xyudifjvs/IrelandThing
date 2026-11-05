@@ -4,3 +4,5 @@ export * from "./service";
 export * from "./http";
 
 export * from "./email";
+
+export * from "./intake-review";

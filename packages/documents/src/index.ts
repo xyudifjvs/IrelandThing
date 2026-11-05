@@ -146,6 +146,7 @@ async function authorizedDocument(actor: Principal, id: string, write = false) {
         (actor.role === "client" && doc.visibility !== "client"))
     )
       throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+    if(write && actor.role !== "coordinator")throw new HttpError(403,"TRANSACTION_READ_ONLY","Only Ireland can change documents on an ongoing transaction.");
   } else if (actor.role !== "coordinator" && doc.createdById !== actor.id)
     throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
   if (write && actor.role !== "coordinator" && doc.createdById !== actor.id)
@@ -324,7 +325,7 @@ export async function uploadDocument(
     );
   let previous: Awaited<ReturnType<typeof authorizedDocument>> | undefined;
   if (documentId) previous = await authorizedDocument(actor, documentId, true);
-  if (data.matterId) await requireMatter(actor, data.matterId);
+  if (data.matterId) await requireMatter(actor, data.matterId, true);
   if (previous && data.matterId && previous.matterId !== data.matterId)
     throw new HttpError(
       422,
@@ -399,7 +400,7 @@ export async function uploadDocument(
     throw new HttpError(
       503,
       "STORAGE_UNAVAILABLE",
-      "Document storage is temporarily unavailable. Your file was not saved. Retry the upload; you can also remove the selected file and submit the intake without it.",
+      "Document storage is temporarily unavailable. Your file was not saved. Retry the upload, or save your intake draft and return later.",
     );
   }
   let extraction;
@@ -418,7 +419,7 @@ export async function uploadDocument(
       let doc = previous;
       if (doc) {
         const changed = await tx.document.updateMany({
-          where: { id: doc.id, revision: doc.revision },
+          where: { id: doc.id, revision: doc.revision, ...(actor.role !== "coordinator" ? {matterId:null,createdById:actor.id} : {}) },
           data: { revision: { increment: 1 } },
         });
         if (!changed.count)

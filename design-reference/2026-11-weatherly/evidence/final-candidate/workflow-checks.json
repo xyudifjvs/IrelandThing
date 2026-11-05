@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "Supplied public information form saves one real synthetic request; supplied portal login authenticates the seeded agent and opens their portal",
+    "Private directory persists across reload; explicit autofill preserves typed conflict; frozen draft snapshot survives directory edit and resume; agent directory403",
+    "Native edit controls stay disabled while the canonical save is pending; no newer visible edits are discarded",
+    "Agent can create expiring read-only link; canonical completion syncs; client-only/private audiences enforced; shared notes/appointment retained; agent writes403 and coordinator UI hidden; revoked link stops working"
+  ],
+  "pageErrors": [],
+  "providerCalls": "none"
+}

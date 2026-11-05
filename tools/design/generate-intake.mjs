@@ -29,6 +29,7 @@ for (const [variant, file] of Object.entries(sources)) {
   );
   markup = markup.replaceAll("<h1>", '<h1 tabindex="-1">');
   markup = markup.replace("<main>", '<main id="main-content" tabindex="-1">');
+  markup = markup.replace('<h2>Transaction submitted</h2>','<h2>Received—awaiting Ireland’s review.</h2>');
   markup = markup.replace(
     'id="restart">Start over',
     'id="restart">Start another transaction',

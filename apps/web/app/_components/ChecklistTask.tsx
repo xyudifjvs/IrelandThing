@@ -3,15 +3,19 @@ import { useState } from "react";
 import {
   mutate,
   date,
+  appointment,
   label,
   type Task,
 } from "../(workspace)/workspace/_components/data";
 import s from "./checklist.module.css";
+import {agentCanSee,clientCanSee,audienceVisibility,localAppointment} from "../_lib/checklist-audiences";
 type Draft = {
   title: string;
   visibility: string;
   dueDate: string;
   status: string;
+  note: string;
+  appointmentAt: string;
   revision?: number;
 };
 export default function ChecklistTask({
@@ -57,13 +61,15 @@ export default function ChecklistTask({
         <div className={s.editorText}>
           <strong>{task.title}</strong>
           <small>
-            {task.visibility === "client"
+            {task.visibility === "client_only" ? "Client only" : task.visibility === "client"
               ? "Clients & agent"
               : task.visibility === "coordinator"
                 ? "Coordinator only"
                 : "Agent only"}{" "}
             · {date(task.dueDate)} · {label(task.status)}
           </small>
+          {task.note && <p>{task.note}</p>}
+          {task.appointmentAt && <small>{appointment(task.appointmentAt)}</small>}
         </div>
       </div>
       <div className={s.editorActions}>
@@ -76,6 +82,8 @@ export default function ChecklistTask({
               visibility: task.visibility || "agent",
               dueDate: task.dueDate?.slice(0, 10) || "",
               status: task.status,
+              note:task.note||"",
+              appointmentAt:localAppointment(task.appointmentAt),
               revision: task.revision,
             })
           }
@@ -113,6 +121,8 @@ export default function ChecklistTask({
                   visibility: draft.visibility,
                   dueDate: draft.dueDate || null,
                   status: draft.status,
+                  note:draft.note,
+                  appointmentAt:draft.appointmentAt?new Date(draft.appointmentAt).toISOString():null,
                 },
                 "PATCH",
               );
@@ -120,6 +130,7 @@ export default function ChecklistTask({
             });
           }}
         >
+          <fieldset disabled={busy} style={{display:"contents"}}>
           {draft.revision !== task.revision && (
             <p className={s.error}>
               This step changed while you were editing. Cancel and reopen to use
@@ -139,20 +150,7 @@ export default function ChecklistTask({
             />
           </label>
           <div className={s.editorFields}>
-            <label>
-              Who can see this step
-              <select
-                aria-label="Step visibility"
-                value={draft.visibility}
-                onChange={(event) =>
-                  setDraft({ ...draft, visibility: event.target.value })
-                }
-              >
-                <option value="agent">Agent only</option>
-                <option value="client">Clients & agent</option>
-                <option value="coordinator">Coordinator only</option>
-              </select>
-            </label>
+            <fieldset style={{border:0,padding:0,margin:0}}><legend>Visible to</legend><label><input type="checkbox" aria-label="Visible to agent" checked={agentCanSee(draft.visibility)} onChange={e=>setDraft({...draft,visibility:audienceVisibility(e.target.checked,clientCanSee(draft.visibility))})}/> Agent</label><label><input type="checkbox" aria-label="Visible to client" checked={clientCanSee(draft.visibility)} onChange={e=>setDraft({...draft,visibility:audienceVisibility(agentCanSee(draft.visibility),e.target.checked)})}/> Client link</label></fieldset>
             <label>
               Due date
               <input
@@ -164,29 +162,9 @@ export default function ChecklistTask({
                 }
               />
             </label>
-            <label>
-              Status
-              <select
-                aria-label="Step status"
-                value={draft.status}
-                onChange={(event) =>
-                  setDraft({ ...draft, status: event.target.value })
-                }
-              >
-                {[
-                  "pending",
-                  "received",
-                  "proposed",
-                  "completed",
-                  "signed",
-                  "not_applicable",
-                ].map((value) => (
-                  <option key={value} value={value}>
-                    {label(value)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <label><input type="checkbox" aria-label="Step completed" checked={['completed','signed','not_applicable'].includes(draft.status)} onChange={e=>setDraft({...draft,status:e.target.checked?'completed':'pending'})}/> Completed</label>
+            <label>Short note<textarea aria-label="Step note" maxLength={1000} value={draft.note} onChange={e=>setDraft({...draft,note:e.target.value})}/></label>
+            <label>Appointment (your local time)<input aria-label="Step appointment" type="datetime-local" value={draft.appointmentAt} onChange={e=>setDraft({...draft,appointmentAt:e.target.value})}/></label>
           </div>
           <p className={s.hint}>
             Client-visible steps appear on the client link. Changing visibility
@@ -222,6 +200,7 @@ export default function ChecklistTask({
               Delete step
             </button>
           </div>
+          </fieldset>
         </form>
       )}
     </div>

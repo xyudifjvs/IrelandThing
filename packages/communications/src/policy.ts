@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { prisma } from "@weatherly/db";
+import { prisma, type Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
 import { requireMatter } from "@weatherly/matters";
 export const email = z.email().transform((v) => v.trim().toLowerCase());
@@ -38,13 +38,14 @@ export async function recipientPolicy(
   matterId: string,
   to: string[],
   cc: string[],
+  db: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
-  const matter = await requireMatter(actor, matterId);
+  const matter = await requireMatter(actor, matterId, false, db);
   const details = asRecord(matter.details);
   const contacts = Array.isArray(details.contacts) ? details.contacts : [];
   const clients = Array.isArray(details.clients) ? details.clients : [];
   const agent = matter.agentId
-    ? await prisma.user.findUnique({
+    ? await db.user.findUnique({
         where: { id: matter.agentId },
         select: { email: true },
       })
@@ -125,6 +126,36 @@ export const templateKeys = new Set([
   "titleDate",
   "appraisalDate",
   "loanCommitmentDate",
+  "client_name",
+  "clientName",
+  "client_names",
+  "property_address",
+  "purchase_price",
+  "purchasePrice",
+  "titleName",
+  "titleCompany",
+  "titleEmail",
+  "titlePhone",
+  "lenderName",
+  "lenderCompany",
+  "lenderEmail",
+  "lenderPhone",
+  "coOpAgentName",
+  "coOpAgentCompany",
+  "coOpAgentEmail",
+  "coOpAgentPhone",
+  "title_contact",
+  "title_company",
+  "title_email",
+  "title_phone",
+  "loan_officer",
+  "lender_company",
+  "lender_email",
+  "lender_phone",
+  "co_op_agent",
+  "co_op_brokerage",
+  "co_op_email",
+  "co_op_phone",
 ]);
 export function validateMerge(template: string) {
   const matches = [...template.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)];
@@ -167,4 +198,30 @@ export function requireResolved(subject: string, body: string) {
       "UNRESOLVED_TEMPLATE",
       "Resolve every merge field before sending",
     );
+}
+
+export function assertNoSourceConflicts(details: unknown) {
+  const conflicts = asRecord(details).sourceConflicts;
+  if (Array.isArray(conflicts) && conflicts.length)
+    throw new HttpError(
+      409,
+      "SOURCE_CONFLICT_REVIEW_REQUIRED",
+      "Ireland must choose or correct conflicting source values before preparing or sending correspondence.",
+    );
+}
+
+export function assertReviewedMatter(matter: {
+  stage: string;
+  details: unknown;
+}) {
+  if (
+    matter.stage === "pending_review" ||
+    asRecord(asRecord(matter.details).fileReview).status === "pending"
+  )
+    throw new HttpError(
+      409,
+      "FILE_REVIEW_REQUIRED",
+      "Confirm and create this file after reviewing its sources before preparing or sending transaction correspondence.",
+    );
+  assertNoSourceConflicts(matter.details);
 }

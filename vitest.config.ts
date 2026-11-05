@@ -12,6 +12,9 @@ if (
 }
 export default defineConfig({
   test: {
+    // Files share one disposable database, including whole-portfolio aggregates
+    // and approved catalog fixtures. Keep those global states isolated in time.
+    fileParallelism: false,
     include: ["packages/**/*.test.ts", "tests/**/*.test.ts"],
     testTimeout: 15000,
     env: { APP_ENV: "test" },

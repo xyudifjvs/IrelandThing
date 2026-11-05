@@ -4,6 +4,7 @@ import { HttpError, type Principal } from "@weatherly/platform";
 import { matterScope, requireMatter } from "@weatherly/matters";
 import { billingConfigured, verifiedStripe } from "./service";
 import { paymentMode, savedPaymentEnvironment } from "./mode";
+import { isPreClosingTermination } from "./termination";
 
 const pagination = {
   cursor: z.string().min(1).max(200).optional(),
@@ -16,6 +17,7 @@ export const accountTransactionQuery = z
     stage: z
       .enum([
         "all",
+        "pending_review",
         "listing",
         "under_contract",
         "closing",
@@ -35,6 +37,9 @@ export const accountPaymentQuery = z
         "all",
         "creating",
         "pending",
+        "void_pending",
+        "cancelled",
+        "requires_reconciliation",
         "paid",
         "failed",
         "expired",
@@ -219,7 +224,13 @@ export async function listAccountPayments(
     async (tx) => {
       const matters = await tx.matter.findMany({
         where: matterScope(actor),
-        select: { id: true, title: true, propertyAddress: true },
+        select: {
+          id: true,
+          title: true,
+          propertyAddress: true,
+          stage: true,
+          details: true,
+        },
       });
       const byMatter = new Map(matters.map((matter) => [matter.id, matter]));
       // PaymentOrder predates the Matter relation. Read only scoped IDs and a narrow
@@ -251,6 +262,12 @@ export async function listAccountPayments(
           matterTitle: matter.title,
           propertyAddress: matter.propertyAddress,
           kind: order.kind,
+          dueAtClosing:
+            order.kind === "service" &&
+            object(order.snapshot).dueAtClosing === true,
+          noFeeIfTerminatedBeforeClosing:
+            order.kind === "service" &&
+            object(order.snapshot).noFeeIfTerminatedBeforeClosing === true,
           description:
             typeof name === "string" && name.trim()
               ? name
@@ -276,6 +293,10 @@ export async function listAccountPayments(
             provider.configured &&
             environment === provider.environment &&
             order.status === "pending" &&
+            !(
+              order.kind === "service" &&
+              (matter.stage === "terminated" || isPreClosingTermination(matter))
+            ) &&
             Boolean(order.stripeSessionId),
         };
       });
@@ -369,7 +390,16 @@ export async function resumeAccountPayment(
   const order = await prisma.paymentOrder.findUnique({ where: { id } });
   if (!order)
     throw new HttpError(404, "PAYMENT_NOT_FOUND", "Payment request not found.");
-  await requireMatter(actor, order.matterId);
+  const matter = await requireMatter(actor, order.matterId);
+  if (
+    order.kind === "service" &&
+    (matter.stage === "terminated" || isPreClosingTermination(matter))
+  )
+    throw new HttpError(
+      409,
+      "SERVICE_NOT_DUE_TERMINATED",
+      "This terminated transaction cannot resume an unpaid service checkout. Ireland must review any existing payment separately.",
+    );
   if (order.status !== "pending" || !order.stripeSessionId)
     throw new HttpError(
       409,
@@ -399,7 +429,17 @@ export async function resumeAccountPayment(
       "The checkout does not match this saved payment request.",
     );
   // Re-check visibility after the provider round trip; revoked participants lose access immediately.
-  await requireMatter(actor, order.matterId);
+  const latestMatter = await requireMatter(actor, order.matterId);
+  if (
+    order.kind === "service" &&
+    (latestMatter.stage === "terminated" ||
+      isPreClosingTermination(latestMatter))
+  )
+    throw new HttpError(
+      409,
+      "SERVICE_NOT_DUE_TERMINATED",
+      "This transaction terminated while checkout was opening. Ireland must review the saved request.",
+    );
   const current = await prisma.paymentOrder.findUniqueOrThrow({
     where: { id },
   });

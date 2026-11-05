@@ -1,8 +1,9 @@
+@import "../../../(marketing)/_components/complete-site-fonts.css";
 .page {
   min-height: 100vh;
   background: #f6f2e8;
   color: #655440;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif;
 }
 .header {
   padding: 25px 5%;
@@ -21,7 +22,8 @@
 .brand span {
   display: block;
   font:
-    23px Georgia,
+    23px "Cormorant Garamond",
+    Georgia,
     serif;
   letter-spacing: 2.5px;
 }
@@ -71,7 +73,8 @@
 }
 .intro h1 {
   font:
-    36px Georgia,
+    36px "Cormorant Garamond",
+    Georgia,
     serif;
   font-weight: 400;
   margin: 0;
@@ -96,7 +99,8 @@
   border-radius: 4px;
   text-decoration: none;
   font:
-    11px Arial,
+    11px "Montserrat",
+    Arial,
     sans-serif;
   cursor: pointer;
 }
@@ -122,7 +126,8 @@
 }
 .card h2 {
   font:
-    25px Georgia,
+    25px "Cormorant Garamond",
+    Georgia,
     serif;
   font-weight: 400;
   margin: 0 0 12px;
@@ -251,7 +256,8 @@
 }
 .sectionHead {
   font:
-    26px Georgia,
+    26px "Cormorant Garamond",
+    Georgia,
     serif;
   font-weight: 400;
   margin: 35px 0 22px;
@@ -305,7 +311,8 @@
 }
 .milestone h3 {
   font:
-    19px Georgia,
+    19px "Cormorant Garamond",
+    Georgia,
     serif;
   font-weight: 400;
   color: #98764b;
@@ -373,4 +380,79 @@
   .card h2 {
     font-size: 23px;
   }
+}
+
+/* Authenticated portal adopts the website identity without changing its data or permissions. */
+.page {
+  background: #f9f6f0;
+  color: #141210;
+  font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif;
+}
+.header {
+  background: #141210;
+  border-color: #141210;
+}
+.brand,
+.brand span,
+.brand small {
+  color: #ffffff;
+}
+.brand span {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.nav a {
+  color: #ffffff;
+  letter-spacing: 0.12em;
+  font-size: 12px;
+}
+.nav button {
+  color: #ffffff;
+  border-color: #a8957c;
+  border-radius: 0;
+}
+.intro h1,
+.card h2 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  color: #141210;
+  font-weight: 500;
+}
+.intro p,
+.card p,
+.hint,
+.eyebrow,
+.private {
+  color: #5a5249;
+}
+.card {
+  background: #ffffff;
+  border-color: #e6dccd;
+  border-radius: 0;
+}
+.button {
+  background: #141210;
+  border-color: #141210;
+  color: #ffffff;
+  border-radius: 0;
+  font-family: "Montserrat", Arial, sans-serif;
+}
+.secondary {
+  background: transparent;
+  border-color: #a8957c;
+  color: #141210;
+  border-radius: 0;
+  font-family: "Montserrat", Arial, sans-serif;
+}
+.status {
+  background: #f2ebe0;
+  border-color: #e6dccd;
+  color: #6b5a45;
+  border-radius: 0;
+}
+.progress {
+  background: #e6dccd;
+}
+.progress span {
+  background: #7a6247;
 }

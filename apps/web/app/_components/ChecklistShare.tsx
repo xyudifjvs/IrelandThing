@@ -28,7 +28,7 @@ export default function ChecklistShare({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const clientTasks = tasks.filter((task) => task.visibility === "client");
+  const clientTasks = tasks.filter((task) => ["client", "client_only"].includes(task.visibility || ""));
   const currentLink =
     q.data?.active &&
     generated &&
@@ -102,8 +102,8 @@ export default function ChecklistShare({
           </p>
         )}
         <p>
-          Private steps, agent-only steps, notes, documents and contacts are
-          excluded.
+          Private steps, agent-only steps, internal notes, documents and contacts are
+          excluded. Short notes and appointment times on shared steps are visible.
         </p>
       </details>
       {q.data?.active && (

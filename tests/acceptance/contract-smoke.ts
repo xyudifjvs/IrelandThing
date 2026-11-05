@@ -202,6 +202,13 @@ try {
   assert.equal(again.data.matter.id, matterId);
   let matter = (await request(`/api/v1/matters/${matterId}`, undefined, owner))
     .data;
+  assert.equal(matter.stage, "pending_review");
+  assert.equal((await request(`/api/v1/matters/${matterId}/checklist-share`, {}, owner)).res.status,409);
+  const review = await request(`/api/v1/matters/${matterId}/file-review`,undefined,owner);
+  assert.equal(review.res.status,200);
+  assert.equal((await request(`/api/v1/matters/${matterId}/confirm-file`,{expectedRevision:review.data.expectedRevision,acknowledgedUnresolved:review.data.acknowledgements.map((item:object)=>({...item,reason:"Synthetic manual follow-up recorded; do not invent a date."}))},owner)).res.status,200);
+  matter=(await request(`/api/v1/matters/${matterId}`,undefined,owner)).data;
+  assert.equal(matter.stage,"under_contract");
   assert.ok(matter.tasks.length > 5);
   const states = new Set([
     "pending",

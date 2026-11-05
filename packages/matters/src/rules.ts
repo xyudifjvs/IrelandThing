@@ -10,12 +10,13 @@ import {
   validDate,
 } from "@weatherly/platform";
 import { requireMatter, audit } from "./index";
+import { taskVisibility } from "./task-fields";
 const stepSchema = z
   .object({
     key: z.string().regex(/^[a-z0-9_-]{1,80}$/),
     title: z.string().min(1).max(200),
     kind: z.enum(["checklist", "broker"]),
-    visibility: z.enum(["coordinator", "agent", "client"]),
+    visibility: taskVisibility,
     when: z
       .object({
         financing: z.enum(["cash", "financed"]).optional(),

@@ -4,37 +4,37 @@ export const publicPages = {
   "/": {
     title: "Real estate transaction coordination",
     description:
-      "Work with Ireland at Weatherly Transaction Co. for contract-to-close coordination, compliance, document organization and deadline tracking.",
+      "Transaction coordination exclusively for Howard Hanna agents. Work with Ireland at Weatherly Transaction Co. on contracts, compliance, documents and deadlines.",
   },
   "/services": {
     title: "Services and pricing",
     description:
-      "Contract to Close ($425) and Contract to Close + Compliance ($515), for buyers and sellers. Full Listing is coming soon. Prices are in USD.",
+      "For Howard Hanna agents only: Contract to Close ($425) and Contract to Close + Compliance ($515), buyer or seller side. Fees are due at closing. Full Listing coming soon.",
   },
   "/process": {
     title: "How transaction coordination works",
     description:
-      "See how Weatherly handles agent onboarding, transaction intake, document review, deadlines and closing coordination with Ireland.",
+      "See how Weatherly handles Howard Hanna agent onboarding, transaction intake, document review, deadlines and closing coordination with Ireland.",
   },
   "/onboarding": {
     title: "Work with Ireland",
     description:
-      "Request an introductory meeting with Ireland to discuss your transactions, brokerage requirements and Weatherly service options.",
+      "Howard Hanna agents can request an introductory meeting with Ireland to discuss transactions, Howard Hanna file requirements and Weatherly service options.",
   },
   "/faq": {
     title: "Transaction coordination questions",
     description:
-      "Answers about Weatherly's services, transaction intake, documents, payments, closing gifts and working with Ireland.",
+      "Answers for Howard Hanna agents about Weatherly's services, transaction intake, documents, fees due at closing and working with Ireland.",
   },
   "/agent-portal": {
     title: "Agent portal access",
     description:
-      "Access your Weatherly transaction workspace to submit a transaction, review shared documents and check updates from Ireland.",
+      "Howard Hanna agents can access their Weatherly transaction workspace to submit a transaction, review shared documents and check updates from Ireland.",
   },
   "/contact": {
     title: "Contact Ireland",
     description:
-      "Contact Ireland at Weatherly Transaction Co. with questions about real estate transaction coordination and your next transaction.",
+      "Contact Ireland at Weatherly Transaction Co. with questions about transaction coordination for Howard Hanna agents and your next transaction.",
   },
 } as const;
 
@@ -116,7 +116,8 @@ export function organizationData() {
     "@id": `${origin}/#organization`,
     name: "Weatherly Transaction Co.",
     url: origin,
-    description: "Real estate transaction coordination with Ireland.",
+    description:
+      "Transaction coordination for Howard Hanna agents with Ireland.",
     logo: `${origin}/brand/icon.jpeg`,
   };
 }

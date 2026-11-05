@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 import { sitePolicy } from "./app/_lib/seo.ts";
 const config: NextConfig = {
+  // A separate verification build keeps the live development preview available.
+  distDir: process.env.WEATHERLY_BUILD_DIR || ".next",
   poweredByHeader: false,
   async headers() {
     const paths = sitePolicy().indexable

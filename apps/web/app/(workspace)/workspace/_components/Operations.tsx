@@ -25,6 +25,7 @@ import s from "./workspace.module.css";
 import MatterPicker from "./MatterPicker";
 import ReviewQueue from "./ReviewQueue";
 import OperationsStatus from "./OperationsStatus";
+import PrivateReminders from "./PrivateReminders";
 import PaymentLink from "./PaymentLink";
 import BillingOperations from "./BillingOperations";
 import WorkflowTemplates from "./WorkflowTemplates";
@@ -132,6 +133,7 @@ export function Settings() {
         </p>
       </div>
       <OperationsStatus />
+      <PrivateReminders />
       <section id="connected-tools">
         <div className={s.sectionHead} style={{ paddingLeft: 0 }}>
           <div>
@@ -263,7 +265,9 @@ export function Payments() {
                         currency: c.currency || "USD",
                         maximumFractionDigits: 0,
                       }).format(c.priceCents / 100)
-                    : c.code === "full_listing" ? "Coming soon" : "Confirm with Ireland"}
+                    : c.code === "full_listing"
+                      ? "Coming soon"
+                      : "Confirm with Ireland"}
                 </p>
                 <p>
                   {c.code === "essentials"

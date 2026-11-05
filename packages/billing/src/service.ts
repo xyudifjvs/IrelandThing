@@ -6,8 +6,17 @@ import {
   assertCoordinator,
   type Principal,
 } from "@weatherly/platform";
-import { audit, requireMatter, matterScope } from "@weatherly/matters";
+import {
+  audit,
+  requireMatter,
+  matterScope,
+  fileReviewPending,
+} from "@weatherly/matters";
 import { checkoutInput } from "./contracts";
+import {
+  isPreClosingTermination,
+  queueTerminatedServiceCheckouts,
+} from "./termination";
 import {
   paymentMode,
   assertPaymentKey,
@@ -85,18 +94,27 @@ export async function listPayments(
     ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
   });
 }
+const serviceTerms = z.object({
+  code: z.enum(["essentials", "complete"]),
+  name: z.string().trim().min(1).max(200),
+  revision: z.number().int().positive(),
+  priceCents: z.number().int().positive(),
+  currency: z.literal("USD"),
+});
+
 export async function createCheckout(
   actor: Principal,
   raw: unknown,
   provider = verifiedStripe,
 ) {
-  // Fee timing is intentionally explicit: only Ireland initiates a request.
+  // Service fees are due at closing. Only an explicit Ireland action issues
+  // checkout; intake/agent reads never create or release a payment request.
   assertCoordinator(actor);
   const input = checkoutInput.parse(raw);
   const stripe = await provider();
   const order = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${input.kind}-payment:${input.matterId}`}))`;
-    const matter = await requireMatter(actor, input.matterId, false, tx);
+    const matter = await requireMatter(actor, input.matterId, true, tx);
     if (input.kind === "gift") {
       if (!input.giftOrderId)
         throw new HttpError(
@@ -186,17 +204,38 @@ export async function createCheckout(
       },
       orderBy: { createdAt: "desc" },
     });
-    if (existing) return existing;
     const key = `service:${matter.id}:${input.idempotencyKey}`;
     const previous = await tx.paymentOrder.findUnique({
       where: { idempotencyKey: key },
     });
-    if (previous) return previous;
+    const retained = existing || previous;
+    if (
+      (matter.stage === "terminated" || isPreClosingTermination(matter)) &&
+      (!retained ||
+        !["paid", "refunded", "partially_refunded", "disputed"].includes(
+          retained.status,
+        ))
+    )
+      throw new HttpError(
+        409,
+        "SERVICE_NOT_DUE_TERMINATED",
+        "No service fee is due for a transaction that terminates before closing. Existing payments require Ireland's review; no refund is automatic.",
+      );
+    if (retained) return retained;
     if (matter.packageCode === "full_listing")
       throw new HttpError(
         409,
         "SERVICE_COMING_SOON",
         "Full Listing is coming soon and cannot receive a new payment request.",
+      );
+    if (
+      fileReviewPending(matter) ||
+      !["closing", "closed"].includes(matter.stage)
+    )
+      throw new HttpError(
+        409,
+        "SERVICE_NOT_DUE",
+        "Confirm the file and move it to Closing before issuing a new service payment request. The service fee is due at closing.",
       );
     const catalog = await tx.catalogItem.findUnique({
       where: { code: matter.packageCode },
@@ -207,11 +246,37 @@ export async function createCheckout(
         "CATALOG_UNAPPROVED",
         "Approve the service price before requesting payment.",
       );
-    if (input.catalogRevision && input.catalogRevision !== catalog.revision)
+    const matterDetails =
+      matter.details &&
+      typeof matter.details === "object" &&
+      !Array.isArray(matter.details)
+        ? (matter.details as Record<string, Prisma.JsonValue>)
+        : {};
+    const savedTerms = matterDetails.serviceSnapshot;
+    const parsedTerms = serviceTerms.safeParse(
+      savedTerms === undefined ? catalog : savedTerms,
+    );
+    if (!parsedTerms.success)
+      throw new HttpError(
+        409,
+        "INVALID_SERVICE_SNAPSHOT",
+        "Review this transaction's approved service and price before requesting payment.",
+      );
+    const approvedService = parsedTerms.data;
+    if (approvedService.code !== matter.packageCode)
+      throw new HttpError(
+        409,
+        "SERVICE_PACKAGE_MISMATCH",
+        "The transaction package differs from its approved service snapshot. Ireland must review the package before requesting payment.",
+      );
+    if (
+      input.catalogRevision &&
+      input.catalogRevision !== approvedService.revision
+    )
       throw new HttpError(
         409,
         "STALE_CATALOG",
-        "The price changed. Review the current catalog.",
+        "The approved service terms changed. Review this transaction's saved service and price.",
       );
     const result = await tx.paymentOrder.create({
       data: {
@@ -219,16 +284,21 @@ export async function createCheckout(
         createdById: actor.id,
         idempotencyKey: key,
         kind: "service",
-        amountCents: catalog.priceCents,
-        currency: catalog.currency,
+        amountCents: approvedService.priceCents,
+        currency: approvedService.currency,
         status: "creating",
-        details: { paymentEnvironment: paymentMode() },
+        details: {
+          paymentEnvironment: paymentMode(),
+          dueAtClosing: true,
+          noFeeIfTerminatedBeforeClosing: true,
+          requestInitiatedBy: "coordinator",
+          requestedById: actor.id,
+          matterStageAtRequest: matter.stage,
+        },
         snapshot: {
-          code: catalog.code,
-          name: catalog.name,
-          revision: catalog.revision,
-          priceCents: catalog.priceCents,
-          currency: catalog.currency,
+          ...approvedService,
+          dueAtClosing: true,
+          noFeeIfTerminatedBeforeClosing: true,
         },
       },
     });
@@ -256,10 +326,52 @@ export async function createCheckout(
       "PAYMENT_ENVIRONMENT_UNKNOWN",
       "Reconcile this request in its original payment environment before opening checkout.",
     );
+  if (
+    order.kind === "service" &&
+    ["void_pending", "cancelled", "requires_reconciliation"].includes(
+      order.status,
+    )
+  )
+    throw new HttpError(
+      409,
+      "PAYMENT_CLOSED",
+      "This service request is closed or requires Ireland's reconciliation.",
+    );
   if (order.stripeSessionId) {
     const session = await stripe.checkout.sessions.retrieve(
       order.stripeSessionId,
     );
+    if (order.kind === "service") {
+      await prisma.$transaction(async (tx) => {
+        const matter = await requireMatter(actor, order.matterId, true, tx);
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${order.id}`}))`;
+        const current = await tx.paymentOrder.findUniqueOrThrow({
+          where: { id: order.id },
+        });
+        if (
+          matter.stage === "terminated" ||
+          isPreClosingTermination(matter) ||
+          current.status !== "pending"
+        )
+          throw new HttpError(
+            409,
+            "PAYMENT_CLOSED",
+            "This request changed while checkout was opening; review the current payment record.",
+          );
+        if (
+          current.stripeSessionId !== session.id ||
+          session.metadata?.paymentOrderId !== current.id ||
+          session.livemode !== (paymentMode() === "live") ||
+          session.amount_total !== current.amountCents ||
+          session.currency?.toUpperCase() !== current.currency
+        )
+          throw new HttpError(
+            409,
+            "PAYMENT_MISMATCH",
+            "The provider checkout does not match this approved service request.",
+          );
+      });
+    }
     return {
       id: order.id,
       status: order.status,
@@ -275,6 +387,33 @@ export async function createCheckout(
   const origin = process.env.WEB_ORIGIN!;
   const snapshot = order.snapshot as { name: string };
   // Provider idempotency survives a crash after Stripe accepted the request.
+  if (order.kind === "service")
+    await prisma.$transaction(async (tx) => {
+      const matter = await requireMatter(actor, order.matterId, true, tx);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${order.id}`}))`;
+      const current = await tx.paymentOrder.findUniqueOrThrow({
+        where: { id: order.id },
+      });
+      if (
+        matter.stage === "terminated" ||
+        isPreClosingTermination(matter) ||
+        current.status !== "creating"
+      )
+        throw new HttpError(
+          409,
+          "PAYMENT_CLOSED",
+          "The transaction changed before checkout was issued.",
+        );
+      await tx.paymentOrder.update({
+        where: { id: current.id },
+        data: {
+          details: {
+            ...(current.details as Record<string, Prisma.InputJsonValue>),
+            checkoutCreationStartedAt: new Date().toISOString(),
+          },
+        },
+      });
+    });
   const session = await stripe.checkout.sessions.create(
     {
       mode: "payment",
@@ -297,10 +436,59 @@ export async function createCheckout(
     },
     { idempotencyKey: `checkout:${order.id}` },
   );
-  await prisma.paymentOrder.updateMany({
-    where: { id: order.id, stripeSessionId: null },
-    data: { stripeSessionId: session.id, status: "pending" },
-  });
+  if (order.kind === "service") {
+    const blocked = await prisma.$transaction(async (tx) => {
+      const matter = await requireMatter(actor, order.matterId, true, tx);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${order.id}`}))`;
+      const current = await tx.paymentOrder.findUniqueOrThrow({
+        where: { id: order.id },
+      });
+      if (current.stripeSessionId && current.stripeSessionId !== session.id)
+        throw new HttpError(
+          409,
+          "CHECKOUT_CHANGED",
+          "A different checkout was recorded while the provider responded.",
+        );
+      const terminated =
+        matter.stage === "terminated" || isPreClosingTermination(matter);
+      const protectedStatus = [
+        "paid",
+        "refunded",
+        "partially_refunded",
+        "disputed",
+      ].includes(current.status);
+      const changed =
+        terminated ||
+        ["cancelled", "void_pending", "requires_reconciliation"].includes(
+          current.status,
+        );
+      await tx.paymentOrder.update({
+        where: { id: current.id },
+        data: {
+          stripeSessionId: session.id,
+          status: protectedStatus
+            ? current.status
+            : changed
+              ? "void_pending"
+              : "pending",
+        },
+      });
+      if (terminated)
+        await queueTerminatedServiceCheckouts(tx, actor, matter.id);
+      return changed || protectedStatus;
+    });
+    if (blocked)
+      throw new HttpError(
+        409,
+        "PAYMENT_CLOSED",
+        "Checkout was withheld because the transaction changed. Ireland must review any settlement; unpaid checkout expiration is queued for confirmed pre-closing termination.",
+      );
+  } else {
+    await prisma.paymentOrder.updateMany({
+      where: { id: order.id, stripeSessionId: null },
+      data: { stripeSessionId: session.id, status: "pending" },
+    });
+  }
   return { id: order.id, status: "pending", url: session.url };
 }
 

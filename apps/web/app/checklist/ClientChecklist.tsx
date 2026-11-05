@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Circle, CircleCheck, LockKeyhole } from "lucide-react";
 import { LiveStatus, useLiveData } from "../_components/useLiveData";
 import s from "./checklist.module.css";
+import {appointment} from "../(workspace)/workspace/_components/data";
 type Checklist = {
   matter: { id: string; title: string; propertyAddress: string; stage: string };
   tasks: {
@@ -11,8 +12,12 @@ type Checklist = {
     status: string;
     dueDate: string | null;
     position: number;
+    note?:string;
+    appointmentAt?:string|null;
   }[];
   clientRequests?: {
+    note?:string;
+    appointmentAt?:string|null;
     id: string;
     title: string;
     status: string;
@@ -96,6 +101,7 @@ export default function ClientChecklist() {
             <LiveStatus query={q} />
             <section className={s.card} aria-label="What we need from you">
               <h2>What we need from you</h2>
+              <p className={s.hint}>Instructions from Ireland. This view is read-only.</p>
               {(data.clientRequests || []).filter(
                 (task) =>
                   !["completed", "signed", "not_applicable"].includes(
@@ -115,6 +121,8 @@ export default function ClientChecklist() {
                         <Circle aria-hidden="true" />
                         <div>
                           <strong>{task.title}</strong>
+                          {task.note&&<p>{task.note}</p>}
+                          {task.appointmentAt&&<small>{appointment(task.appointmentAt)}</small>}
                           <small>
                             {task.dueDate
                               ? date(task.dueDate)
@@ -156,6 +164,8 @@ export default function ClientChecklist() {
                         )}
                         <div>
                           <strong>{task.title}</strong>
+                          {task.note&&<p>{task.note}</p>}
+                          {task.appointmentAt&&<small>{appointment(task.appointmentAt)}</small>}
                           <small>
                             {label(task.status)}
                             {task.dueDate ? ` · ${date(task.dueDate)}` : ""}

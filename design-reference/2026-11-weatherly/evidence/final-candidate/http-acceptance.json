@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "checks": [
+    "isolated migrated PostgreSQL and API readiness",
+    "real cookie sign-in and unauthenticated denial",
+    "Full Listing cannot bypass coming-soon through direct coordinator creation",
+    "contract-location submission, canonical follow-ups and duplicate-submit idempotency",
+    "unsupported buyer Full Listing branch rejected",
+    "task completion and stale revision conflict",
+    "agent/client shared projections and private-note/intake isolation",
+    "real deadline create and correction",
+    "public meeting request persisted for coordinator review",
+    "approved catalog and unconfigured money/mail fail-closed gates",
+    "eight public pages and sign-in HTTP render"
+  ],
+  "providerCalls": "none",
+  "databaseIsolation": true
+}

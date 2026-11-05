@@ -267,6 +267,7 @@ describe("Ireland approval boundary for consequential dates", () => {
         label: "Effective date",
         date: "2026-11-01",
         status: "confirmed",
+        visibility: "client",
       });
       const get = (label: string) =>
         prisma.deadline.findFirstOrThrow({

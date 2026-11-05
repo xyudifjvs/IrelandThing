@@ -1,6 +1,9 @@
 import { publicMetadata } from "../../_lib/seo";
-export const metadata = publicMetadata("/services");
-import { Services } from "../_components/Marketing";
+import ReferenceSitePage from "../_components/ReferenceSitePage";
+export const metadata = {
+  ...publicMetadata("/services"),
+  title: { absolute: "Services · Weatherly Transaction Co." },
+};
 export default function Page() {
-  return <Services />;
+  return <ReferenceSitePage page="services" />;
 }

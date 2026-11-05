@@ -36,7 +36,7 @@ export default function Page() {
     (_, i) =>
       new Date(first.getFullYear(), first.getMonth(), first.getDate() + i),
   );
-  const events: Event[] = (q.data || []).flatMap((m) => [
+  const events: Event[] = (q.data || []).filter(m=>m.stage!=="pending_review").flatMap((m) => [
     ...(m.deadlines || [])
       .filter((d) => d.date && d.status === "confirmed")
       .map((d) => ({
@@ -59,11 +59,12 @@ export default function Page() {
         status: t.status,
         kind: "task",
       })),
+    ...(m.tasks||[]).filter(t=>t.appointmentAt&&t.status!=="not_applicable").map(t=>({id:t.id,matterId:m.id,property:address(m),title:t.title+' appointment',date:t.appointmentAt!,status:t.status,kind:'appointment'})),
   ]);
   const key = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const onDay = (d: Date) =>
-    events.filter((e) => e.date.slice(0, 10) === key(d));
+    events.filter((e) => key(parseDate(e.date)) === key(d));
   const upcoming = events
     .filter((e) => {
       const d = parseDate(e.date);

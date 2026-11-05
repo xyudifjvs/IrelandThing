@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import {
   useData,
+  useAllMatters,
   rows,
   address,
   date,
@@ -27,6 +28,7 @@ import {
   type Task,
 } from "./data";
 import s from "./workspace.module.css";
+import PortfolioOverview from "./PortfolioOverview";
 export default function Dashboard({
   transactions = false,
 }: {
@@ -38,9 +40,11 @@ export default function Dashboard({
   const params = new URLSearchParams({ limit: String(pageLimit) });
   if (submittedSearch) params.set("q", submittedSearch);
   if (stageFilter) params.set("stage", stageFilter);
-  const query = useData<Matter[]>(
-    transactions ? `/api/v1/matters?${params}` : "/api/v1/matters",
+  const transactionQuery = useData<Matter[]>(
+    transactions ? `/api/v1/matters?${params}` : null,
   );
+  const portfolio = useAllMatters(!transactions);
+  const query = transactions ? transactionQuery : portfolio;
   const session = useData<Session>("/api/v1/session");
   const [search, setSearch] = useState("");
   const [todo, setTodo] = useState("");
@@ -52,7 +56,10 @@ export default function Dashboard({
   const [saving, setSaving] = useState(false);
   const matters = [...rows(query.data), ...older],
     active = matters.filter(
-      (m) => !["closed", "terminated", "archived"].includes(m.stage || ""),
+      (m) =>
+        !["pending_review", "closed", "terminated", "archived"].includes(
+          m.stage || "",
+        ),
     );
   const allTasks = matters.flatMap((m) =>
     (m.tasks || []).map((t) => ({
@@ -149,6 +156,7 @@ export default function Dashboard({
           New transaction
         </Link>
       </div>
+      {!transactions && <PortfolioOverview />}
       {query.error && (
         <div className={s.error} role="alert">
           {query.error}{" "}
@@ -163,8 +171,7 @@ export default function Dashboard({
       )}
       {!transactions && (
         <p className={s.fieldHint}>
-          Overview of the most recent 200 transactions. Use All transactions to
-          search and load earlier records.
+          Upcoming and overdue items across all transactions.
         </p>
       )}
       <div className={s.stats}>

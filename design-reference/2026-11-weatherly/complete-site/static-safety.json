@@ -1,0 +1,60 @@
+{
+  "home": {
+    "body": {
+      "elements": 45
+    },
+    "chrome": {
+      "elements": 16
+    },
+    "changes": []
+  },
+  "services": {
+    "body": {
+      "elements": 162
+    },
+    "chrome": {
+      "elements": 16
+    },
+    "changes": [
+      "Single-brokerage compliance wording.",
+      "Howard Hanna permissions remain required.",
+      "Approved pre-closing termination fee wording."
+    ]
+  },
+  "process": {
+    "body": {
+      "elements": 34
+    },
+    "chrome": {
+      "elements": 16
+    },
+    "changes": []
+  },
+  "onboarding": {
+    "body": {
+      "elements": 74
+    },
+    "chrome": {
+      "elements": 16
+    },
+    "changes": []
+  },
+  "agentPortal": {
+    "body": {
+      "elements": 27
+    },
+    "chrome": {
+      "elements": 16
+    },
+    "changes": []
+  },
+  "contact": {
+    "body": {
+      "elements": 51
+    },
+    "chrome": {
+      "elements": 16
+    },
+    "changes": []
+  }
+}

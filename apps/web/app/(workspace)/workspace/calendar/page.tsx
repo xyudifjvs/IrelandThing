@@ -38,7 +38,7 @@ export default function Page() {
   );
   const events: Event[] = (q.data || []).flatMap((m) => [
     ...(m.deadlines || [])
-      .filter((d) => d.date && d.status !== "rejected")
+      .filter((d) => d.date && d.status === "confirmed")
       .map((d) => ({
         id: d.id,
         matterId: m.id,
@@ -182,9 +182,9 @@ export default function Page() {
         ) : null}
       </section>
       <div className={s.notice}>
-        <CalendarDays size={16} /> Proposed dates are marked for review. Open
-        the transaction to confirm or correct a date. Undated milestones remain
-        in the transaction checklist.
+        <CalendarDays size={16} /> Confirmed contract dates and
+        coordinator-scheduled tasks appear here. Review proposed dates in each
+        transaction. Undated milestones remain in the transaction checklist.
       </div>
     </>
   );

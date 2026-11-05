@@ -11,15 +11,23 @@ export const checkoutInput = z
 export const approvedCatalog = [
   {
     code: "essentials",
-    name: "Essentials",
-    priceCents: 37500,
+    name: "Contract to Close",
+    priceCents: 42500,
+    approved: true,
     sellerOnly: false,
   },
-  { code: "complete", name: "Complete", priceCents: 47500, sellerOnly: false },
+  {
+    code: "complete",
+    name: "Contract to Close + Compliance",
+    priceCents: 51500,
+    sellerOnly: false,
+    approved: true,
+  },
   {
     code: "full_listing",
     name: "Full Listing",
     priceCents: 62500,
+    approved: false,
     sellerOnly: true,
   },
 ] as const;

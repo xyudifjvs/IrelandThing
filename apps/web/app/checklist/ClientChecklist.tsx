@@ -12,6 +12,13 @@ type Checklist = {
     dueDate: string | null;
     position: number;
   }[];
+  clientRequests?: {
+    id: string;
+    title: string;
+    status: string;
+    dueDate: string | null;
+    position: number;
+  }[];
   deadlines: { id: string; label: string; date: string | null }[];
 };
 function label(value: string) {
@@ -87,8 +94,45 @@ export default function ClientChecklist() {
               </span>
             </div>
             <LiveStatus query={q} />
+            <section className={s.card} aria-label="What we need from you">
+              <h2>What we need from you</h2>
+              {(data.clientRequests || []).filter(
+                (task) =>
+                  !["completed", "signed", "not_applicable"].includes(
+                    task.status,
+                  ),
+              ).length ? (
+                <ol className={s.tasks}>
+                  {(data.clientRequests || [])
+                    .filter(
+                      (task) =>
+                        !["completed", "signed", "not_applicable"].includes(
+                          task.status,
+                        ),
+                    )
+                    .map((task) => (
+                      <li key={task.id}>
+                        <Circle aria-hidden="true" />
+                        <div>
+                          <strong>{task.title}</strong>
+                          <small>
+                            {task.dueDate
+                              ? date(task.dueDate)
+                              : "Ireland will confirm any due date"}
+                          </small>
+                        </div>
+                      </li>
+                    ))}
+                </ol>
+              ) : (
+                <p>Nothing requested right now.</p>
+              )}
+              <p className={s.hint}>
+                Ireland updates completion as your transaction moves forward.
+              </p>
+            </section>
             <section className={s.card} aria-label="Client checklist">
-              <h2>Your checklist</h2>
+              <h2>Transaction milestones</h2>
               <p className={s.hint}>
                 Ireland updates these steps as your transaction moves forward.
               </p>

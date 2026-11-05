@@ -4,12 +4,12 @@ export const publicPages = {
   "/": {
     title: "Real estate transaction coordination",
     description:
-      "Work with Ireland at Weatherly Transaction Co. for contract-to-close and seller pre-listing coordination, document organization and deadline tracking.",
+      "Work with Ireland at Weatherly Transaction Co. for contract-to-close coordination, compliance, document organization and deadline tracking.",
   },
   "/services": {
     title: "Services and pricing",
     description:
-      "Compare Weatherly's Essentials ($375), Complete ($475) and seller-only Full Listing ($625) transaction coordination services. Prices are in USD.",
+      "Contract to Close ($425) and Contract to Close + Compliance ($515), for buyers and sellers. Full Listing is coming soon. Prices are in USD.",
   },
   "/process": {
     title: "How transaction coordination works",

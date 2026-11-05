@@ -280,6 +280,7 @@ describe("canonical client checklist sharing", () => {
     const share = await createChecklistShare(actors.owner, matter.id);
     const result = await getPublicChecklist(tokenFrom(share));
     expect(Object.keys(result).sort()).toEqual([
+      "clientRequests",
       "deadlines",
       "matter",
       "tasks",
@@ -336,6 +337,73 @@ describe("canonical client checklist sharing", () => {
     expect(JSON.stringify(result)).not.toContain("SECRET_");
     expect(JSON.stringify(result)).not.toContain("private-client");
     expect(JSON.stringify(result)).not.toContain(other.id);
+  });
+
+  it("shares client requests only when both explicit kind and client visibility are selected, using the same live task records", async () => {
+    const matter = await fixture();
+    const token = tokenFrom(
+      await createChecklistShare(actors.owner, matter.id),
+    );
+    expect((await getPublicChecklist(token)).clientRequests).toEqual([]);
+    const shared = await addTask(actors.owner, matter.id, {
+      title: "Please provide your insurance information",
+      kind: "client_request",
+      visibility: "client",
+      details: { privateNote: "SECRET_REQUEST_DETAILS" },
+    });
+    await addTask(actors.owner, matter.id, {
+      title: "SECRET_PRIVATE_REQUEST",
+      kind: "client_request",
+      visibility: "coordinator",
+    });
+    await addTask(actors.owner, matter.id, {
+      title: "SECRET_AGENT_REQUEST",
+      kind: "client_request",
+      visibility: "agent",
+    });
+    await addTask(actors.owner, matter.id, {
+      title: "Ordinary shared checklist",
+      kind: "checklist",
+      visibility: "client",
+      details: { clientRequest: true },
+    });
+    const projection = await getPublicChecklist(token);
+    expect(projection.clientRequests).toEqual([
+      expect.objectContaining({
+        id: shared.id,
+        title: shared.title,
+        status: "pending",
+      }),
+    ]);
+    expect(Object.keys(projection.clientRequests[0]).sort()).toEqual([
+      "dueDate",
+      "id",
+      "position",
+      "status",
+      "title",
+    ]);
+    expect(JSON.stringify(projection)).not.toContain("SECRET_");
+    const changed = await updateTask(actors.owner, matter.id, shared.id, {
+      expectedRevision: shared.revision,
+      status: "completed",
+    });
+    expect((await getPublicChecklist(token)).clientRequests[0].status).toBe(
+      "completed",
+    );
+    expect(
+      (await getPublicChecklist(token)).tasks.find((t) => t.id === shared.id)
+        ?.status,
+    ).toBe("completed");
+    if (!("revision" in changed)) throw Error("Expected updated task");
+    await updateTask(actors.owner, matter.id, shared.id, {
+      expectedRevision: changed.revision,
+      visibility: "agent",
+    });
+    expect((await getPublicChecklist(token)).clientRequests).toEqual([]);
+    await revokeChecklistShare(actors.owner, matter.id);
+    await expect(getPublicChecklist(token)).rejects.toMatchObject({
+      code: "CHECKLIST_UNAVAILABLE",
+    });
   });
 
   it("reflects canonical additions, completions, dates, removals and visibility withdrawals on subsequent reads", async () => {

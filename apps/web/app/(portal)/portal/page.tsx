@@ -9,6 +9,7 @@ import {
   type Session,
   address,
   label,
+  serviceName,
   progress,
   date,
 } from "../../(workspace)/workspace/_components/data";
@@ -89,7 +90,7 @@ export default function Portal() {
                   ? address(m)
                   : client
                     ? "View the shared checklist and documents for this property."
-                    : label(m.packageCode)}
+                    : serviceName(m)}
               </p>
               <div className={s.progress}>
                 <span style={{ width: `${progress(m)}%` }} />

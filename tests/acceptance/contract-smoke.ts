@@ -132,12 +132,31 @@ try {
   );
   assert.equal((await request("/api/v1/matters")).res.status, 401);
   checks.push("real cookie sign-in and unauthenticated denial");
+  assert.equal(
+    (
+      await request(
+        "/api/v1/matters",
+        {
+          title: "Synthetic unavailable listing",
+          propertyAddress: "Synthetic listing",
+          side: "seller",
+          packageCode: "full_listing",
+        },
+        owner,
+      )
+    ).res.status,
+    409,
+  );
+  checks.push(
+    "Full Listing cannot bypass coming-soon through direct coordinator creation",
+  );
   const payload = {
-    packageCode: "full_listing",
+    packageCode: "complete",
     side: "seller",
     propertyAddress: "123 Synthetic Acceptance Lane, Columbus, OH",
     purchaseType: "financed",
-    contractSource: "not_yet_executed",
+    contractSource: "dotloop",
+    dotloopLoopId: "synthetic-contract-location",
     documentIds: [],
     clients: [
       {
@@ -197,11 +216,11 @@ try {
     "Generated tasks must use canonical workflow states.",
   );
   checks.push(
-    "full-listing branch submission, canonical follow-ups and duplicate-submit idempotency",
+    "contract-location submission, canonical follow-ups and duplicate-submit idempotency",
   );
   const invalid = await request(
     "/api/v1/intake/drafts",
-    { payload: { ...payload, side: "buyer" } },
+    { payload: { ...payload, side: "buyer", packageCode: "full_listing" } },
     owner,
   );
   assert.equal(
@@ -349,7 +368,7 @@ try {
       )
       .map((c: { priceCents: number }) => c.priceCents)
       .sort((a: number, b: number) => a - b),
-    [37500, 47500, 62500],
+    [42500, 51500, 62500],
   );
   assert.equal(
     (

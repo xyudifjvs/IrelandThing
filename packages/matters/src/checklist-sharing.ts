@@ -11,6 +11,7 @@ import {
   type Principal,
 } from "@weatherly/platform";
 import { audit, requireMatter } from "./index";
+import { approvedWorkflowTaskDates } from "./rules";
 
 /** Apply before authentication/rate limiting as well when mounting these routes. */
 export const checklistPrivacyHeaders: RequestHandler = (_req, res, next) => {
@@ -259,6 +260,7 @@ export async function getPublicChecklist(token: string) {
           title: true,
           propertyAddress: true,
           stage: true,
+          details: true,
           tasks: {
             where: { visibility: "client" },
             orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
@@ -267,22 +269,50 @@ export async function getPublicChecklist(token: string) {
               title: true,
               status: true,
               dueDate: true,
+              kind: true,
+              details: true,
             },
           },
           deadlines: {
-            where: { status: "confirmed", date: { not: null } },
             orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-            select: { id: true, label: true, date: true },
+            select: {
+              id: true,
+              label: true,
+              date: true,
+              status: true,
+              details: true,
+            },
           },
         },
       });
       if (!matter) throw unavailable();
-      const { tasks, deadlines, ...summary } = matter;
+      const { tasks, deadlines, details, ...summary } = matter;
+      const approvedTasks = approvedWorkflowTaskDates(
+        tasks,
+        deadlines,
+        details,
+      );
+      const sharedTasks = approvedTasks.map(
+        ({ kind: _kind, details: _details, ...task }, position) => ({
+          ...task,
+          position,
+        }),
+      );
+      const requestIds = new Set(
+        approvedTasks
+          .filter((task) => task.kind === "client_request")
+          .map((task) => task.id),
+      );
       // Do not expose gaps from private tasks in the canonical ordering.
       return {
         matter: summary,
-        tasks: tasks.map((task, position) => ({ ...task, position })),
-        deadlines,
+        tasks: sharedTasks,
+        clientRequests: sharedTasks.filter((task) => requestIds.has(task.id)),
+        deadlines: deadlines
+          .filter(
+            (deadline) => deadline.status === "confirmed" && deadline.date,
+          )
+          .map(({ id, label, date }) => ({ id, label, date })),
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },

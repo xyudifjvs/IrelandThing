@@ -178,6 +178,26 @@ export async function createCheckout(
       );
       return result;
     }
+    const existing = await tx.paymentOrder.findFirst({
+      where: {
+        matterId: matter.id,
+        kind: "service",
+        status: { notIn: ["expired", "failed", "refunded"] },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) return existing;
+    const key = `service:${matter.id}:${input.idempotencyKey}`;
+    const previous = await tx.paymentOrder.findUnique({
+      where: { idempotencyKey: key },
+    });
+    if (previous) return previous;
+    if (matter.packageCode === "full_listing")
+      throw new HttpError(
+        409,
+        "SERVICE_COMING_SOON",
+        "Full Listing is coming soon and cannot receive a new payment request.",
+      );
     const catalog = await tx.catalogItem.findUnique({
       where: { code: matter.packageCode },
     });
@@ -193,20 +213,6 @@ export async function createCheckout(
         "STALE_CATALOG",
         "The price changed. Review the current catalog.",
       );
-    const existing = await tx.paymentOrder.findFirst({
-      where: {
-        matterId: matter.id,
-        kind: "service",
-        status: { notIn: ["expired", "failed", "refunded"] },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    if (existing) return existing;
-    const key = `service:${matter.id}:${input.idempotencyKey}`;
-    const previous = await tx.paymentOrder.findUnique({
-      where: { idempotencyKey: key },
-    });
-    if (previous) return previous;
     const result = await tx.paymentOrder.create({
       data: {
         matterId: matter.id,

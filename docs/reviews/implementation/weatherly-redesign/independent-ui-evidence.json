@@ -1,0 +1,43 @@
+{
+  "origin": "http://127.0.0.1:3314",
+  "apiMode": "synthetic mocked responses",
+  "results": [
+    {
+      "scenario": "association failure → retry → remove",
+      "checks": [
+        "Invalid file visible and removable",
+        "Failed association visible",
+        "No duplicate bytes upload",
+        "Removed document absent from next snapshot"
+      ],
+      "uploads": 1,
+      "creates": 2,
+      "pageErrors": []
+    },
+    {
+      "scenario": "association failure → remove",
+      "checks": [
+        "Invalid file visible and removable",
+        "Failed association visible",
+        "No duplicate bytes upload",
+        "Removed document absent from next snapshot"
+      ],
+      "uploads": 1,
+      "creates": 2,
+      "pageErrors": []
+    },
+    {
+      "scenario": "save snapshot in flight",
+      "checks": [
+        "Native and communication controls disabled",
+        "Dropped file ignored",
+        "Through-agent preference retained",
+        "New step heading focused",
+        "Approved service mapping and Full Listing coming soon",
+        "Inherited URL variant ignored"
+      ],
+      "uploads": 0,
+      "pageErrors": []
+    }
+  ]
+}

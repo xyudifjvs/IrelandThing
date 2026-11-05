@@ -263,7 +263,7 @@ export function Payments() {
                         currency: c.currency || "USD",
                         maximumFractionDigits: 0,
                       }).format(c.priceCents / 100)
-                    : "Confirm with Ireland"}
+                    : c.code === "full_listing" ? "Coming soon" : "Confirm with Ireland"}
                 </p>
                 <p>
                   {c.code === "essentials"

@@ -2,6 +2,10 @@
 
 PostgreSQL is the system of record. Private object storage holds immutable document bytes; PostgreSQL records each version, checksum, extraction/page state and source link. OAuth credentials are encrypted and excluded from assistant projections. Business changes use the same domain services behind the UI and HTTP API. A saved draft, queued job or proposed date is never represented as a sent message, completed job or confirmed deadline.
 
+## Supplied intake records
+
+New intake records include a versioned `referenceIntake` snapshot containing the exact form variant, all named answers, private upload groups and document filenames. These remain in authorized matter details and immutable intake submission records, including answers temporarily hidden by later choices. Client projections exclude them. See [record contract](packages/intake/REFERENCE_RECORDS.md). No reference choice authorizes invitations, provider actions or financial transitions.
+
 ## Application API
 
 Authenticated routes are rooted at `/api/v1`. Browser writes require the exact configured origin. Coordinator, agent and client access is enforced in the services, including matter participation, document/message visibility and revoked access. BetterAuth sessions protect coordinator access. Authenticator enrollment is optional; accounts that enable it must complete the second-factor challenge at sign-in. The session response retains `mfaRequired: false` for older clients. Useful route families are `matters`, `documents`, `intake`, `onboarding`, `communications`, `billing`, `dotloop`, `workflows`, `ai`, and `assistant`.

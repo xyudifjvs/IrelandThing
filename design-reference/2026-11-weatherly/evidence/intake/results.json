@@ -1,0 +1,2675 @@
+{
+  "checks": [
+    "Real synthetic agent authentication through web proxy",
+    "buyer: all six steps and conditional choices match visibility",
+    "seller: all six steps and conditional choices match visibility",
+    "buyer-compliance: all six steps and conditional choices match visibility",
+    "seller-compliance: all six steps and conditional choices match visibility",
+    "Real seller compliance: structured address, multiple sellers/relationship, co-op, additional contacts, title/lender, commission, HOA date, utilities/prior-policy upload, gift acknowledgment; failed-upload retry; save/resume; uploaded-only documents retained; idempotent durable receipt and downloads",
+    "Agent transaction displays full saved reference record",
+    "Real client link: no login, explicit client action visible, coordinator completion synchronizes agent and client from same task, full matter API remains private",
+    "All four drafts save incomplete; blank final rejected; explicit contract location permits confirmed minimum; new service price snapshots 42500/51500",
+    "Changing buyer/seller and service retains answers and approved catalog mapping",
+    "Full Listing has no new order path",
+    "Unauthenticated/client intake denial and exact same-origin write protection"
+  ],
+  "comparisons": [
+    {
+      "variant": "buyer",
+      "label": "step-0",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1464
+      },
+      "actual": {
+        "width": 681,
+        "height": 1464
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-1",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 856
+      },
+      "actual": {
+        "width": 681,
+        "height": 856
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-2",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-3",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 339
+      },
+      "actual": {
+        "width": 681,
+        "height": 339
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-4",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-5",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 879
+      },
+      "actual": {
+        "width": 681,
+        "height": 879
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "cash-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1464
+      },
+      "actual": {
+        "width": 681,
+        "height": 1464
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "cash-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1464
+      },
+      "actual": {
+        "width": 681,
+        "height": 1464
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "coop-contract",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 856
+      },
+      "actual": {
+        "width": 681,
+        "height": 856
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "coop-type",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1040
+      },
+      "actual": {
+        "width": 681,
+        "height": 1040
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "addl-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1317
+      },
+      "actual": {
+        "width": 681,
+        "height": 1317
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "addl-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1040
+      },
+      "actual": {
+        "width": 681,
+        "height": 1040
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "title-have",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1303
+      },
+      "actual": {
+        "width": 681,
+        "height": 1303
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "title-mls",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "title-unsure",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "lender-have",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1303
+      },
+      "actual": {
+        "width": 681,
+        "height": 1303
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "lender-preapproval",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "lender-deciding",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "lender-cash",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "emd-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "emd-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "hoa-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 512
+      },
+      "actual": {
+        "width": 681,
+        "height": 512
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "hoa-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 339
+      },
+      "actual": {
+        "width": 681,
+        "height": 339
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "hoaDocs-upload",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 732
+      },
+      "actual": {
+        "width": 681,
+        "height": 732
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "hoaDocs-mls",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 607
+      },
+      "actual": {
+        "width": 681,
+        "height": 607
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "hoaDocs-request",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 512
+      },
+      "actual": {
+        "width": 681,
+        "height": 512
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "hoaSent-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 841
+      },
+      "actual": {
+        "width": 681,
+        "height": 841
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "hoaSent-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 732
+      },
+      "actual": {
+        "width": 681,
+        "height": 732
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "mls-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1273
+      },
+      "actual": {
+        "width": 681,
+        "height": 1273
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "mls-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "gift-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "gift-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 726
+      },
+      "actual": {
+        "width": 681,
+        "height": 726
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "tier-Classic",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "tier-Signature",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "tier-Luxury",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "multiple-clients-other-relationship",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1332
+      },
+      "actual": {
+        "width": 681,
+        "height": 1332
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-0",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1860
+      },
+      "actual": {
+        "width": 358,
+        "height": 1860
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-1",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1079
+      },
+      "actual": {
+        "width": 358,
+        "height": 1079
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-2",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1304
+      },
+      "actual": {
+        "width": 358,
+        "height": 1304
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-3",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 349
+      },
+      "actual": {
+        "width": 358,
+        "height": 349
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-4",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1578
+      },
+      "actual": {
+        "width": 358,
+        "height": 1578
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer",
+      "label": "step-5",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1177
+      },
+      "actual": {
+        "width": 358,
+        "height": 1177
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-0",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1553
+      },
+      "actual": {
+        "width": 681,
+        "height": 1553
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-1",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 856
+      },
+      "actual": {
+        "width": 681,
+        "height": 856
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-2",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-3",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 339
+      },
+      "actual": {
+        "width": 681,
+        "height": 339
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-4",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1388
+      },
+      "actual": {
+        "width": 681,
+        "height": 1388
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-5",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 889
+      },
+      "actual": {
+        "width": 681,
+        "height": 889
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "cash-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1553
+      },
+      "actual": {
+        "width": 681,
+        "height": 1553
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "cash-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1553
+      },
+      "actual": {
+        "width": 681,
+        "height": 1553
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "occ-Vacant",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1553
+      },
+      "actual": {
+        "width": 681,
+        "height": 1553
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "occ-Occupied",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1553
+      },
+      "actual": {
+        "width": 681,
+        "height": 1553
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "coop-contract",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 856
+      },
+      "actual": {
+        "width": 681,
+        "height": 856
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "coop-type",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1040
+      },
+      "actual": {
+        "width": 681,
+        "height": 1040
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "addl-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1317
+      },
+      "actual": {
+        "width": 681,
+        "height": 1317
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "addl-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1040
+      },
+      "actual": {
+        "width": 681,
+        "height": 1040
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "title-have",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1228
+      },
+      "actual": {
+        "width": 681,
+        "height": 1228
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "title-mls",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "lender-have",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1228
+      },
+      "actual": {
+        "width": 681,
+        "height": 1228
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "lender-preapproval",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "lender-buyersagent",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "lender-cash",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "hoa-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 512
+      },
+      "actual": {
+        "width": 681,
+        "height": 512
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "hoa-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 339
+      },
+      "actual": {
+        "width": 681,
+        "height": 339
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "hoaDocs-upload",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 732
+      },
+      "actual": {
+        "width": 681,
+        "height": 732
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "hoaDocs-mls",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 607
+      },
+      "actual": {
+        "width": 681,
+        "height": 607
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "hoaDocs-request",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 512
+      },
+      "actual": {
+        "width": 681,
+        "height": 512
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "hoaSent-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 841
+      },
+      "actual": {
+        "width": 681,
+        "height": 841
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "hoaSent-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 732
+      },
+      "actual": {
+        "width": 681,
+        "height": 732
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "gift-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1388
+      },
+      "actual": {
+        "width": 681,
+        "height": 1388
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "gift-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 938
+      },
+      "actual": {
+        "width": 681,
+        "height": 938
+      },
+      "changedPixels": 681,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "tier-Classic",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1388
+      },
+      "actual": {
+        "width": 681,
+        "height": 1388
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "tier-Signature",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1388
+      },
+      "actual": {
+        "width": 681,
+        "height": 1388
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "tier-Luxury",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1388
+      },
+      "actual": {
+        "width": 681,
+        "height": 1388
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "multiple-clients-other-relationship",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1332
+      },
+      "actual": {
+        "width": 681,
+        "height": 1332
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-0",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1949
+      },
+      "actual": {
+        "width": 358,
+        "height": 1949
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-1",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1079
+      },
+      "actual": {
+        "width": 358,
+        "height": 1079
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-2",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1145
+      },
+      "actual": {
+        "width": 358,
+        "height": 1145
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-3",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 349
+      },
+      "actual": {
+        "width": 358,
+        "height": 349
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-4",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1829
+      },
+      "actual": {
+        "width": 358,
+        "height": 1829
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller",
+      "label": "step-5",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1229
+      },
+      "actual": {
+        "width": 358,
+        "height": 1229
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-0",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1523
+      },
+      "actual": {
+        "width": 681,
+        "height": 1523
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-1",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 856
+      },
+      "actual": {
+        "width": 681,
+        "height": 856
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-2",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-3",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 339
+      },
+      "actual": {
+        "width": 681,
+        "height": 339
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-4",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-5",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 879
+      },
+      "actual": {
+        "width": 681,
+        "height": 879
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "cash-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1523
+      },
+      "actual": {
+        "width": 681,
+        "height": 1523
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "cash-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1523
+      },
+      "actual": {
+        "width": 681,
+        "height": 1523
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "docsDotloop-true",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1401
+      },
+      "actual": {
+        "width": 681,
+        "height": 1401
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "docsDotloop-false",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1523
+      },
+      "actual": {
+        "width": 681,
+        "height": 1523
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "coop-contract",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 856
+      },
+      "actual": {
+        "width": 681,
+        "height": 856
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "coop-type",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1040
+      },
+      "actual": {
+        "width": 681,
+        "height": 1040
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "addl-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1317
+      },
+      "actual": {
+        "width": 681,
+        "height": 1317
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "addl-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1040
+      },
+      "actual": {
+        "width": 681,
+        "height": 1040
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "title-have",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1303
+      },
+      "actual": {
+        "width": 681,
+        "height": 1303
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "title-mls",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "title-unsure",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "lender-have",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1303
+      },
+      "actual": {
+        "width": 681,
+        "height": 1303
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "lender-preapproval",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "lender-deciding",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "lender-cash",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "emd-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "emd-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1128
+      },
+      "actual": {
+        "width": 681,
+        "height": 1128
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "hoa-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 512
+      },
+      "actual": {
+        "width": 681,
+        "height": 512
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "hoa-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 339
+      },
+      "actual": {
+        "width": 681,
+        "height": 339
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "hoaDocs-upload",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 732
+      },
+      "actual": {
+        "width": 681,
+        "height": 732
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "hoaDocs-mls",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 607
+      },
+      "actual": {
+        "width": 681,
+        "height": 607
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "hoaDocs-request",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 512
+      },
+      "actual": {
+        "width": 681,
+        "height": 512
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "hoaSent-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 841
+      },
+      "actual": {
+        "width": 681,
+        "height": 841
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "hoaSent-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 732
+      },
+      "actual": {
+        "width": 681,
+        "height": 732
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "mls-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1273
+      },
+      "actual": {
+        "width": 681,
+        "height": 1273
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "mls-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "gift-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "gift-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 726
+      },
+      "actual": {
+        "width": 681,
+        "height": 726
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "tier-Classic",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "tier-Signature",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "tier-Luxury",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1176
+      },
+      "actual": {
+        "width": 681,
+        "height": 1176
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "multiple-clients-other-relationship",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1332
+      },
+      "actual": {
+        "width": 681,
+        "height": 1332
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-0",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1919
+      },
+      "actual": {
+        "width": 358,
+        "height": 1919
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-1",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1100
+      },
+      "actual": {
+        "width": 358,
+        "height": 1100
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-2",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1325
+      },
+      "actual": {
+        "width": 358,
+        "height": 1325
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-3",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 349
+      },
+      "actual": {
+        "width": 358,
+        "height": 349
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-4",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1578
+      },
+      "actual": {
+        "width": 358,
+        "height": 1578
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "buyer-compliance",
+      "label": "step-5",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1177
+      },
+      "actual": {
+        "width": 358,
+        "height": 1177
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-0",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1612
+      },
+      "actual": {
+        "width": 681,
+        "height": 1612
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-1",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 856
+      },
+      "actual": {
+        "width": 681,
+        "height": 856
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-2",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-3",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 339
+      },
+      "actual": {
+        "width": 681,
+        "height": 339
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-4",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1413
+      },
+      "actual": {
+        "width": 681,
+        "height": 1413
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-5",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 889
+      },
+      "actual": {
+        "width": 681,
+        "height": 889
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "cash-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1612
+      },
+      "actual": {
+        "width": 681,
+        "height": 1612
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "cash-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1612
+      },
+      "actual": {
+        "width": 681,
+        "height": 1612
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "docsDotloop-true",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1490
+      },
+      "actual": {
+        "width": 681,
+        "height": 1490
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "docsDotloop-false",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1612
+      },
+      "actual": {
+        "width": 681,
+        "height": 1612
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "occ-Vacant",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1612
+      },
+      "actual": {
+        "width": 681,
+        "height": 1612
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "occ-Occupied",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1612
+      },
+      "actual": {
+        "width": 681,
+        "height": 1612
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "coop-contract",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 856
+      },
+      "actual": {
+        "width": 681,
+        "height": 856
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "coop-type",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1040
+      },
+      "actual": {
+        "width": 681,
+        "height": 1040
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "addl-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1317
+      },
+      "actual": {
+        "width": 681,
+        "height": 1317
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "addl-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1040
+      },
+      "actual": {
+        "width": 681,
+        "height": 1040
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "title-have",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1228
+      },
+      "actual": {
+        "width": 681,
+        "height": 1228
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "title-mls",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "lender-have",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1228
+      },
+      "actual": {
+        "width": 681,
+        "height": 1228
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "lender-preapproval",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "lender-buyersagent",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "lender-cash",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1052
+      },
+      "actual": {
+        "width": 681,
+        "height": 1052
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "hoa-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 512
+      },
+      "actual": {
+        "width": 681,
+        "height": 512
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "hoa-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 339
+      },
+      "actual": {
+        "width": 681,
+        "height": 339
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "hoaDocs-upload",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 732
+      },
+      "actual": {
+        "width": 681,
+        "height": 732
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "hoaDocs-mls",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 607
+      },
+      "actual": {
+        "width": 681,
+        "height": 607
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "hoaDocs-request",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 512
+      },
+      "actual": {
+        "width": 681,
+        "height": 512
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "hoaSent-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 841
+      },
+      "actual": {
+        "width": 681,
+        "height": 841
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "hoaSent-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 732
+      },
+      "actual": {
+        "width": 681,
+        "height": 732
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "gift-yes",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1413
+      },
+      "actual": {
+        "width": 681,
+        "height": 1413
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "gift-no",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 963
+      },
+      "actual": {
+        "width": 681,
+        "height": 963
+      },
+      "changedPixels": 681,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "tier-Classic",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1413
+      },
+      "actual": {
+        "width": 681,
+        "height": 1413
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "tier-Signature",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1413
+      },
+      "actual": {
+        "width": 681,
+        "height": 1413
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "tier-Luxury",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1413
+      },
+      "actual": {
+        "width": 681,
+        "height": 1413
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "multiple-clients-other-relationship",
+      "width": 1280,
+      "original": {
+        "width": 681,
+        "height": 1332
+      },
+      "actual": {
+        "width": 681,
+        "height": 1332
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-0",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 2008
+      },
+      "actual": {
+        "width": 358,
+        "height": 2008
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-1",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1100
+      },
+      "actual": {
+        "width": 358,
+        "height": 1100
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-2",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1166
+      },
+      "actual": {
+        "width": 358,
+        "height": 1166
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-3",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 349
+      },
+      "actual": {
+        "width": 358,
+        "height": 349
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-4",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1855
+      },
+      "actual": {
+        "width": 358,
+        "height": 1855
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    },
+    {
+      "variant": "seller-compliance",
+      "label": "step-5",
+      "width": 390,
+      "original": {
+        "width": 358,
+        "height": 1229
+      },
+      "actual": {
+        "width": 358,
+        "height": 1229
+      },
+      "changedPixels": 0,
+      "maximumInteriorChannelDifference": 0,
+      "pixelsOverTolerance": 0
+    }
+  ],
+  "pageErrors": []
+}

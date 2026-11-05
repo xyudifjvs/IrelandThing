@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { publicMetadata } from "../../_lib/seo";
 export const metadata = publicMetadata("/contact");
 import { PageHead } from "../_components/Marketing";
@@ -17,6 +18,9 @@ export default function Page() {
         <section className={s.panel} style={{ alignSelf: "start" }}>
           <p className={s.eyebrow}>Weatherly Transaction Co.</p>
           <h2>Questions about working together?</h2>
+          <p>
+            <Link href="/faq">Read frequently asked questions</Link>
+          </p>
           <p>
             Tell Ireland what you need help with and include any questions about
             your file or service options.

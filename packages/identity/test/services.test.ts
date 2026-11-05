@@ -232,7 +232,7 @@ describe("real PostgreSQL services and Better Auth", () => {
       title: "Revision test",
       propertyAddress: "Synthetic Road",
       side: "seller",
-      packageCode: "full_listing",
+      packageCode: "complete",
       agentId: agent.id,
     });
     matterIds.push(m.id);
@@ -283,7 +283,15 @@ describe("real PostgreSQL services and Better Auth", () => {
         true,
       );
     const draft = await prisma.intakeDraft.create({
-      data: { userId: agent.id, payload: fixture },
+      data: {
+        userId: agent.id,
+        payload: {
+          ...fixture,
+          packageCode: "complete",
+          contractSource: "dotloop",
+          dotloopLoopId: "synthetic-contract-loop",
+        },
+      },
     });
     draftIds.push(draft.id);
     await expect(
@@ -370,7 +378,7 @@ describe("real PostgreSQL services and Better Auth", () => {
       title: "Reviewed evidence",
       propertyAddress: "Synthetic Evidence Road",
       side: "seller",
-      packageCode: "full_listing",
+      packageCode: "complete",
       agentId: agent.id,
     });
     matterIds.push(m.id);
@@ -673,7 +681,7 @@ describe("real PostgreSQL services and Better Auth", () => {
     const template = await createWorkflowTemplate(owner, {
       name: `Synthetic rules ${suffix}`,
       side: "seller",
-      packageCode: "full_listing",
+      packageCode: "complete",
       definition,
     });
     workflowTemplateIds.push(template.id);
@@ -681,7 +689,7 @@ describe("real PostgreSQL services and Better Auth", () => {
       title: `Page-${suffix}-first`,
       propertyAddress: "Synthetic workflow first",
       side: "seller",
-      packageCode: "full_listing",
+      packageCode: "complete",
       agentId: agent.id,
     });
     matterIds.push(first.id);
@@ -733,7 +741,7 @@ describe("real PostgreSQL services and Better Auth", () => {
       title: `Page-${suffix}-second`,
       propertyAddress: "Synthetic workflow second",
       side: "seller",
-      packageCode: "full_listing",
+      packageCode: "complete",
       agentId: agent.id,
     });
     matterIds.push(second.id);

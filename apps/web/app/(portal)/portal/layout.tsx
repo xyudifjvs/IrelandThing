@@ -1,13 +1,22 @@
 "use client";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import RouteFocus from "../../(workspace)/workspace/_components/RouteFocus";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { api } from "@weatherly/ui";
 import s from "./_components/portal.module.css";
 export default function Layout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  if (pathname === "/portal/intake")
+    return (
+      <>
+        <RouteFocus />
+        {children}
+      </>
+    );
   return (
     <div className={s.page}>
       <header className={s.header}>

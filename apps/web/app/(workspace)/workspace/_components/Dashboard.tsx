@@ -18,6 +18,7 @@ import {
   date,
   parseDate,
   label,
+  serviceName,
   progress,
   mutate,
   api,
@@ -213,9 +214,7 @@ export default function Dashboard({
                 <h2>Transactions by stage</h2>
                 <p>Count of files at each stage.</p>
               </div>
-              <Link href="/workspace/new?side=seller&package=full_listing">
-                Add a listing <Plus />
-              </Link>
+              <span className={s.fieldHint}>Full Listing · Coming soon</span>
             </div>
             <div className={s.stageGrid}>
               {[
@@ -337,7 +336,7 @@ export default function Dashboard({
                           {m.title !== address(m)
                             ? m.title
                             : label(m.side) + " side"}{" "}
-                          · {label(m.packageCode)}
+                          · {serviceName(m)}
                         </small>
                       </td>
                       <td>

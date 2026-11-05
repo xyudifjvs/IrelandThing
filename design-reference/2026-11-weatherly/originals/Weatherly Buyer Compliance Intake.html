@@ -1,0 +1,686 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Weatherly Buyer Compliance Intake</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap">
+<style>
+/* Layout: fixed left step rail + single form column of cards; rail collapses to a scrolling step strip on phones.
+   Single light look by choice — this mirrors the Weatherly brand mockup. */
+:root{
+  color-scheme: light;
+  --bg:#F3EDE3; --rail:#E9DFCE; --card:#FAF6EF; --field:#FFFDF9;
+  --line:#E2D6C3; --line-strong:#CDBDA5;
+  --ink:#2A231C; --muted:#6E6253; --faint:#9A8C79;
+  --accent:#8A6641; --accent-dark:#6F5132; --accent-soft:#EFE4D3; --on-accent:#FFFFFF;
+  --note:#F7EFE2; --warn:#8A4B24;
+  --display:"EB Garamond", "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --body:"DM Sans", "Helvetica Neue", Arial, sans-serif;
+  --r:12px;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);font-size:15px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.proto{background:var(--ink);color:#F3EDE3;font-size:12.5px;letter-spacing:.02em;
+  padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;gap:8px 16px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.proto b{font-weight:600}
+
+.shell{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:calc(100vh - 36px)}
+.rail{background:var(--rail);padding:36px 24px;padding-left:max(24px,env(safe-area-inset-left,0px))}
+.brand{font-family:var(--display);font-size:25px;letter-spacing:.2em;line-height:1}
+.brand small{display:block;font-family:var(--body);font-size:10.5px;letter-spacing:.24em;color:var(--muted);margin-top:8px}
+.nav{list-style:none;margin:40px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.nav button{all:unset;cursor:pointer;display:flex;gap:10px;align-items:center;padding:7px 4px;border-radius:8px;color:var(--ink);font-size:14px;width:100%}
+.nav button:focus-visible{outline:2px solid var(--accent)}
+.nav .dot{width:24px;height:24px;flex:none;border-radius:50%;border:1.5px solid var(--faint);display:grid;place-items:center;font-size:11.5px;color:var(--muted)}
+.nav .done .dot{border-color:var(--accent);color:var(--accent)}
+.nav .done .dot::before{content:"";width:8px;height:4px;border-left:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(-45deg) translate(1px,-1px)}
+.nav .done .dot span{display:none}
+.nav .active .dot{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.nav .active{font-weight:600}
+.nav .todo{color:var(--faint)}
+
+main{padding-block:40px 64px;padding-left:max(16px,4vw);padding-right:max(16px,env(safe-area-inset-right,0px),4vw);min-width:0}
+.wrap{max-width:680px}
+.eyebrow{font-size:12.5px;color:var(--muted);margin:0}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(34px,5vw,46px);line-height:1.05;margin:4px 0 6px;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 24px}
+h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 4px;line-height:1.2}
+h3{font-size:14px;font-weight:600;margin:0}
+.hint{font-size:13px;color:var(--muted);margin:0}
+
+.welcome{background:var(--note);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin-bottom:16px}
+.welcome p{margin:0;font-size:14.5px}
+.welcome p+p{margin-top:8px}
+.welcome .sig{font-family:var(--display);font-style:italic;font-size:17px;color:var(--accent-dark)}
+
+.who{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px;font-size:14px;margin-bottom:16px}
+.who .hint{font-size:12.5px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px;margin-bottom:16px;display:flex;flex-direction:column;gap:16px}
+.card-head{display:flex;flex-direction:column;gap:2px}
+.section-label{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.addr1{grid-template-columns:110px minmax(0,1fr)}
+.addr2{grid-template-columns:minmax(0,1fr) 100px 120px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+label.lbl,.lbl{font-size:13.5px;font-weight:500}
+.req{color:var(--accent)}
+input[type=text],input[type=email],input[type=tel],input[type=date],select,textarea{
+  width:100%;background:var(--field);border:1px solid var(--line);border-radius:9px;padding:11px 12px;min-height:44px}
+textarea{min-height:90px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+::placeholder{color:var(--faint)}
+
+/* pill toggle */
+.seg{display:inline-flex;background:var(--field);border:1px solid var(--line);border-radius:999px;padding:4px;gap:2px;align-self:flex-start}
+.seg label{position:relative}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:block;padding:8px 22px;border-radius:999px;font-weight:500;font-size:14px;color:var(--muted)}
+.seg input:checked+span{background:var(--accent);color:var(--on-accent)}
+.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+
+/* radio / check cards */
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;gap:12px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer}
+.opt:has(input:checked){border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:#FFFCF6}
+.opt input{margin:3px 0 0;accent-color:var(--accent);width:16px;height:16px;flex:none}
+.opt .t{font-size:14px;font-weight:500}
+.opt .d{font-size:13px;color:var(--muted)}
+.reveal{border-left:2px solid var(--line-strong);margin-left:7px;padding:4px 0 4px 18px;display:flex;flex-direction:column;gap:14px}
+.reveal.grid{display:grid}
+
+.check{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted);cursor:pointer}
+.check input{accent-color:var(--accent);margin:2px 0 0;width:15px;height:15px;flex:none}
+
+/* uploads */
+.drop{border:1.5px dashed var(--line-strong);border-radius:10px;background:var(--field);padding:24px 16px;text-align:center;cursor:pointer;display:block}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop input{position:absolute;width:1px;height:1px;opacity:0}
+.drop strong{display:block;font-weight:600;font-size:14.5px}
+.drop span{font-size:13px;color:var(--muted)}
+.doclist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.doclist li{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13.5px}
+.doclist .name{overflow-wrap:anywhere;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;border:1px solid var(--line);background:var(--field);border-radius:999px;padding:3px 10px;color:var(--muted)}
+.chip.key{border-color:var(--accent);color:var(--accent-dark);font-weight:600}
+
+.person{border:1px solid var(--line);border-radius:10px;padding:16px;background:#FFFCF7;display:flex;flex-direction:column;gap:12px}
+.person-head{display:flex;justify-content:space-between;align-items:center}
+.link{all:unset;cursor:pointer;color:var(--accent-dark);font-size:13.5px;font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.link:focus-visible{outline:2px solid var(--accent)}
+.link.quiet{color:var(--muted);font-weight:400}
+
+.banner{background:var(--note);border:1px solid var(--line-strong);border-radius:10px;padding:12px 14px;font-size:13.5px;color:var(--warn)}
+
+/* gift */
+.tiers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tiers .opt{flex-direction:column;gap:2px}
+.tiers .row{display:flex;gap:10px;align-items:center}
+.tiers .price{font-size:13px;color:var(--muted);padding-left:26px;font-variant-numeric:tabular-nums}
+.gifts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.gift{display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}
+.gift .photo{aspect-ratio:4/3;max-width:100%;background:repeating-linear-gradient(135deg,#EFE5D5 0 10px,#F6EEE1 10px 20px);display:grid;place-items:center;color:var(--muted);font-size:12.5px;border-bottom:1px solid var(--line)}
+.gift .body{display:flex;gap:10px;padding:12px 14px}
+.total{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px}
+.total .amt{font-variant-numeric:tabular-nums;font-weight:600}
+
+/* buttons */
+.actions{display:flex;justify-content:space-between;gap:12px;margin-top:24px}
+.btn{cursor:pointer;border-radius:999px;padding:12px 26px;font-weight:500;font-size:15px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);min-height:44px}
+.btn:hover{background:var(--accent-dark)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line-strong)}
+.btn.ghost:hover{background:var(--field)}
+.btn.small{padding:9px 18px;font-size:14px}
+
+/* review */
+.review{display:grid;grid-template-columns:170px minmax(0,1fr) auto;gap:10px 14px;font-size:14px}
+.review dt{color:var(--muted)}
+.review dd{margin:0;overflow-wrap:anywhere}
+.review .divider{grid-column:1/-1;border-top:1px solid var(--line);margin:4px 0}
+.empty{color:var(--faint)}
+.done-card{text-align:center;padding:40px 24px}
+.done-card h2{font-size:30px}
+
+@media (max-width:760px){
+  .shell{grid-template-columns:1fr}
+  .rail{padding:18px 16px 10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .brand{font-size:20px}
+  .nav{flex-direction:row;overflow-x:auto;margin-top:14px;gap:4px;padding-bottom:6px}
+  .nav li{flex:none}
+  .nav button{white-space:nowrap;padding:6px 10px 6px 4px;font-size:13px}
+  main{padding-top:24px}
+  .g2,.g3,.tiers,.gifts{grid-template-columns:1fr}
+  .addr2{grid-template-columns:minmax(0,1fr) 90px}
+  .addr2 .zip{grid-column:1/-1}
+  .review{grid-template-columns:minmax(0,1fr) auto}
+  .review dt{grid-column:1/-1;margin-bottom:-8px;font-size:12.5px}
+}
+@media (prefers-reduced-motion:no-preference){ .step{animation:in .25s ease} @keyframes in{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}} }
+</style>
+
+<div class="proto"><span><b>Mockup preview</b> · Contract to Close + Compliance · Buyer version</span><span>Click through the steps to see every conditional field</span></div>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">WEATHERLY<small>TRANSACTION CO.</small></div>
+    <ol class="nav" id="nav"></ol>
+  </aside>
+
+  <main>
+  <form class="wrap" id="form" novalidate>
+
+  <!-- STEP 1 -->
+  <section class="step" data-step="0" data-label="Start">
+    <p class="eyebrow">Step 1 of 6 · Start</p>
+    <h1>New transaction</h1>
+    <p class="sub">Start with the basics. Everything after this adapts to your answers.</p>
+
+    <div class="welcome">
+      <p class="sig">Congratulations on your new contract, and thank you for choosing Weatherly Transaction Co.!</p>
+      <p>Your business is my priority, so we kindly ask that you take a few minutes to fill out our intake form to ensure a seamless and smooth closing for all parties involved.</p>
+    </div>
+
+    <div class="who"><span>Submitting as <b>Sample Agent</b> · agent@brokerage.com</span><span class="hint">From your portal profile</span></div>
+
+    <div class="card">
+      <h2>Which service?</h2>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="service" value="ctc"><span><span class="t">Contract to Close</span></span></label>
+        <label class="opt"><input type="radio" name="service" value="ctcc" checked><span><span class="t">Contract to Close + Compliance</span><br><span class="d">We pull documents from Dotloop and review your file.</span></span></label>
+      </div>
+      <p class="banner" data-show="service=ctc">This preview is the Contract to Close + Compliance version. Contract to Close is its own form.</p>
+    </div>
+
+    <div class="card">
+      <h2>Who do you represent on this deal?</h2>
+      <div class="seg" role="radiogroup" aria-label="Who do you represent">
+        <label><input type="radio" name="side" value="buyer" checked><span>Buyer</span></label>
+        <label><input type="radio" name="side" value="seller"><span>Seller</span></label>
+      </div>
+      <p class="banner" data-show="side=seller">This preview is the Buyer version. The Seller version of the form comes next.</p>
+    </div>
+
+    <div class="card">
+      <h2>The deal</h2>
+      <div class="field">
+        <span class="lbl">Property address <span class="req">*</span></span>
+        <div class="grid addr1">
+          <div class="field"><label class="hint" for="a_num">Street #</label><input type="text" id="a_num" name="a_num" inputmode="numeric" placeholder="1420"></div>
+          <div class="field"><label class="hint" for="a_street">Street name</label><input type="text" id="a_street" name="a_street" placeholder="Maple Grove Ave"></div>
+        </div>
+        <div class="grid addr2">
+          <div class="field"><label class="hint" for="a_city">City</label><input type="text" id="a_city" name="a_city" placeholder="Columbus"></div>
+          <div class="field"><label class="hint" for="a_state">State</label><input type="text" id="a_state" name="a_state" maxlength="2" placeholder="OH"></div>
+          <div class="field zip"><label class="hint" for="a_zip">ZIP code</label><input type="text" id="a_zip" name="a_zip" inputmode="numeric" maxlength="10" placeholder="43215"></div>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lbl">Is this a cash purchase?</span>
+        <div class="seg" role="radiogroup" aria-label="Cash purchase">
+          <label><input type="radio" name="cash" value="yes"><span>Yes</span></label>
+          <label><input type="radio" name="cash" value="no" checked><span>No</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Upload all contract documents</h2>
+        <p class="hint">Add as many files as you need. You can upload them together or one at a time.</p>
+      </div>
+      <div class="chips">
+        <span class="chip">Executed contract</span><span class="chip">Counter offers</span><span class="chip">Pre-approval / proof of funds</span><span class="chip">Addendums</span><span class="chip">Lead-based paint (if applicable)</span><span class="chip key">Agency disclosure</span><span class="chip">Etc.</span>
+      </div>
+      <label class="opt"><input type="checkbox" id="docsDotloop" name="docsDotloop"><span class="t">N/A — see Dotloop</span></label>
+      <div data-show="docsDotloop=" style="display:flex;flex-direction:column;gap:12px">
+      <label class="drop" data-drop="contractDocs">
+        <input type="file" id="contractDocs" multiple accept=".pdf,.doc,.docx,.jpg,.png">
+        <strong>Drop files here or click to upload</strong>
+        <span>We'll pull the price, dates and contacts from them.</span>
+      </label>
+      <ul class="doclist" id="list-contractDocs"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="step" data-step="1" data-label="Clients / Co-op" hidden>
+    <p class="eyebrow">Step 2 of 6 · Clients / Co-op</p>
+    <h1>Buyer contact info</h1>
+    <p class="sub">Who should we reach out to?</p>
+
+    <div class="card">
+      <div id="buyers" style="display:flex;flex-direction:column;gap:12px"></div>
+      <div><button type="button" class="link" id="addBuyer">+ Add another buyer</button></div>
+      <div class="field" id="relWrap" hidden>
+        <label class="lbl" for="buyerRel">How are the buyers related to each other? <span class="req">*</span></label>
+        <select id="buyerRel" name="buyerRel">
+          <option value="">Choose one</option>
+          <option>Married</option><option>Engaged / partners</option><option>Siblings</option>
+          <option>Parent / child</option><option>Friends</option><option>Business partners</option>
+          <option value="other">Other</option>
+        </select>
+        <input type="text" id="buyerRelOther" name="buyerRelOther" placeholder="Describe the relationship (e.g. mother / daughter)" data-show="buyerRel=other">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Co-op agent info</h2>
+        <p class="hint">The listing agent on the other side of this deal.</p>
+      </div>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="coop" value="contract"><span class="t">I can confirm the co-op information provided in the contract (uploaded on this form or in Dotloop) is the correct information to reach out to.</span></label>
+        <label class="opt"><input type="radio" name="coop" value="type"><span class="t">I'll type out the co-op agent's information</span></label>
+      </div>
+      <div class="grid g2 reveal" data-show="coop=type">
+        <div class="field">
+          <label class="lbl" for="co_brokerage">Brokerage <span class="req">*</span></label>
+          <input type="text" id="co_brokerage" name="co_brokerage">
+        </div>
+        <div class="field">
+          <label class="lbl" for="co_name">First & last name <span class="req">*</span></label>
+          <input type="text" id="co_name" name="co_name">
+        </div>
+        <div class="field">
+          <label class="lbl" for="co_phone">Phone # <span class="req">*</span></label>
+          <input type="tel" id="co_phone" name="co_phone">
+        </div>
+        <div class="field">
+          <label class="lbl" for="co_email">Email <span class="req">*</span></label>
+          <input type="email" id="co_email" name="co_email">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Additional contacts</h2>
+        <p class="hint">Are there any additional contacts we should add to client communication or invite to the client portal?</p>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Additional contacts">
+        <label><input type="radio" name="addl" value="yes"><span>Yes</span></label>
+        <label><input type="radio" name="addl" value="no" checked><span>No</span></label>
+      </div>
+      <div data-show="addl=yes" style="display:flex;flex-direction:column;gap:12px">
+        <div id="contacts" style="display:flex;flex-direction:column;gap:12px"></div>
+        <div><button type="button" class="link" id="addContact">+ Add another contact</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="step" data-step="2" data-label="Title, lender & commission" hidden>
+    <p class="eyebrow">Step 3 of 6 · Title, lender & commission</p>
+    <h1>Title & lender</h1>
+    <p class="sub">Tell us what you have. We'll chase the rest.</p>
+
+    <div class="card">
+      <h2>Title company</h2>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="title" value="have"><span class="t">I have the details</span></label>
+        <div class="reveal" data-show="title=have">
+          <div class="grid g2">
+            <div class="field"><label class="lbl" for="t_co">Title company</label><input type="text" id="t_co" name="t_co"></div>
+            <div class="field"><label class="lbl" for="t_contact">Contact name</label><input type="text" id="t_contact" name="t_contact"></div>
+            <div class="field"><label class="lbl" for="t_email">Email</label><input type="email" id="t_email" name="t_email"></div>
+            <div class="field"><label class="lbl" for="t_phone">Phone</label><input type="tel" id="t_phone" name="t_phone"></div>
+          </div>
+        </div>
+        <label class="opt"><input type="radio" name="title" value="mls"><span class="t">I can confirm the title company contact information provided in the MLS or in Dotloop for the corresponding property is correct. Please reach out to them.</span></label>
+        <label class="opt"><input type="radio" name="title" value="unsure"><span class="t">I am not sure. Please reach out to the listing agent.</span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Lender</h2>
+      <p class="banner" data-show="cash=yes">You marked this as a cash purchase, so we selected N/A – cash for you.</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="lender" value="have"><span class="t">I have the details</span></label>
+        <div class="reveal" data-show="lender=have">
+          <div class="grid g2">
+            <div class="field"><label class="lbl" for="l_co">Lender</label><input type="text" id="l_co" name="l_co"></div>
+            <div class="field"><label class="lbl" for="l_officer">Loan officer</label><input type="text" id="l_officer" name="l_officer"></div>
+            <div class="field"><label class="lbl" for="l_email">Email</label><input type="email" id="l_email" name="l_email"></div>
+            <div class="field"><label class="lbl" for="l_phone">Phone</label><input type="tel" id="l_phone" name="l_phone"></div>
+          </div>
+        </div>
+        <label class="opt"><input type="radio" name="lender" value="preapproval"><span class="t">I can confirm the pre-approval (uploaded on this form or in Dotloop) has the correct lender contact information. Please reach out.</span></label>
+        <label class="opt"><input type="radio" name="lender" value="deciding"><span class="t">Buyer is still deciding between lenders. I will email you the corresponding pre-approval / contact info as soon as a decision has been made.</span></label>
+        <label class="opt"><input type="radio" name="lender" value="cash"><span class="t">N/A – cash</span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Commission info</h2>
+      <div class="field" style="max-width:320px">
+        <label class="lbl" for="fee">Buyer broker fee amount <span class="req">*</span></label>
+        <input type="text" id="fee" name="fee" placeholder="e.g. 2.5% or $7,500">
+      </div>
+      <div class="field">
+        <span class="lbl">If the earnest money is being held with your brokerage, should the earnest money be deducted from your commission?</span>
+        <div class="seg" role="radiogroup" aria-label="Deduct earnest money">
+          <label><input type="radio" name="emd" value="yes"><span>Yes</span></label>
+          <label><input type="radio" name="emd" value="no"><span>No</span></label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="step" data-step="3" data-label="HOA & docs" hidden>
+    <p class="eyebrow">Step 4 of 6 · HOA & docs</p>
+    <h1>HOA & documents</h1>
+    <p class="sub">Where do things stand? "I" means you; "you" means your Weatherly coordinator.</p>
+
+    <div class="card">
+      <h2>Is there an HOA?</h2>
+      <div class="seg" role="radiogroup" aria-label="Is there an HOA">
+        <label><input type="radio" name="hoa" value="yes"><span>Yes</span></label>
+        <label><input type="radio" name="hoa" value="no"><span>No</span></label>
+      </div>
+
+      <div class="opts" data-show="hoa=yes">
+        <label class="opt"><input type="radio" name="hoaDocs" value="upload"><span class="t">Upload HOA docs here</span></label>
+        <div class="reveal" data-show="hoaDocs=upload">
+          <label class="drop" data-drop="hoaFiles">
+            <input type="file" id="hoaFiles" multiple accept=".pdf,.doc,.docx,.jpg,.png">
+            <strong>Drop HOA documents here or click to upload</strong>
+            <span>Add as many files as you need.</span>
+          </label>
+          <ul class="doclist" id="list-hoaFiles"></ul>
+        </div>
+        <label class="opt"><input type="radio" name="hoaDocs" value="mls"><span class="t">I can confirm all necessary HOA docs are found in the MLS listing or in Dotloop</span></label>
+        <label class="opt"><input type="radio" name="hoaDocs" value="request"><span class="t">I have not received them. Please request them from the listing agent.</span></label>
+
+        <div class="reveal" data-show="hoaDocs=upload|mls" style="margin-top:6px">
+          <div class="field">
+            <span class="lbl">Have the HOA docs been sent to the buyer?</span>
+            <div class="seg" role="radiogroup" aria-label="HOA docs sent to buyer">
+              <label><input type="radio" name="hoaSent" value="yes"><span>Yes</span></label>
+              <label><input type="radio" name="hoaSent" value="no"><span>No</span></label>
+            </div>
+          </div>
+          <div class="field" data-show="hoaSent=yes" style="max-width:240px">
+            <label class="lbl" for="hoaDate">Date HOA documents were sent to buyer</label>
+            <input type="date" id="hoaDate" name="hoaDate">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 5 -->
+  <section class="step" data-step="4" data-label="Notes & gift" hidden>
+    <p class="eyebrow">Step 5 of 6 · Notes & gift</p>
+    <h1>Notes & closing gift</h1>
+    <p class="sub">Anything else we should know?</p>
+
+    <div class="card">
+      <label class="lbl" for="notes">Additional information</label>
+      <textarea id="notes" name="notes" placeholder="Unusual terms, deadlines, client preferences…"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>MLS closing instructions</h2>
+        <p class="hint">Are there any specific MLS closing instructions the listing agent should be aware of? For example, closing out the file under the team leader's name.</p>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="MLS closing instructions">
+        <label><input type="radio" name="mls" value="yes"><span>Yes</span></label>
+        <label><input type="radio" name="mls" value="no"><span>No</span></label>
+      </div>
+      <div class="grid g2 reveal" data-show="mls=yes">
+        <div class="field"><label class="lbl" for="mls_sell">Selling agent name <span class="req">*</span></label><input type="text" id="mls_sell" name="mls_sell" placeholder="Name to close the file under"></div>
+        <div class="field"><label class="lbl" for="mls_cosell">Co-selling agent name</label><input type="text" id="mls_cosell" name="mls_cosell" placeholder="If applicable"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Add a closing gift?</h2>
+      <div class="seg" role="radiogroup" aria-label="Add a closing gift">
+        <label><input type="radio" name="gift" value="yes" checked><span>Yes</span></label>
+        <label><input type="radio" name="gift" value="no"><span>No</span></label>
+      </div>
+      <div data-show="gift=yes" style="display:flex;flex-direction:column;gap:16px">
+        <div class="field">
+          <span class="section-label">Tier</span>
+          <div class="tiers">
+            <label class="opt"><span class="row"><input type="radio" name="tier" value="Classic" checked><span class="t">Classic</span></span><span class="price">[$ price]</span></label>
+            <label class="opt"><span class="row"><input type="radio" name="tier" value="Signature"><span class="t">Signature</span></span><span class="price">[$ price]</span></label>
+            <label class="opt"><span class="row"><input type="radio" name="tier" value="Luxury"><span class="t">Luxury</span></span><span class="price">[$ price]</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <span class="section-label">Gift</span>
+          <div class="gifts">
+            <label class="opt gift"><span class="photo">Gift photo</span><span class="body"><input type="radio" name="giftOpt" value="Gift Option 1" checked><span><span class="t">Gift Option 1</span><br><span class="d">[Describe what's included in this gift]</span></span></span></label>
+            <label class="opt gift"><span class="photo">Gift photo</span><span class="body"><input type="radio" name="giftOpt" value="Gift Option 2"><span><span class="t">Gift Option 2</span><br><span class="d">[Describe what's included in this gift]</span></span></span></label>
+          </div>
+        </div>
+        <div class="banner" style="color:var(--ink);display:flex;flex-direction:column;gap:10px">
+          <span><b>Gift policy:</b> Gift payments are nonrefundable. Your gift is ordered closer to closing. If your transaction terminates, your payment carries over as a credit toward your next closing gift.</span>
+          <label class="check" style="color:var(--ink)"><input type="checkbox" id="giftAgree" name="giftAgree">I understand the gift policy. <span class="req">*</span></label>
+        </div>
+        <div class="total">
+          <span>Gift total: <span class="amt" id="giftTotal">Classic · [$ price]</span><br><span class="hint">Payment is required before we order.</span></span>
+          <button type="button" class="btn small" id="payBtn">Pay for closing gift</button>
+        </div>
+        <p class="hint" id="payNote" hidden>In the live form this button opens your payment page in a new tab. Payment link to be added.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 6 -->
+  <section class="step" data-step="5" data-label="Review" hidden>
+    <p class="eyebrow">Step 6 of 6 · Review</p>
+    <h1>Review & submit</h1>
+    <p class="sub">Check the details, then send it to your coordinator.</p>
+    <div class="card"><dl class="review" id="review"></dl></div>
+  </section>
+
+  <section class="step" data-step="6" hidden>
+    <div class="card done-card">
+      <h2>Transaction submitted</h2>
+      <p class="hint">Your Weatherly coordinator will be in touch within one business day.</p>
+      <div><button type="button" class="btn ghost small" id="restart">Start over</button></div>
+    </div>
+  </section>
+
+  <div class="actions" id="actions">
+    <button type="button" class="btn ghost" id="back">Back</button>
+    <button type="button" class="btn" id="next">Continue</button>
+  </div>
+  </form>
+  </main>
+</div>
+
+<script>
+const form=document.getElementById('form');
+const steps=[...document.querySelectorAll('.step')];
+const labels=steps.slice(0,6).map(s=>s.dataset.label);
+let cur=0;
+
+/* ---------- step nav ---------- */
+const nav=document.getElementById('nav');
+function renderNav(){
+  nav.innerHTML=labels.map((l,i)=>{
+    const st=i===cur?'active':(i<cur||cur===6?'done':'todo');
+    return `<li><button type="button" class="${st}" data-go="${i}"><span class="dot"><span>${i+1}</span></span>${l}</button></li>`;
+  }).join('');
+}
+nav.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)go(+b.dataset.go)});
+function go(i){
+  cur=i;
+  steps.forEach((s,k)=>s.hidden=k!==i);
+  document.getElementById('back').style.visibility=i===0?'hidden':'visible';
+  document.getElementById('actions').hidden=i===6;
+  document.getElementById('next').textContent=i===5?'Submit transaction':'Continue';
+  if(i===5)buildReview();
+  renderNav();
+  window.scrollTo({top:0});
+}
+document.getElementById('next').onclick=()=>go(Math.min(cur+1,6));
+document.getElementById('back').onclick=()=>go(Math.max(cur-1,0));
+document.getElementById('restart').onclick=()=>location.reload();
+
+/* ---------- conditional fields ---------- */
+function val(name){
+  const el=form.elements[name]; if(!el)return '';
+  if(el instanceof RadioNodeList)return el.value;
+  if(el.type==='checkbox')return el.checked?'on':'';
+  return el.value;
+}
+function sync(){
+  document.querySelectorAll('[data-show]').forEach(el=>{
+    const [n,v]=el.dataset.show.split('=');
+    el.hidden=!v.split('|').includes(val(n));
+  });
+  document.getElementById('relWrap').hidden=document.querySelectorAll('#buyers .person').length<2;
+  const tier=val('tier')||'—';
+  document.getElementById('giftTotal').textContent=tier+' · [$ price]';
+}
+form.addEventListener('input',sync);
+form.addEventListener('change',e=>{
+  if(e.target.name==='cash'){
+    const l=form.elements.lender;
+    if(e.target.value==='yes')l.value='cash';
+    else if(l.value==='cash')[...l].forEach(r=>r.checked=false);
+  }
+  sync();
+});
+
+/* ---------- repeatable people ---------- */
+let bN=0,cN=0;
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function addBuyer(){
+  const i=++bN, box=document.getElementById('buyers');
+  const d=document.createElement('div'); d.className='person'; d.dataset.k=i;
+  d.innerHTML=`<div class="person-head"><h3 class="ptitle"></h3><button type="button" class="link quiet" data-rm>Remove</button></div>
+  <div class="grid g3">
+    <div class="field"><label class="lbl" for="b${i}_name">Name <span class="req">*</span></label><input type="text" id="b${i}_name" name="b${i}_name"></div>
+    <div class="field"><label class="lbl" for="b${i}_email">Email <span class="req">*</span></label><input type="email" id="b${i}_email" name="b${i}_email"></div>
+    <div class="field"><label class="lbl" for="b${i}_phone">Phone <span class="req">*</span></label><input type="tel" id="b${i}_phone" name="b${i}_phone"></div>
+  </div>`;
+  box.appendChild(d); relabel('#buyers','Buyer'); sync();
+}
+function addContact(){
+  const i=++cN, box=document.getElementById('contacts');
+  const d=document.createElement('div'); d.className='person'; d.dataset.k=i;
+  d.innerHTML=`<div class="person-head"><h3 class="ptitle"></h3><button type="button" class="link quiet" data-rm>Remove</button></div>
+  <div class="grid g2">
+    <div class="field"><label class="lbl" for="c${i}_name">Name</label><input type="text" id="c${i}_name" name="c${i}_name"></div>
+    <div class="field"><label class="lbl" for="c${i}_email">Email</label><input type="email" id="c${i}_email" name="c${i}_email"></div>
+    <div class="field"><label class="lbl" for="c${i}_phone">Phone</label><input type="tel" id="c${i}_phone" name="c${i}_phone"></div>
+    <div class="field"><label class="lbl" for="c${i}_rel">Relationship to client</label><input type="text" id="c${i}_rel" name="c${i}_rel" placeholder="Parent, child, etc."></div>
+  </div>`;
+  box.appendChild(d); relabel('#contacts','Contact'); sync();
+}
+function relabel(sel,word){
+  const ps=[...document.querySelectorAll(sel+' .person')];
+  ps.forEach((p,k)=>{p.querySelector('.ptitle').textContent=`${word} ${k+1}`;p.querySelector('[data-rm]').hidden=ps.length===1});
+}
+document.getElementById('addBuyer').onclick=addBuyer;
+document.getElementById('addContact').onclick=addContact;
+document.addEventListener('click',e=>{
+  const rm=e.target.closest('[data-rm]'); if(!rm)return;
+  const p=rm.closest('.person'), host=p.parentElement; p.remove();
+  relabel('#'+host.id, host.id==='buyers'?'Buyer':'Contact'); sync();
+});
+addBuyer(); addContact();
+
+/* ---------- uploads ---------- */
+const files={contractDocs:[],hoaFiles:[]};
+function renderFiles(key){
+  document.getElementById('list-'+key).innerHTML=files[key].map((f,i)=>
+    `<li><span class="name">${esc(f.name)}</span><button type="button" class="link quiet" data-file="${key}:${i}">Remove</button></li>`).join('');
+}
+Object.keys(files).forEach(key=>{
+  const inp=document.getElementById(key), drop=document.querySelector(`[data-drop="${key}"]`);
+  inp.addEventListener('change',()=>{files[key].push(...inp.files);inp.value='';renderFiles(key)});
+  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+  drop.addEventListener('drop',e=>{files[key].push(...e.dataTransfer.files);renderFiles(key)});
+});
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-file]'); if(!b)return;
+  const [k,i]=b.dataset.file.split(':'); files[k].splice(+i,1); renderFiles(k);
+});
+document.getElementById('payBtn').onclick=()=>{document.getElementById('payNote').hidden=false};
+
+/* ---------- review ---------- */
+function v(id){const el=document.getElementById(id);return el?el.value.trim():''}
+function optText(name){
+  const r=form.querySelector(`input[name="${name}"]:checked`); if(!r)return '';
+  const t=r.closest('label').querySelector('.t'); return t?t.textContent.trim():r.value;
+}
+function joinNz(arr,sep=' · '){return arr.filter(Boolean).join(sep)}
+function buildReview(){
+  const blank='<span class="empty">Not provided</span>';
+  const rows=[];
+  const add=(k,val,step)=>rows.push([k,val||blank,step]);
+  const div=()=>rows.push(null);
+
+  add('Service',optText('service'),0);
+  add('Representing',val('side')==='buyer'?'Buyer':'Seller',0);
+  const addr=joinNz([joinNz([v('a_num'),v('a_street')],' '),v('a_city'),joinNz([v('a_state').toUpperCase(),v('a_zip')],' ')],', ');
+  add('Property',esc(addr),0);
+  add('Purchase type',val('cash')==='yes'?'Cash':'Financed',0);
+  add('Contract documents',val('docsDotloop')?'N/A — see Dotloop':files.contractDocs.length?files.contractDocs.map(f=>esc(f.name)).join('<br>'):'',0);
+  div();
+  const buyers=[...document.querySelectorAll('#buyers .person')].map(p=>{
+    const k=p.dataset.k; return esc(joinNz([v(`b${k}_name`),v(`b${k}_email`),v(`b${k}_phone`)]));
+  }).filter(Boolean);
+  add('Buyers',buyers.join('<br>'),1);
+  if(document.querySelectorAll('#buyers .person').length>1){
+    const r=val('buyerRel')==='other'?v('buyerRelOther'):val('buyerRel');
+    add('Buyer relationship',esc(r),1);
+  }
+  const co=esc(joinNz([v('co_name'),v('co_brokerage'),v('co_phone'),v('co_email')]));
+  if(val('coop')==='contract')add('Co-op agent','Confirmed: use the co-op information in the contract / Dotloop',1);
+  else add('Co-op agent',co,1);
+  if(val('addl')==='yes'){
+    const cs=[...document.querySelectorAll('#contacts .person')].map(p=>{
+      const k=p.dataset.k; const n=v(`c${k}_name`); if(!n)return '';
+      return esc(n)+(v(`c${k}_rel`)?` (${esc(v(`c${k}_rel`))})`:'')+(v(`c${k}_email`)?` · ${esc(v(`c${k}_email`))}`:'');
+    }).filter(Boolean);
+    add('Additional contacts',cs.join('<br>'),1);
+  } else add('Additional contacts','None',1);
+  div();
+  add('Title',val('title')==='have'?esc(joinNz([v('t_co'),v('t_contact'),v('t_email'),v('t_phone')]))||'Details to be added':esc(optText('title')),2);
+  add('Lender',val('lender')==='have'?esc(joinNz([v('l_co'),v('l_officer'),v('l_email'),v('l_phone')]))||'Details to be added':esc(optText('lender')),2);
+  add('Buyer broker fee',esc(v('fee')),2);
+  add('Deduct EMD from commission',val('emd')==='yes'?'Yes':val('emd')==='no'?'No':'',2);
+  div();
+  let hoa='';
+  if(val('hoa')==='no')hoa='No HOA';
+  else if(val('hoa')==='yes'){
+    const d=val('hoaDocs');
+    hoa=d==='upload'?`Uploaded (${files.hoaFiles.length} file${files.hoaFiles.length===1?'':'s'})`:d==='mls'?'In the MLS listing or Dotloop':d==='request'?'Request from listing agent':'Yes, docs status not chosen';
+    if(d==='upload'||d==='mls'){
+      if(val('hoaSent')==='yes')hoa+=` · Sent to buyer${v('hoaDate')?' on '+new Date(v('hoaDate')+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}`;
+      else if(val('hoaSent')==='no')hoa+=' · Not yet sent to buyer';
+    }
+  }
+  add('HOA',hoa,3);
+  div();
+  add('Notes',esc(v('notes')),4);
+  add('MLS closing instructions',val('mls')==='yes'?esc(joinNz(['Selling agent: '+(v('mls_sell')||'—'),v('mls_cosell')?'Co-selling agent: '+v('mls_cosell'):''])):val('mls')==='no'?'None':'',4);
+  add('Closing gift',val('gift')==='yes'?esc(joinNz([val('tier'),val('giftOpt')]))+(val('giftAgree')?'<br><span class="hint">Gift policy acknowledged</span>':'<br><span class="hint">Gift policy not yet acknowledged</span>'):'No gift',4);
+
+  document.getElementById('review').innerHTML=rows.map(r=>r?`<dt>${r[0]}</dt><dd>${r[1]}</dd><dd><button type="button" class="link quiet" data-go2="${r[2]}">Edit</button></dd>`:'<div class="divider"></div>').join('');
+}
+document.getElementById('review').addEventListener('click',e=>{const b=e.target.closest('[data-go2]');if(b)go(+b.dataset.go2)});
+
+sync(); go(0);
+</script>
+
+</body></html>

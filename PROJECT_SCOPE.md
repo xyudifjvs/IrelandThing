@@ -6,6 +6,10 @@ Ireland is the founder named in the mockup. This scope is for her business; the 
 
 The delivery covers the full product. Work packages are a dependency sequence, not a proposal to leave the integrations for an unspecified later release. See [technical architecture](TECHNICAL_PLAN.md) and the [two-team implementation plan](IMPLEMENTATION_PLAN.md).
 
+## November 4 reference update
+
+The new supplied Process page and four buyer/seller intake variants supersede the corresponding original visual references below. See [redesign release notes](docs/release/weatherly-redesign.md) and [preserved design inputs](design-reference/2026-11-weatherly/README.md). Ireland subsequently approved Contract to Close $425 and Contract to Close + Compliance $515, both sides; Full Listing is coming soon. Drafts save at any point; final submission requires an executed contract upload or location direction. Remaining field-by-field completion/location rules and gift operations remain unresolved. Historical records, permissions and provider gates are preserved. Consequential dates require coordinator approval before authoritative display. Other marketing page bodies have no new reference.
+
 ## Confirmed requirements
 
 - One Weatherly business, with Ireland as administrator, invited agents, and clients with limited access.

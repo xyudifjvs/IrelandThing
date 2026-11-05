@@ -268,27 +268,129 @@ export async function applyInitialWorkflow(
   );
   await recalculateWorkflow(tx, actor, matterId);
 }
+/** Rule calculations are proposals. Only coordinator-confirmed deadlines may
+ * supply the authoritative task date consumed by calendars and shared views.
+ * Read projection also protects records saved before this approval boundary.
+ */
+export function approvedWorkflowTaskDates<
+  T extends { dueDate: string | null; details: Prisma.JsonValue },
+>(
+  tasks: T[],
+  deadlines: {
+    date: string | null;
+    status: string;
+    details: Prisma.JsonValue;
+  }[],
+  matterDetails: Prisma.JsonValue,
+): T[] {
+  const details = matterDetails as {
+    workflow?: { definition?: unknown };
+  } | null;
+  const definition = definitionSchema.safeParse(details?.workflow?.definition);
+  if (!definition.success) return tasks;
+  const ruleKeys = new Set(
+    definition.data.steps.filter((step) => step.rule).map((step) => step.key),
+  );
+  return tasks.map((task) => {
+    const key = (task.details as { workflowKey?: string } | null)?.workflowKey;
+    if (!key || !ruleKeys.has(key)) return task;
+    const matching = deadlines.filter(
+      (deadline) =>
+        (deadline.details as { workflowKey?: string } | null)?.workflowKey ===
+        key,
+    );
+    const approved =
+      matching.length === 1 && matching[0].status === "confirmed"
+        ? matching[0].date
+        : null;
+    return { ...task, dueDate: approved };
+  });
+}
+
+async function syncApprovedTaskDate(
+  tx: Prisma.TransactionClient,
+  actor: Principal,
+  matterId: string,
+  key: string,
+  date: string | null,
+) {
+  const updated = await tx.task.updateMany({
+    where: {
+      matterId,
+      details: { path: ["workflowKey"], equals: key },
+      ...(date
+        ? { OR: [{ dueDate: null }, { dueDate: { not: date } }] }
+        : { dueDate: { not: null } }),
+    },
+    data: { dueDate: date, revision: { increment: 1 } },
+  });
+  if (updated.count)
+    await audit(
+      tx,
+      actor,
+      "workflow.approved_task_date_synced",
+      "Matter",
+      matterId,
+      matterId,
+      {
+        workflowKey: key,
+        date,
+        taskCount: updated.count,
+      },
+    );
+}
+
 /** Recomputes rule-owned dates after anchor changes. Explicit manual overrides are preserved. */
 export async function recalculateWorkflow(
   tx: Prisma.TransactionClient,
   actor: Principal,
   matterId: string,
+  options: { approvedDeadlineIds?: ReadonlySet<string> } = {},
 ) {
   const matter = await tx.matter.findUniqueOrThrow({ where: { id: matterId } });
   const details = matter.details as Record<string, Prisma.JsonValue>;
   const workflow = details.workflow as { definition?: unknown } | undefined;
   if (!workflow?.definition) return [];
   const definition = definitionSchema.parse(workflow.definition);
-  const deadlines = await tx.deadline.findMany({ where: { matterId } });
+  // A downstream rule must see its anchor's final state in this transaction,
+  // even when the saved presentation order puts the dependent step first.
+  const remaining = definition.steps.filter((step) => step.rule);
+  const ordered: typeof remaining = [];
+  while (remaining.length) {
+    const ready = remaining.filter(
+      (step) => !remaining.some((other) => other.title === step.rule!.anchor),
+    );
+    if (!ready.length)
+      throw new HttpError(
+        422,
+        "DATE_RULE_CYCLE",
+        "Workflow date rules contain a circular anchor. Correct the workflow before recalculating.",
+      );
+    ordered.push(...ready);
+    for (const step of ready) remaining.splice(remaining.indexOf(step), 1);
+  }
   const changes: { label: string; date: string | null; preserved?: boolean }[] =
     [];
-  for (const step of definition.steps) {
+  for (const step of ordered) {
     if (!step.rule) continue;
+    // Re-read our own earlier writes rather than using an obsolete confirmed
+    // anchor from the start of the recalculation.
+    const deadlines = await tx.deadline.findMany({ where: { matterId } });
     const deadline = deadlines.find(
       (d) => (d.details as { workflowKey?: string }).workflowKey === step.key,
     );
-    if (!deadline) continue;
+    if (!deadline) {
+      await syncApprovedTaskDate(tx, actor, matterId, step.key, null);
+      continue;
+    }
     if ((deadline.details as { manualOverride?: boolean }).manualOverride) {
+      await syncApprovedTaskDate(
+        tx,
+        actor,
+        matterId,
+        step.key,
+        deadline.status === "confirmed" ? deadline.date : null,
+      );
       changes.push({
         label: deadline.label,
         date: deadline.date,
@@ -309,6 +411,54 @@ export async function recalculateWorkflow(
             step.rule.skipDates,
           )
         : null;
+    if (
+      options.approvedDeadlineIds?.has(deadline.id) &&
+      deadline.status === "confirmed" &&
+      deadline.date &&
+      deadline.date !== date
+    ) {
+      // An explicit approval of quoted source evidence wins over a configured
+      // calculation. Treat that conflict as the existing manual-override policy,
+      // rather than silently replacing Ireland's accepted date in this transaction.
+      const preserved = await tx.deadline.updateMany({
+        where: { id: deadline.id, revision: deadline.revision },
+        data: {
+          details: {
+            ...(deadline.details as Record<string, Prisma.InputJsonValue>),
+            manualOverride: true,
+            ruleOverrideReason:
+              "Coordinator approved source date over calculated rule",
+          },
+          revision: { increment: 1 },
+        },
+      });
+      if (!preserved.count)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "Deadline changed during review; refresh before applying",
+        );
+      await syncApprovedTaskDate(tx, actor, matterId, step.key, deadline.date);
+      await audit(
+        tx,
+        actor,
+        "deadline.reviewed_rule_override_preserved",
+        "Deadline",
+        deadline.id,
+        matterId,
+        {
+          approvedDate: deadline.date,
+          calculatedProposal: date,
+          rule: step.rule,
+        },
+      );
+      changes.push({
+        label: deadline.label,
+        date: deadline.date,
+        preserved: true,
+      });
+      continue;
+    }
     const previousAnchor = deadline.details as {
       anchorId?: string;
       anchorRevision?: number;
@@ -317,13 +467,26 @@ export async function recalculateWorkflow(
       deadline.date === date &&
       previousAnchor.anchorId === (anchors[0]?.id || null) &&
       previousAnchor.anchorRevision === (anchors[0]?.revision || null)
-    )
+    ) {
+      await syncApprovedTaskDate(
+        tx,
+        actor,
+        matterId,
+        step.key,
+        deadline.status === "confirmed" ? deadline.date : null,
+      );
       continue;
+    }
+    const nextStatus = date
+      ? deadline.date === date && deadline.status === "confirmed"
+        ? "confirmed"
+        : "proposed"
+      : "unknown";
     const changed = await tx.deadline.updateMany({
       where: { id: deadline.id, revision: deadline.revision },
       data: {
         date,
-        status: date ? "proposed" : "unknown",
+        status: nextStatus,
         revision: { increment: 1 },
         details: {
           ...(deadline.details as Record<string, Prisma.InputJsonValue>),
@@ -339,14 +502,15 @@ export async function recalculateWorkflow(
         "REVISION_CONFLICT",
         "A deadline changed during recalculation. Refresh and try again.",
       );
-    await tx.task.updateMany({
-      where: {
-        matterId,
-        details: { path: ["workflowKey"], equals: step.key },
-        status: { notIn: ["completed", "signed", "not_applicable"] },
-      },
-      data: { dueDate: date, revision: { increment: 1 } },
-    });
+    // Only a changed calculated value needs a new approval; a metadata-only
+    // anchor revision must not revoke approval of an unchanged date.
+    await syncApprovedTaskDate(
+      tx,
+      actor,
+      matterId,
+      step.key,
+      nextStatus === "confirmed" ? date : null,
+    );
     await audit(
       tx,
       actor,

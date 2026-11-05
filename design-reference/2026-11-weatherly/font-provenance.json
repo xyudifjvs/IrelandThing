@@ -1,0 +1,26 @@
+{
+  "intakeSourceDefinitions": "intake-fonts.css",
+  "intakeFonts": [
+    {
+      "file": "apps/web/public/fonts/intake-dm-sans-400.ttf",
+      "sha256": "b0ae3e89a7d3ef2b1838bb4b1ceb0b17cc3435af061eee809d76aa623ff116e9"
+    },
+    {
+      "file": "apps/web/public/fonts/intake-dm-sans-500.ttf",
+      "sha256": "376427b5322148d8de1e03f263bcca4935a2d60ba71d9f94f4947ab664c711ae"
+    },
+    {
+      "file": "apps/web/public/fonts/intake-dm-sans-600.ttf",
+      "sha256": "b79a2ea7a38f33fd96a282fadb9ce97626bb0724a44d21075859f0e50239993a"
+    },
+    {
+      "file": "apps/web/public/fonts/intake-eb-garamond-400.ttf",
+      "sha256": "934aa932b4bc1a75d883f7c3d4d5bbc8278e5e7fcc96d5440bbffd61050cf958"
+    },
+    {
+      "file": "apps/web/public/fonts/intake-eb-garamond-500.ttf",
+      "sha256": "45fad23db0ff6cc8f2ce5a6f9802d499e8ab737c039a7944a6f2f617d224af14"
+    }
+  ],
+  "marketingFontSource": "manifest.json"
+}

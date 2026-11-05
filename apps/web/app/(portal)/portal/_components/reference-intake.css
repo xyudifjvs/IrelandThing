@@ -1,0 +1,200 @@
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/intake-dm-sans-400.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/intake-dm-sans-500.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/intake-dm-sans-600.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/intake-eb-garamond-400.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/intake-eb-garamond-500.ttf') format('truetype');
+}
+.weatherly-intake {min-height:100vh;font:15px/1.5 "DM Sans",Arial,sans-serif;}
+.weatherly-intake p{margin-block:1em}.weatherly-intake h3{font-family:var(--body)}
+
+/* Layout: fixed left step rail + single form column of cards; rail collapses to a scrolling step strip on phones.
+   Single light look by choice — this mirrors the Weatherly brand mockup. */
+.weatherly-intake{
+  color-scheme: light;
+  --bg:#F3EDE3; --rail:#E9DFCE; --card:#FAF6EF; --field:#FFFDF9;
+  --line:#E2D6C3; --line-strong:#CDBDA5;
+  --ink:#2A231C; --muted:#6E6253; --faint:#9A8C79;
+  --accent:#8A6641; --accent-dark:#6F5132; --accent-soft:#EFE4D3; --on-accent:#FFFFFF;
+  --note:#F7EFE2; --warn:#8A4B24;
+  --display:"EB Garamond", "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --body:"DM Sans", "Helvetica Neue", Arial, sans-serif;
+  --r:12px;
+}
+.weatherly-intake *{box-sizing:border-box}
+.weatherly-intake,.weatherly-intake{background:var(--bg);color:var(--ink)}
+.weatherly-intake{font-family:var(--body);font-size:15px;line-height:1.5}
+.weatherly-intake button,.weatherly-intake input,.weatherly-intake select,.weatherly-intake textarea{font:inherit;color:inherit}
+.weatherly-intake :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.weatherly-intake .proto{background:var(--ink);color:#F3EDE3;font-size:12.5px;letter-spacing:.02em;
+  padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;gap:8px 16px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.weatherly-intake .proto b{font-weight:600}
+
+.weatherly-intake .shell{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:calc(100vh - 36px)}
+.weatherly-intake .rail{background:var(--rail);padding:36px 24px;padding-left:max(24px,env(safe-area-inset-left,0px))}
+.weatherly-intake .brand{font-family:var(--display);font-size:25px;letter-spacing:.2em;line-height:1}
+.weatherly-intake .brand small{display:block;font-family:var(--body);font-size:10.5px;letter-spacing:.24em;color:var(--muted);margin-top:8px}
+.weatherly-intake .nav{list-style:none;margin:40px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.weatherly-intake .nav button{all:unset;cursor:pointer;display:flex;gap:10px;align-items:center;padding:7px 4px;border-radius:8px;color:var(--ink);font-size:14px;width:100%}
+.weatherly-intake .nav button:focus-visible{outline:2px solid var(--accent)}
+.weatherly-intake .nav .dot{width:24px;height:24px;flex:none;border-radius:50%;border:1.5px solid var(--faint);display:grid;place-items:center;font-size:11.5px;color:var(--muted)}
+.weatherly-intake .nav .done .dot{border-color:var(--accent);color:var(--accent)}
+.weatherly-intake .nav .done .dot::before{content:"";width:8px;height:4px;border-left:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(-45deg) translate(1px,-1px)}
+.weatherly-intake .nav .done .dot span{display:none}
+.weatherly-intake .nav .active .dot{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.weatherly-intake .nav .active{font-weight:600}
+.weatherly-intake .nav .todo{color:var(--faint)}
+
+.weatherly-intake main{padding-block:40px 64px;padding-left:max(16px,4vw);padding-right:max(16px,env(safe-area-inset-right,0px),4vw);min-width:0}
+.weatherly-intake .wrap{max-width:680px}
+.weatherly-intake .eyebrow{font-size:12.5px;color:var(--muted);margin:0}
+.weatherly-intake h1{font-family:var(--display);font-weight:400;font-size:clamp(34px,5vw,46px);line-height:1.05;margin:4px 0 6px;text-wrap:balance}
+.weatherly-intake .sub{color:var(--muted);margin:0 0 24px}
+.weatherly-intake h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 4px;line-height:1.2}
+.weatherly-intake h3{font-size:14px;font-weight:600;margin:0}
+.weatherly-intake .hint{font-size:13px;color:var(--muted);margin:0}
+
+.weatherly-intake .welcome{background:var(--note);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin-bottom:16px}
+.weatherly-intake .welcome p{margin:0;font-size:14.5px}
+.weatherly-intake .welcome p+p{margin-top:8px}
+.weatherly-intake .welcome .sig{font-family:var(--display);font-style:italic;font-size:17px;color:var(--accent-dark)}
+
+.weatherly-intake .who{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px;font-size:14px;margin-bottom:16px}
+.weatherly-intake .who .hint{font-size:12.5px}
+
+.weatherly-intake .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:22px;margin-bottom:16px;display:flex;flex-direction:column;gap:16px}
+.weatherly-intake .card-head{display:flex;flex-direction:column;gap:2px}
+.weatherly-intake .section-label{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+.weatherly-intake .grid{display:grid;gap:14px}
+.weatherly-intake .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.weatherly-intake .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.weatherly-intake .addr1{grid-template-columns:110px minmax(0,1fr)}
+.weatherly-intake .addr2{grid-template-columns:minmax(0,1fr) 100px 120px}
+.weatherly-intake .field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.weatherly-intake label.lbl,.weatherly-intake .lbl{font-size:13.5px;font-weight:500}
+.weatherly-intake .req{color:var(--accent)}
+.weatherly-intake input[type=text],.weatherly-intake input[type=email],.weatherly-intake input[type=tel],.weatherly-intake input[type=date],.weatherly-intake select,.weatherly-intake textarea{
+  width:100%;background:var(--field);border:1px solid var(--line);border-radius:9px;padding:11px 12px;min-height:44px}
+.weatherly-intake textarea{min-height:90px;resize:vertical}
+.weatherly-intake input:focus,.weatherly-intake select:focus,.weatherly-intake textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.weatherly-intake ::placeholder{color:var(--faint)}
+
+/* pill toggle */
+.weatherly-intake .seg{display:inline-flex;background:var(--field);border:1px solid var(--line);border-radius:999px;padding:4px;gap:2px;align-self:flex-start}
+.weatherly-intake .seg label{position:relative}
+.weatherly-intake .seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.weatherly-intake .seg span{display:block;padding:8px 22px;border-radius:999px;font-weight:500;font-size:14px;color:var(--muted)}
+.weatherly-intake .seg input:checked+span{background:var(--accent);color:var(--on-accent)}
+.weatherly-intake .seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+
+/* radio / check cards */
+.weatherly-intake .opts{display:flex;flex-direction:column;gap:8px}
+.weatherly-intake .opt{display:flex;gap:12px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer}
+.weatherly-intake .opt:has(input:checked){border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:#FFFCF6}
+.weatherly-intake .opt input{margin:3px 0 0;accent-color:var(--accent);width:16px;height:16px;flex:none}
+.weatherly-intake .opt .t{font-size:14px;font-weight:500}
+.weatherly-intake .opt .d{font-size:13px;color:var(--muted)}
+.weatherly-intake .reveal{border-left:2px solid var(--line-strong);margin-left:7px;padding:4px 0 4px 18px;display:flex;flex-direction:column;gap:14px}
+.weatherly-intake .reveal.grid{display:grid}
+
+.weatherly-intake .check{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted);cursor:pointer}
+.weatherly-intake .check input{accent-color:var(--accent);margin:2px 0 0;width:15px;height:15px;flex:none}
+
+/* uploads */
+.weatherly-intake .drop{border:1.5px dashed var(--line-strong);border-radius:10px;background:var(--field);padding:24px 16px;text-align:center;cursor:pointer;display:block}
+.weatherly-intake .drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.weatherly-intake .drop input{position:absolute;width:1px;height:1px;opacity:0}
+.weatherly-intake .drop strong{display:block;font-weight:600;font-size:14.5px}
+.weatherly-intake .drop span{font-size:13px;color:var(--muted)}
+.weatherly-intake .doclist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.weatherly-intake .doclist li{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13.5px}
+.weatherly-intake .doclist .name{overflow-wrap:anywhere;min-width:0}
+.weatherly-intake .chips{display:flex;flex-wrap:wrap;gap:6px}
+.weatherly-intake .chip{font-size:12px;border:1px solid var(--line);background:var(--field);border-radius:999px;padding:3px 10px;color:var(--muted)}
+.weatherly-intake .chip.key{border-color:var(--accent);color:var(--accent-dark);font-weight:600}
+
+.weatherly-intake .person{border:1px solid var(--line);border-radius:10px;padding:16px;background:#FFFCF7;display:flex;flex-direction:column;gap:12px}
+.weatherly-intake .person-head{display:flex;justify-content:space-between;align-items:center}
+.weatherly-intake .link{all:unset;cursor:pointer;color:var(--accent-dark);font-size:13.5px;font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.weatherly-intake .link:focus-visible{outline:2px solid var(--accent)}
+.weatherly-intake .link.quiet{color:var(--muted);font-weight:400}
+
+.weatherly-intake .banner{background:var(--note);border:1px solid var(--line-strong);border-radius:10px;padding:12px 14px;font-size:13.5px;color:var(--warn)}
+
+/* gift */
+.weatherly-intake .tiers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.weatherly-intake .tiers .opt{flex-direction:column;gap:2px}
+.weatherly-intake .tiers .row{display:flex;gap:10px;align-items:center}
+.weatherly-intake .tiers .price{font-size:13px;color:var(--muted);padding-left:26px;font-variant-numeric:tabular-nums}
+.weatherly-intake .gifts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.weatherly-intake .gift{display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}
+.weatherly-intake .gift .photo{aspect-ratio:4/3;max-width:100%;background:repeating-linear-gradient(135deg,#EFE5D5 0 10px,#F6EEE1 10px 20px);display:grid;place-items:center;color:var(--muted);font-size:12.5px;border-bottom:1px solid var(--line)}
+.weatherly-intake .gift .body{display:flex;gap:10px;padding:12px 14px}
+.weatherly-intake .total{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px}
+.weatherly-intake .total .amt{font-variant-numeric:tabular-nums;font-weight:600}
+
+/* buttons */
+.weatherly-intake .actions{display:flex;justify-content:space-between;gap:12px;margin-top:24px}
+.weatherly-intake .btn{cursor:pointer;border-radius:999px;padding:12px 26px;font-weight:500;font-size:15px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);min-height:44px}
+.weatherly-intake .btn:hover{background:var(--accent-dark)}
+.weatherly-intake .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line-strong)}
+.weatherly-intake .btn.ghost:hover{background:var(--field)}
+.weatherly-intake .btn.small{padding:9px 18px;font-size:14px}
+
+/* review */
+.weatherly-intake .review{display:grid;grid-template-columns:170px minmax(0,1fr) auto;gap:10px 14px;font-size:14px}
+.weatherly-intake .review dt{color:var(--muted)}
+.weatherly-intake .review dd{margin:0;overflow-wrap:anywhere}
+.weatherly-intake .review .divider{grid-column:1/-1;border-top:1px solid var(--line);margin:4px 0}
+.weatherly-intake .empty{color:var(--faint)}
+.weatherly-intake .done-card{text-align:center;padding:40px 24px}
+.weatherly-intake .done-card h2{font-size:30px}
+
+@media (max-width:760px){
+  .weatherly-intake .shell{grid-template-columns:1fr}
+  .weatherly-intake .rail{padding:18px 16px 10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .weatherly-intake .brand{font-size:20px}
+  .weatherly-intake .nav{flex-direction:row;overflow-x:auto;margin-top:14px;gap:4px;padding-bottom:6px}
+  .weatherly-intake .nav li{flex:none}
+  .weatherly-intake .nav button{white-space:nowrap;padding:6px 10px 6px 4px;font-size:13px}
+  .weatherly-intake main{padding-top:24px}
+  .weatherly-intake .g2,.weatherly-intake .g3,.weatherly-intake .tiers,.weatherly-intake .gifts{grid-template-columns:1fr}
+  .weatherly-intake .addr2{grid-template-columns:minmax(0,1fr) 90px}
+  .weatherly-intake .addr2 .zip{grid-column:1/-1}
+  .weatherly-intake .review{grid-template-columns:minmax(0,1fr) auto}
+  .weatherly-intake .review dt{grid-column:1/-1;margin-bottom:-8px;font-size:12.5px}
+}
+@media (prefers-reduced-motion:no-preference){ .weatherly-intake .step{animation:in .25s ease} @keyframes in{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}} }
+
+.weatherly-intake .proto button,.weatherly-intake .proto a,.weatherly-intake .proto select {font:inherit;color:inherit;background:transparent;border:0;padding:0;text-decoration:underline;cursor:pointer}.weatherly-intake .proto select{background:var(--ink);max-width:180px;min-height:0;width:auto}.weatherly-intake .draft-tools {padding:12px 16px;border-bottom:1px solid var(--line);background:var(--card)}.weatherly-intake .draft-tools button{margin:4px 12px 4px 0}.weatherly-intake .save-message {margin:0;padding:10px 16px;background:var(--note)}.weatherly-intake .doclist small{display:block}.weatherly-intake .review dd{white-space:pre-wrap}@media(max-width:760px){.weatherly-intake .shell{grid-template-columns:minmax(0,1fr)}.weatherly-intake .rail{position:static;height:auto;min-width:0}}

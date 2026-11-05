@@ -1,0 +1,32 @@
+[
+  {
+    "key": "process",
+    "file": "originals/Weatherly Transaction Co. Website \u2013 Process.html",
+    "sha256": "5253eeaded9a1430ea2fc2c4286a4b8d89e6ebbb71366a26268229edb052649e",
+    "source": "/Users/carson/Library/Messages/Attachments/64/04/EF4BC77B-31F9-4BAF-B4A8-777D70957220/Weatherly Transaction Co. Website \u2013 Process.html"
+  },
+  {
+    "key": "seller-compliance",
+    "file": "originals/Weatherly Seller Compliance Intake.html",
+    "sha256": "a305676f6003972edbb5fa652a58687e0619d3e8bb13686cf842ebbfa1293594",
+    "source": "/Users/carson/Library/Messages/Attachments/35/05/293ADC56-7B48-4907-B890-524D15E7207F/Weatherly Seller Compliance Intake.html"
+  },
+  {
+    "key": "buyer",
+    "file": "originals/Weatherly Buyer Intake.html",
+    "sha256": "c7ef93720247e5235f0c8d362623563b757505e7a51b7532032b827566ba0dbc",
+    "source": "/Users/carson/Library/Messages/Attachments/cf/15/5148A636-08D0-4C0D-8339-E8D7B04112CB/Weatherly Buyer Intake.html"
+  },
+  {
+    "key": "seller",
+    "file": "originals/Weatherly Seller Intake.html",
+    "sha256": "01bf36febe2eb21d08eda3378de52e3a34dad13ecdd107124e3b7c5e375a34ef",
+    "source": "/Users/carson/Library/Messages/Attachments/eb/11/398F441E-55CB-4559-A65C-465EAF9C0EEE/Weatherly Seller Intake.html"
+  },
+  {
+    "key": "buyer-compliance",
+    "file": "originals/Weatherly Buyer Compliance Intake.html",
+    "sha256": "c8df0350afc1edbab13da42fa8905d045a6f6d6a7f7c65ee99c7089f5cd07e0e",
+    "source": "/Users/carson/Library/Messages/Attachments/86/06/D17D76BE-CC08-423D-9F76-733AB46F90E5/Weatherly Buyer Compliance Intake.html"
+  }
+]

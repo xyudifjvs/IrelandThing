@@ -1,4 +1,5 @@
 "use client";
+import SavedIntakeDetails from "../../../../_components/SavedIntakeDetails";
 import { use, useState } from "react";
 import Link from "next/link";
 import {
@@ -17,6 +18,7 @@ import {
   useData,
   address,
   label,
+  serviceName,
   date,
   type Matter,
   type Session,
@@ -88,6 +90,7 @@ function TransactionDetail({ id }: { id: string }) {
         </div>
       )}
       <LiveStatus query={q} />
+      {!client && <SavedIntakeDetails value={m.details?.referenceIntake} />}
       <div className={s.columns}>
         <div>
           <section className={s.card}>
@@ -165,7 +168,7 @@ function TransactionDetail({ id }: { id: string }) {
           {!client && (
             <section className={s.card} style={{ marginTop: 23 }}>
               <p className={s.eyebrow}>Your service</p>
-              <h2>{label(m.packageCode)}</h2>
+              <h2>{serviceName(m)}</h2>
               <p>Ireland will confirm when your service fee is due.</p>
               <p className={s.hint}>
                 When online payment is available, Ireland can prepare a payment

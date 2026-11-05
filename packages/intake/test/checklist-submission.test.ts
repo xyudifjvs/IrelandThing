@@ -11,6 +11,7 @@ import {
   uploadDocument,
   type ObjectStore,
 } from "@weatherly/documents";
+import { getMatter } from "@weatherly/matters";
 import { queryStoredRecords } from "../../assistant/src/records";
 import { saveIntakeDraft, submitIntake } from "../src/index";
 
@@ -155,7 +156,7 @@ afterAll(async () => {
 });
 
 describe("durable intake document batch submissions", () => {
-  it("creates a visible transaction from blank fields without documents and returns the same receipt on retry", async () => {
+  it("saves blank drafts and requires a contract location before creating a transaction", async () => {
     const savedPayload = {
       ...payload([], {}),
       propertyAddress: "",
@@ -172,12 +173,39 @@ describe("durable intake document batch submissions", () => {
       expectedRevision: 1,
       idempotencyKey: `submit-${created.id}`,
     };
+    await expect(submitIntake(agent, created.id, input)).rejects.toMatchObject({
+      code: "CONTRACT_REQUIRED",
+      status: 422,
+    });
+    const saved = await saveIntakeDraft(agent, created.id, {
+      expectedRevision: 1,
+      payload: {
+        ...savedPayload,
+        referenceIntake: {
+          version: 1,
+          variant: "buyer-compliance",
+          fields: {
+            contractLocation:
+              "Dotloop: synthetic loop / executed contract folder",
+          },
+          uploads: {},
+          fileNames: {},
+        },
+      },
+    });
+    input.expectedRevision = saved.revision;
     const result = await submitIntake(agent, created.id, input);
     matterIds.push(result.matter.id);
     expect(result.matter.title).toBe("Untitled transaction");
     expect(result.matter.propertyAddress).toBe("");
     expect(result.matter.agentId).toBe(agent.id);
     expect(result.submission.snapshot).toMatchObject({
+      serviceSnapshot: {
+        code: "complete",
+        name: "Contract to Close + Compliance",
+        priceCents: 51500,
+        currency: "USD",
+      },
       propertyAddress: "",
       documentIds: [],
     });
@@ -393,5 +421,347 @@ describe("durable intake document batch submissions", () => {
         })
       ).status,
     ).toBe("draft");
+  });
+
+  it("preserves every reference field and upload group, including files absent from legacy documentIds", async () => {
+    const groups = {
+      contractDocs: [await upload(agent, "reference-contract.pdf", "contract")],
+      hoaFiles: [await upload(agent, "reference-hoa.pdf", "hoa")],
+      utilFiles: [await upload(agent, "reference-utilities.pdf", "utilities")],
+      policyFiles: [
+        await upload(agent, "reference-policy.pdf", "prior_policy"),
+      ],
+    };
+    const reference = {
+      version: 1,
+      variant: "seller-compliance",
+      fields: {
+        service: "ctcc",
+        side: "seller",
+        a_num: "1420",
+        a_street: "Synthetic Road",
+        a_city: "Columbus",
+        a_state: "OH",
+        a_zip: "43215",
+        occ: "Occupied",
+        b1_name: "First seller",
+        b1_email: "first@example.test",
+        b1_phone: "555-0101",
+        b2_name: "Second seller",
+        b2_email: "second@example.test",
+        b2_phone: "555-0102",
+        buyerRel: "other",
+        buyerRelOther: "Mother / daughter",
+        coop: "type",
+        co_brokerage: "Synthetic brokerage",
+        co_name: "Synthetic Co-op",
+        co_email: "coop@example.test",
+        co_phone: "555-0103",
+        addl: "yes",
+        c1_name: "Additional person",
+        c1_email: "additional@example.test",
+        c1_rel: "Parent",
+        title: "mls",
+        lender: "cash",
+        cash: "yes",
+        fee: "$500",
+        listcomm: "3%",
+        hoa: "yes",
+        hoaDocs: "upload",
+        hoaSent: "yes",
+        hoaDate: "2026-11-04",
+        utilNotes: "Policy attached",
+        docsDotloop: true,
+        notes: "Synthetic reference submission",
+        gift: "yes",
+        tier: "Classic",
+        giftOpt: "Gift Option 1",
+        giftAgree: true,
+      },
+      uploads: Object.fromEntries(
+        Object.entries(groups).map(([key, docs]) => [
+          key,
+          docs.map((doc) => doc.id),
+        ]),
+      ),
+      fileNames: Object.fromEntries(
+        Object.values(groups)
+          .flat()
+          .map((doc) => [doc.id, doc.name]),
+      ),
+    };
+    const savedPayload = {
+      ...payload([], {}),
+      side: "seller",
+      referenceIntake: reference,
+    };
+    const created = await prisma.intakeDraft.create({
+      data: { userId: agent.id, payload: savedPayload },
+    });
+    draftIds.push(created.id);
+    const saved = await saveIntakeDraft(agent, created.id, {
+      expectedRevision: 1,
+      payload: savedPayload,
+    });
+    await expect(
+      saveIntakeDraft(agent, created.id, {
+        expectedRevision: 1,
+        payload: savedPayload,
+      }),
+    ).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+    const input = {
+      expectedRevision: saved.revision,
+      idempotencyKey: `submit-${created.id}`,
+    };
+    const result = await submitIntake(agent, created.id, input);
+    matterIds.push(result.matter.id);
+    expect(result.submission.snapshot).toMatchObject({
+      referenceIntake: reference,
+    });
+    const owned = await getMatter(agent, result.matter.id);
+    expect(owned).toMatchObject({ details: { referenceIntake: reference } });
+    expect(
+      (await listDocuments(agent, result.matter.id))
+        .map((doc) => doc.id)
+        .sort(),
+    ).toEqual(
+      Object.values(groups)
+        .flat()
+        .map((doc) => doc.id)
+        .sort(),
+    );
+    const coordinator = { ...agent, role: "coordinator" as const };
+    const records = await queryStoredRecords(coordinator, {
+      kind: "intake_submissions",
+      matterId: result.matter.id,
+    });
+    expect(records.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          snapshot: expect.objectContaining({ referenceIntake: reference }),
+        }),
+      ]),
+    );
+    await expect(getMatter(outsider, result.matter.id)).rejects.toMatchObject({
+      status: 404,
+    });
+    await prisma.matterParticipant.create({
+      data: { matterId: result.matter.id, userId: outsider.id, role: "client" },
+    });
+    const clientView = await getMatter(
+      { ...outsider, role: "client" },
+      result.matter.id,
+    );
+    expect(clientView).not.toHaveProperty("details");
+    await expect(
+      queryStoredRecords(
+        { ...outsider, role: "client" },
+        { kind: "intake_submissions", matterId: result.matter.id },
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    const replay = await submitIntake(agent, created.id, input);
+    expect(replay.submission.id).toBe(result.submission.id);
+    expect(
+      await prisma.matterParticipant.count({
+        where: { matterId: result.matter.id },
+      }),
+    ).toBe(1);
+    const tasks = await prisma.task.findMany({
+      where: { matterId: result.matter.id },
+    });
+    expect(tasks.map((task) => task.title)).toEqual(
+      expect.arrayContaining([
+        "Review additional communication and portal contact requests",
+        "Review seller utilities and previous title policy",
+        "Verify reported HOA document delivery date",
+      ]),
+    );
+  });
+
+  it("rejects foreign files in every new upload group and rejects unfinished upload records atomically", async () => {
+    const foreign = await upload(outsider, "foreign-reference.pdf", "hoa");
+    for (const key of [
+      "contractDocs",
+      "hoaFiles",
+      "utilFiles",
+      "policyFiles",
+    ]) {
+      const created = await prisma.intakeDraft.create({
+        data: {
+          userId: agent.id,
+          payload: {
+            ...payload([], {}),
+            referenceIntake: {
+              version: 1,
+              variant: "buyer-compliance",
+              fields: {
+                contractLocation:
+                  "Synthetic external executed-contract location",
+              },
+              uploads: { [key]: [foreign.id] },
+              fileNames: {},
+            },
+          },
+        },
+      });
+      draftIds.push(created.id);
+      await expect(
+        submitIntake(agent, created.id, {
+          expectedRevision: 1,
+          idempotencyKey: `submit-${created.id}`,
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_DOCUMENT", status: 422 });
+      expect(
+        (
+          await prisma.intakeDraft.findUniqueOrThrow({
+            where: { id: created.id },
+          })
+        ).status,
+      ).toBe("draft");
+    }
+    const unfinished = await prisma.document.create({
+      data: {
+        name: "unfinished.pdf",
+        mimeType: "application/pdf",
+        createdById: agent.id,
+      },
+    });
+    const created = await prisma.intakeDraft.create({
+      data: {
+        userId: agent.id,
+        payload: {
+          ...payload([], {}),
+          referenceIntake: {
+            version: 1,
+            variant: "buyer-compliance",
+            fields: {
+              contractLocation: "Synthetic external executed-contract location",
+            },
+            uploads: { hoaFiles: [unfinished.id] },
+            fileNames: {},
+          },
+        },
+      },
+    });
+    draftIds.push(created.id);
+    await expect(
+      submitIntake(agent, created.id, {
+        expectedRevision: 1,
+        idempotencyKey: `submit-${created.id}`,
+      }),
+    ).rejects.toMatchObject({ code: "DOCUMENT_NOT_AVAILABLE", status: 422 });
+    expect(
+      (
+        await prisma.intakeDraft.findUniqueOrThrow({
+          where: { id: created.id },
+        })
+      ).status,
+    ).toBe("draft");
+    expect(
+      await prisma.intakeSubmission.count({ where: { draftId: created.id } }),
+    ).toBe(0);
+  });
+
+  it("keeps an HOA-only upload and still requests the missing contract", async () => {
+    const hoa = await upload(agent, "only-hoa-evidence.pdf", "hoa");
+    const created = await prisma.intakeDraft.create({
+      data: {
+        userId: agent.id,
+        payload: {
+          ...payload([hoa.id], {}),
+          referenceIntake: {
+            version: 1,
+            variant: "buyer-compliance",
+            fields: {
+              hoa: "yes",
+              hoaDocs: "upload",
+              contractLocation: "Dotloop: synthetic executed contract folder",
+            },
+            uploads: { hoaFiles: [hoa.id] },
+            fileNames: { [hoa.id]: hoa.name },
+          },
+        },
+      },
+    });
+    draftIds.push(created.id);
+    const result = await submitIntake(agent, created.id, {
+      expectedRevision: 1,
+      idempotencyKey: `submit-${created.id}`,
+    });
+    matterIds.push(result.matter.id);
+    expect(
+      (await listDocuments(agent, result.matter.id)).map((doc) => doc.id),
+    ).toEqual([hoa.id]);
+    expect(
+      (
+        await prisma.task.findMany({ where: { matterId: result.matter.id } })
+      ).map((task) => task.title),
+    ).toContain("Obtain executed contract");
+  });
+
+  it("keeps Full Listing drafts resumable and replays historical submitted receipts", async () => {
+    const created = await prisma.intakeDraft.create({
+      data: {
+        userId: agent.id,
+        payload: {
+          ...payload([], {}),
+          side: "seller",
+          packageCode: "full_listing",
+        },
+      },
+    });
+    draftIds.push(created.id);
+    const saved = await saveIntakeDraft(agent, created.id, {
+      expectedRevision: 1,
+      payload: {
+        ...payload([], {}),
+        side: "seller",
+        packageCode: "full_listing",
+        notes: "Still resumable",
+      },
+    });
+    await expect(
+      submitIntake(agent, created.id, {
+        expectedRevision: saved.revision,
+        idempotencyKey: `submit-${created.id}`,
+      }),
+    ).rejects.toMatchObject({ code: "SERVICE_COMING_SOON" });
+    expect(
+      (
+        await prisma.intakeDraft.findUniqueOrThrow({
+          where: { id: created.id },
+        })
+      ).status,
+    ).toBe("draft");
+    const matter = await prisma.matter.create({
+      data: {
+        title: "Historical Full Listing",
+        propertyAddress: "Synthetic historical address",
+        side: "seller",
+        packageCode: "full_listing",
+        agentId: agent.id,
+        details: { priceCents: 62500 },
+      },
+    });
+    matterIds.push(matter.id);
+    const historical = await prisma.intakeSubmission.create({
+      data: {
+        draftId: created.id,
+        matterId: matter.id,
+        userId: agent.id,
+        idempotencyKey: `historical-${created.id}`,
+        snapshot: { packageCode: "full_listing", priceCents: 62500 },
+      },
+    });
+    await prisma.intakeDraft.update({
+      where: { id: created.id },
+      data: { status: "submitted", submittedMatterId: matter.id },
+    });
+    const replay = await submitIntake(agent, created.id, {
+      expectedRevision: 1,
+      idempotencyKey: historical.idempotencyKey,
+    });
+    expect(replay.submission).toEqual(historical);
+    expect(replay.matter.details).toEqual({ priceCents: 62500 });
   });
 });

@@ -1,0 +1,230 @@
+[
+  {
+    "width": 1280,
+    "reference": {
+      "body": 1358,
+      "width": 1280,
+      "header": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 97,
+        "top": 0,
+        "right": 1280,
+        "bottom": 97,
+        "left": 0
+      },
+      "section": {
+        "x": 0,
+        "y": 97,
+        "width": 1280,
+        "height": 1070.28125,
+        "top": 97,
+        "right": 1280,
+        "bottom": 1167.28125,
+        "left": 0
+      },
+      "footer": {
+        "x": 0,
+        "y": 1167.28125,
+        "width": 1280,
+        "height": 191,
+        "top": 1167.28125,
+        "right": 1280,
+        "bottom": 1358.28125,
+        "left": 0
+      },
+      "h1": {
+        "x": 352.265625,
+        "y": 206,
+        "width": 575.46875,
+        "height": 98.6875,
+        "top": 206,
+        "right": 927.734375,
+        "bottom": 304.6875,
+        "left": 352.265625
+      }
+    },
+    "actual": {
+      "body": 1358,
+      "width": 1280,
+      "header": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 97,
+        "top": 0,
+        "right": 1280,
+        "bottom": 97,
+        "left": 0
+      },
+      "section": {
+        "x": 0,
+        "y": 97,
+        "width": 1280,
+        "height": 1070.28125,
+        "top": 97,
+        "right": 1280,
+        "bottom": 1167.28125,
+        "left": 0
+      },
+      "footer": {
+        "x": 0,
+        "y": 1167.28125,
+        "width": 1280,
+        "height": 191,
+        "top": 1167.28125,
+        "right": 1280,
+        "bottom": 1358.28125,
+        "left": 0
+      },
+      "h1": {
+        "x": 352.265625,
+        "y": 206,
+        "width": 575.46875,
+        "height": 98.6875,
+        "top": 206,
+        "right": 927.734375,
+        "bottom": 304.6875,
+        "left": 352.265625
+      }
+    },
+    "imageOriginal": {
+      "format": "raw",
+      "width": 1280,
+      "height": 1358,
+      "channels": 4,
+      "depth": "uchar",
+      "premultiplied": false,
+      "hasAlpha": true,
+      "size": 6952960
+    },
+    "imageActual": {
+      "format": "raw",
+      "width": 1280,
+      "height": 1358,
+      "channels": 4,
+      "depth": "uchar",
+      "premultiplied": false,
+      "hasAlpha": true,
+      "size": 6952960
+    },
+    "sameDimensions": true,
+    "changedPixels": 0,
+    "meanChannelDifference": 0
+  },
+  {
+    "width": 390,
+    "reference": {
+      "body": 2441,
+      "width": 390,
+      "header": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 169,
+        "top": 0,
+        "right": 390,
+        "bottom": 169,
+        "left": 0
+      },
+      "section": {
+        "x": 0,
+        "y": 169,
+        "width": 390,
+        "height": 2081.4375,
+        "top": 169,
+        "right": 390,
+        "bottom": 2250.4375,
+        "left": 0
+      },
+      "footer": {
+        "x": 0,
+        "y": 2250.4375,
+        "width": 390,
+        "height": 191,
+        "top": 2250.4375,
+        "right": 390,
+        "bottom": 2441.4375,
+        "left": 0
+      },
+      "h1": {
+        "x": 16,
+        "y": 278,
+        "width": 358,
+        "height": 197.375,
+        "top": 278,
+        "right": 374,
+        "bottom": 475.375,
+        "left": 16
+      }
+    },
+    "actual": {
+      "body": 2441,
+      "width": 390,
+      "header": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 169,
+        "top": 0,
+        "right": 390,
+        "bottom": 169,
+        "left": 0
+      },
+      "section": {
+        "x": 0,
+        "y": 169,
+        "width": 390,
+        "height": 2081.4375,
+        "top": 169,
+        "right": 390,
+        "bottom": 2250.4375,
+        "left": 0
+      },
+      "footer": {
+        "x": 0,
+        "y": 2250.4375,
+        "width": 390,
+        "height": 191,
+        "top": 2250.4375,
+        "right": 390,
+        "bottom": 2441.4375,
+        "left": 0
+      },
+      "h1": {
+        "x": 16,
+        "y": 278,
+        "width": 358,
+        "height": 197.375,
+        "top": 278,
+        "right": 374,
+        "bottom": 475.375,
+        "left": 16
+      }
+    },
+    "imageOriginal": {
+      "format": "raw",
+      "width": 390,
+      "height": 2441,
+      "channels": 4,
+      "depth": "uchar",
+      "premultiplied": false,
+      "hasAlpha": true,
+      "size": 3807960
+    },
+    "imageActual": {
+      "format": "raw",
+      "width": 390,
+      "height": 2441,
+      "channels": 4,
+      "depth": "uchar",
+      "premultiplied": false,
+      "hasAlpha": true,
+      "size": 3807960
+    },
+    "sameDimensions": true,
+    "changedPixels": 0,
+    "meanChannelDifference": 0
+  }
+]

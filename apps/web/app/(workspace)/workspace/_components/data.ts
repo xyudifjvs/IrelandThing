@@ -232,3 +232,13 @@ export function useAllMatters() {
   }, [refresh]);
   return { data, loading, error, refresh };
 }
+
+export function serviceName(m: Matter) {
+  const snapshot = m.details?.serviceSnapshot;
+  return snapshot &&
+    typeof snapshot === "object" &&
+    "name" in snapshot &&
+    typeof snapshot.name === "string"
+    ? snapshot.name
+    : label(m.packageCode);
+}

@@ -63,7 +63,7 @@ async function fixture(twoFactorEnabled = false) {
     title: "Synthetic review access",
     propertyAddress: "Synthetic Review Lane",
     side: "seller",
-    packageCode: "full_listing",
+    packageCode: "complete",
   });
   matters.push(matter.id);
   const document = await prisma.document.create({

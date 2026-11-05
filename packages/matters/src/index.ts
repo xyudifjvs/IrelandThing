@@ -1,4 +1,8 @@
-import { applyInitialWorkflow, recalculateWorkflow } from "./rules";
+import {
+  applyInitialWorkflow,
+  recalculateWorkflow,
+  approvedWorkflowTaskDates,
+} from "./rules";
 export * from "./rules";
 export * from "./checklist-sharing";
 import {
@@ -159,13 +163,25 @@ export async function listMatters(
                     : { in: ["agent", "client"] },
               },
       },
-      deadlines: {
-        where: actor.role === "client" ? { status: "confirmed" } : {},
-      },
+      deadlines: true,
     },
   });
+  const projected = rows.map((matter) => ({
+    ...matter,
+    tasks: approvedWorkflowTaskDates(
+      matter.tasks,
+      matter.deadlines,
+      matter.details,
+    ),
+    deadlines:
+      actor.role === "coordinator"
+        ? matter.deadlines
+        : matter.deadlines.filter(
+            (deadline) => deadline.status === "confirmed",
+          ),
+  }));
   return actor.role === "client"
-    ? rows.map((m) => ({
+    ? projected.map((m) => ({
         id: m.id,
         title: m.title,
         propertyAddress: m.propertyAddress,
@@ -183,11 +199,11 @@ export async function listMatters(
         ),
       }))
     : actor.role === "agent"
-      ? rows.map((matter) => ({
+      ? projected.map((matter) => ({
           ...matter,
           tasks: matter.tasks.map((task, position) => ({ ...task, position })),
         }))
-      : rows;
+      : projected;
 }
 export async function getMatter(actor: Principal, id: string) {
   await requireMatter(actor, id);
@@ -225,6 +241,15 @@ export async function getMatter(actor: Principal, id: string) {
       },
     },
   });
+  matter.tasks = approvedWorkflowTaskDates(
+    matter.tasks,
+    matter.deadlines,
+    matter.details,
+  );
+  if (actor.role !== "coordinator")
+    matter.deadlines = matter.deadlines.filter(
+      (deadline) => deadline.status === "confirmed",
+    );
   if (actor.role === "client")
     return {
       id: matter.id,
@@ -255,6 +280,12 @@ export async function getMatter(actor: Principal, id: string) {
 export async function createMatter(actor: Principal, input: unknown) {
   assertCoordinator(actor);
   const data = matterInput.parse(input);
+  if (data.packageCode === "full_listing")
+    throw new HttpError(
+      409,
+      "SERVICE_COMING_SOON",
+      "Full Listing is coming soon and cannot be created as a new service.",
+    );
   return prisma.$transaction(async (tx) => {
     if (data.agentId) {
       const agent = await tx.user.findFirst({
@@ -902,6 +933,7 @@ export async function applyReviewedFacts(
         "REVISION_CONFLICT",
         "Matter changed since extraction; review the current record",
       );
+    const approvedDeadlineIds = new Set<string>();
     for (const proposed of data.deadlines) {
       const doc = await tx.document.findFirst({
         where: { id: proposed.sourceDocumentId, matterId },
@@ -983,6 +1015,7 @@ export async function applyReviewedFacts(
           },
         });
       }
+      approvedDeadlineIds.add(deadline.id);
       await audit(
         tx,
         actor,
@@ -997,7 +1030,7 @@ export async function applyReviewedFacts(
         },
       );
     }
-    await recalculateWorkflow(tx, actor, matterId);
+    await recalculateWorkflow(tx, actor, matterId, { approvedDeadlineIds });
     await matterChanged(tx, actor, matterId);
     if (data.facts) {
       const previous =

@@ -61,7 +61,11 @@ await prisma.$transaction(async (tx) => {
     },
   });
   for (const item of approvedCatalog)
-    await tx.catalogItem.create({ data: { ...item, approved: true } });
+    await tx.catalogItem.upsert({
+      where: { code: item.code },
+      create: { ...item },
+      update: {},
+    });
   await tx.auditEvent.create({
     data: {
       actorId: id,

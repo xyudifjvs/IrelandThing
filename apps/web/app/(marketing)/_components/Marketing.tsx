@@ -10,59 +10,27 @@ import {
   Gift,
 } from "lucide-react";
 import s from "./marketing.module.css";
-export const pages = [
-  ["/", "About Me"],
-  ["/services", "Services"],
-  ["/process", "Process"],
-  ["/onboarding", "New Agent Onboarding"],
-  ["/faq", "FAQ"],
-  ["/agent-portal", "Agent Portal"],
-  ["/contact", "Contact"],
-];
+export { pages } from "./MarketingHeader";
+import MarketingHeader from "./MarketingHeader";
+import chrome from "./reference-marketing.module.css";
 export function MarketingShell({ children }: { children: ReactNode }) {
   return (
-    <div className={s.site}>
-      <header className={s.header}>
-        <Link className={s.brand} href="/" aria-label="Weatherly home">
-          <span>WEATHERLY</span>
-          <small>TRANSACTION CO.</small>
-        </Link>
-        <nav className={s.nav} aria-label="Main navigation">
-          {pages.map(([href, name]) => (
-            <Link
-              key={href}
-              href={href}
-              className={href === "/agent-portal" ? s.portal : ""}
-            >
-              {name}
-            </Link>
-          ))}
-        </nav>
-      </header>
-      <main id="main-content" tabIndex={-1} className={s.main}>
+    <div className={chrome.site}>
+      <MarketingHeader />
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className={`${s.main} ${chrome.main}`}
+      >
         {children}
       </main>
-      <footer className={s.footer}>
-        <div className={s.footerTop}>
-          <div>
-            <Link className={s.brand} style={{ margin: 0 }} href="/">
-              <span style={{ fontSize: 20 }}>WEATHERLY</span>
-              <small>TRANSACTION CO.</small>
-            </Link>
-            <p>Transaction coordination with Ireland.</p>
-          </div>
-          <div>
-            <Link href="/onboarding">Work with Ireland</Link>
-            <Link href="/agent-portal">Agent portal</Link>
-            <Link href="/contact">
-              Get in touch <ArrowUpRight size={10} />
-            </Link>
-          </div>
+      <footer className={chrome.footer}>
+        <p className={chrome.footerBrand}>WEATHERLY TRANSACTION CO.</p>
+        <div className={chrome.contact}>
+          <a href="mailto:ireland@weatherlytc.com">ireland@weatherlytc.com</a>
+          <a href="tel:+14193665265">419-366-5265</a>
         </div>
-        <div className={s.footerBottom}>
-          <p>© {new Date().getFullYear()} Weatherly Transaction Co.</p>
-          <Link href="/faq">Frequently asked questions</Link>
-        </div>
+        <p className={chrome.copyright}>© 2026 Weatherly Transaction Co.</p>
       </footer>
     </div>
   );
@@ -112,8 +80,8 @@ export function About() {
           </h1>
           <p className={s.lead}>
             Ireland coordinates contracts, deadlines, documents and follow-up
-            for buyer and seller transactions. Choose contract-to-close support
-            or seller pre-listing coordination.
+            for buyer and seller transactions. Choose Contract to Close or
+            Contract to Close + Compliance.
           </p>
           <div className={s.actions}>
             <Link className={s.button} href="/onboarding">
@@ -185,15 +153,15 @@ export function Services() {
         eyebrow="Services and pricing"
         title="Transaction coordination services."
       >
-        Choose from three service levels. Essentials and Complete support buyer
-        or seller transactions. Full Listing is for seller transactions.
+        Contract to Close and Contract to Close + Compliance support buyer or
+        seller transactions. Full Listing is coming soon.
       </PageHead>
       <div className={s.cards}>
         {[
           {
-            name: "Essentials",
+            name: "Contract to Close",
             tag: "Contract to Close",
-            price: 375,
+            price: 425,
             list: [
               "Contract intake and timeline",
               "Deadline tracking and status updates",
@@ -202,11 +170,11 @@ export function Services() {
             code: "essentials",
           },
           {
-            name: "Complete",
+            name: "Contract to Close + Compliance",
             tag: "Coordination and Compliance",
-            price: 475,
+            price: 515,
             list: [
-              "Everything in Essentials",
+              "Everything in Contract to Close",
               "Document review and broker checklist",
               "File submission and post-closing follow-up",
             ],
@@ -215,9 +183,9 @@ export function Services() {
           {
             name: "Full Listing",
             tag: "Pre-listing through closing",
-            price: 625,
+            price: null,
             list: [
-              "Everything in Complete",
+              "Everything in Contract to Close + Compliance",
               "Pre-listing paperwork and disclosures",
               "Listing support through closing",
             ],
@@ -233,21 +201,28 @@ export function Services() {
             )}
             <p className={s.eyebrow}>{p.tag}</p>
             <h2>{p.name}</h2>
-            <p className={s.price}>${p.price}</p>
+            <p className={s.price}>
+              {p.price === null ? "Coming soon" : `$${p.price}`}
+            </p>
             <small>
               {p.code === "full_listing"
-                ? "Seller side only"
-                : "Buyer or seller side"}{" "}
-              · USD per transaction
+                ? "Not available for new transactions"
+                : "Buyer or seller side · USD per transaction"}
             </small>
             <ul>
               {p.list.map((t) => (
                 <li key={t}>{t}</li>
               ))}
             </ul>
-            <Link className={s.secondary} href="/onboarding">
-              Ask about this service <ArrowUpRight size={12} />
-            </Link>
+            {p.code === "full_listing" ? (
+              <button className={s.secondary} disabled>
+                Coming soon
+              </button>
+            ) : (
+              <Link className={s.secondary} href="/onboarding">
+                Ask about this service <ArrowUpRight size={12} />
+              </Link>
+            )}
           </article>
         ))}
       </div>

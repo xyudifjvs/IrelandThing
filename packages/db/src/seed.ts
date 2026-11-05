@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { prisma } from "./index";
+import { approvedCatalog } from "../../billing/src/contracts";
 import { hashPassword } from "better-auth/crypto";
 if (process.env.APP_ENV !== "local" || process.env.NODE_ENV === "production")
   throw new Error(
@@ -44,25 +45,11 @@ for (const user of users) {
     update: {},
   });
 }
-for (const item of [
-  {
-    code: "essentials",
-    name: "Essentials",
-    priceCents: 37500,
-    sellerOnly: false,
-  },
-  { code: "complete", name: "Complete", priceCents: 47500, sellerOnly: false },
-  {
-    code: "full_listing",
-    name: "Full Listing",
-    priceCents: 62500,
-    sellerOnly: true,
-  },
-])
+for (const item of approvedCatalog)
   await prisma.catalogItem.upsert({
     where: { code: item.code },
-    create: { ...item, approved: true },
-    update: { ...item, approved: true },
+    create: { ...item },
+    update: { ...item },
   });
 const date = (offset: number) =>
   new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);

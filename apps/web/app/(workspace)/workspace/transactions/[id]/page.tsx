@@ -1,4 +1,5 @@
 "use client";
+import SavedIntakeDetails from "../../../../_components/SavedIntakeDetails";
 import { use, useState } from "react";
 import Link from "next/link";
 import {
@@ -18,6 +19,7 @@ import {
   address,
   date,
   label,
+  serviceName,
   progress,
   type Matter,
   type Session,
@@ -53,6 +55,7 @@ function TransactionDetail({ id }: { id: string }) {
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
   const [task, setTask] = useState("");
+  const [clientRequest, setClientRequest] = useState(false);
   const [taskVisibility, setTaskVisibility] = useState("agent");
   const [taskDueDate, setTaskDueDate] = useState("");
   const [person, setPerson] = useState({ userId: "", role: "client" });
@@ -147,7 +150,7 @@ function TransactionDetail({ id }: { id: string }) {
             </select>
           </label>
           <span className={s.pill}>{label(m.side)} side</span>
-          <span className={s.pill}>{label(m.packageCode)}</span>
+          <span className={s.pill}>{serviceName(m)}</span>
           {m.details?.cash === true && (
             <span className={s.pill}>Cash purchase</span>
           )}
@@ -164,6 +167,7 @@ function TransactionDetail({ id }: { id: string }) {
       )}
       {notice && <div className={s.notice}>{notice}</div>}
       <LiveStatus query={q} />
+      <SavedIntakeDetails value={m.details?.referenceIntake} />
       <div className={s.tabs} role="tablist" aria-label="Transaction sections">
         {[
           "Checklist",
@@ -248,12 +252,13 @@ function TransactionDetail({ id }: { id: string }) {
                       void act("task", async () => {
                         await mutate(`/api/v1/matters/${id}/tasks`, {
                           title: task,
-                          visibility: taskVisibility,
+                          visibility: clientRequest ? "client" : taskVisibility,
                           dueDate: taskDueDate || undefined,
-                          kind: "custom",
+                          kind: clientRequest ? "client_request" : "custom",
                         });
                         setTask("");
                         setTaskDueDate("");
+                        setClientRequest(false);
                       });
                     }}
                   >
@@ -274,6 +279,7 @@ function TransactionDetail({ id }: { id: string }) {
                         Who can see this step
                         <select
                           className={s.select}
+                          disabled={clientRequest}
                           aria-label="New step visibility"
                           value={taskVisibility}
                           onChange={(e) => setTaskVisibility(e.target.value)}
@@ -294,6 +300,14 @@ function TransactionDetail({ id }: { id: string }) {
                         />
                       </label>
                     </div>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={clientRequest}
+                        onChange={(e) => setClientRequest(e.target.checked)}
+                      />{" "}
+                      Ask the client to do this (shared on client view)
+                    </label>
                     <button
                       className={s.buttonSmall}
                       disabled={!!busy || !task.trim()}

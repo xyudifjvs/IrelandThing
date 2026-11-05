@@ -17,7 +17,7 @@ export default function Page() {
           ],
           [
             "Which service is right for my file?",
-            "Essentials covers contract-to-close coordination. Complete adds broker file and compliance support. Full Listing includes Complete and adds seller pre-listing support. Ask Ireland if you’re unsure which service your file needs.",
+            "Contract to Close is $425 and covers contract-to-close coordination. Contract to Close + Compliance is $515 and adds broker file and compliance support. Both support buyer and seller transactions. Full Listing is coming soon. Ask Ireland if you’re unsure which service your file needs.",
           ],
           [
             "Can you contact my client directly?",
@@ -25,7 +25,7 @@ export default function Page() {
           ],
           [
             "What do I need to submit a transaction?",
-            "Submit the property and client details and an executed contract. Complete and Full Listing also require brokerage information. When Dotloop is connected, those services can reference a loop; otherwise, upload the contract. Full Listing can begin before a contract is executed.",
+            "Submit the property and client details and an executed contract. Contract to Close + Compliance also includes brokerage information. When Dotloop is connected, that service can reference a loop; otherwise, upload the contract. Full Listing is coming soon and is not available for new transactions.",
           ],
           [
             "When is payment due?",

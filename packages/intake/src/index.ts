@@ -8,6 +8,12 @@ import {
   type Principal,
 } from "@weatherly/platform";
 import { audit, revision, applyInitialWorkflow } from "@weatherly/matters";
+import {
+  referenceIntake,
+  referenceDocumentIds,
+  referenceFollowups,
+} from "./reference";
+export { referenceIntake } from "./reference";
 const optionalEmail = z.union([z.email(), z.literal("")]).optional();
 const contact = z
   .object({
@@ -32,7 +38,7 @@ export const intakePayload = z
     propertyAddress: z.string().trim().max(500).default(""),
     purchaseType: z.enum(["cash", "financed"]),
     contractSource: z.enum(["upload", "dotloop", "not_yet_executed"]),
-    documentIds: z.array(z.string()).max(30).default([]),
+    documentIds: z.array(z.string()).max(120).default([]),
     dotloopLoopId: z.string().max(200).optional(),
     clients: z.array(contact).max(12).default([]),
     relationship: z.string().max(200).optional(),
@@ -79,11 +85,42 @@ export const intakePayload = z
       })
       .strict(),
     linkedMatterId: z.string().optional(),
+    referenceIntake: referenceIntake.optional(),
   })
   .strict()
   .superRefine((v, c) => {
     const err = (path: (string | number)[], message: string) =>
       c.addIssue({ code: "custom", path, message });
+    if (!v.referenceIntake && v.documentIds.length > 30)
+      err(["documentIds"], "Attach at most 30 contract documents");
+    if (
+      v.referenceIntake &&
+      (v.referenceIntake.variant.startsWith("seller") ? "seller" : "buyer") !==
+        v.side
+    )
+      err(
+        ["referenceIntake", "variant"],
+        "Intake version must match represented side",
+      );
+    if (
+      v.referenceIntake &&
+      new Set([...v.documentIds, ...referenceDocumentIds(v.referenceIntake)])
+        .size > 120
+    )
+      err(
+        ["documentIds"],
+        "Attach at most 120 intake documents across all groups",
+      );
+    if (v.referenceIntake && v.packageCode !== "full_listing") {
+      const expectedPackage = v.referenceIntake.variant.endsWith("-compliance")
+        ? "complete"
+        : "essentials";
+      if (v.packageCode !== expectedPackage)
+        err(
+          ["packageCode"],
+          "Service package must match the selected intake service",
+        );
+    }
     const checklistIds = new Set([
       ...(v.broker?.checklistDocumentIds || []),
       ...(v.broker?.checklistDocumentId ? [v.broker.checklistDocumentId] : []),
@@ -166,6 +203,30 @@ export const intakePayload = z
       err(["gift"], "Remove gift details when no gift is requested");
   });
 export type IntakePayload = z.infer<typeof intakePayload>;
+/** Drafts remain partial; these confirmed minimums apply only to a new submission. */
+export function assertSubmissionReady(data: IntakePayload) {
+  if (data.packageCode === "full_listing")
+    throw new HttpError(
+      409,
+      "SERVICE_COMING_SOON",
+      "Full Listing is coming soon and is not available for new submissions.",
+    );
+  const reference = data.referenceIntake;
+  const hasContract = reference
+    ? Boolean(reference.uploads.contractDocs?.length)
+    : data.contractSource === "upload" && Boolean(data.documentIds.length);
+  const hasLocation = reference
+    ? typeof reference.fields.contractLocation === "string" &&
+      Boolean(reference.fields.contractLocation.trim())
+    : data.contractSource === "dotloop" && Boolean(data.dotloopLoopId?.trim());
+  if (!hasContract && !hasLocation)
+    throw new HttpError(
+      422,
+      "CONTRACT_REQUIRED",
+      "Upload the executed contract or tell Ireland exactly where she can locate it.",
+    );
+}
+
 async function draftFor(
   actor: Principal,
   id: string,
@@ -261,6 +322,26 @@ export async function submitIntake(
         };
       }
       const data = intakePayload.parse(draft.payload);
+      assertSubmissionReady(data);
+      const catalog = await tx.catalogItem.findUnique({
+        where: { code: data.packageCode },
+      });
+      if (!catalog?.approved)
+        throw new HttpError(
+          409,
+          "CATALOG_UNAPPROVED",
+          "The selected service is not available for a new submission.",
+        );
+      const snapshot = {
+        ...data,
+        serviceSnapshot: {
+          code: catalog.code,
+          name: catalog.name,
+          revision: catalog.revision,
+          priceCents: catalog.priceCents,
+          currency: catalog.currency,
+        },
+      };
       if (data.linkedMatterId) {
         const linked = await tx.matter.findFirst({
           where: {
@@ -294,6 +375,7 @@ export async function submitIntake(
       const allDocumentIds = [
         ...new Set([
           ...data.documentIds,
+          ...referenceDocumentIds(data.referenceIntake),
           ...(data.broker?.checklistDocumentId
             ? [data.broker.checklistDocumentId]
             : []),
@@ -302,12 +384,29 @@ export async function submitIntake(
       ];
       const docs = await tx.document.findMany({
         where: { id: { in: allDocumentIds }, createdById: draft.userId },
+        include: { versions: { orderBy: { version: "desc" }, take: 1 } },
       });
       if (docs.length !== allDocumentIds.length)
         throw new HttpError(
           422,
           "INVALID_DOCUMENT",
           "Uploaded files must belong to this submitting agent",
+        );
+      if (
+        docs.some((doc) => {
+          const latest = doc.versions[0];
+          return (
+            !latest ||
+            latest.size <= 0 ||
+            !latest.objectKey ||
+            !/^[a-f0-9]{64}$/i.test(latest.checksum)
+          );
+        })
+      )
+        throw new HttpError(
+          422,
+          "DOCUMENT_NOT_AVAILABLE",
+          "Complete every selected upload before submitting",
         );
       const matter = await tx.matter.create({
         data: {
@@ -318,7 +417,7 @@ export async function submitIntake(
           stage:
             data.packageCode === "full_listing" ? "listing" : "under_contract",
           agentId: draft.userId,
-          details: data as Prisma.InputJsonValue,
+          details: snapshot as Prisma.InputJsonValue,
         },
       });
       for (const doc of docs) {
@@ -358,9 +457,17 @@ export async function submitIntake(
         data.clients.some((c) => !c.name || !c.email || !c.phone)
       )
         add("Complete client contact information");
+      const contractIds = data.referenceIntake
+        ? data.referenceIntake.uploads.contractDocs || []
+        : data.documentIds;
+      const dotloopRequested =
+        data.referenceIntake?.fields.docsDotloop === true ||
+        data.referenceIntake?.fields.docsDotloop === "on";
       add(
         data.contractSource === "not_yet_executed" ||
-          (data.contractSource === "upload" && !data.documentIds.length)
+          (data.contractSource === "upload" &&
+            !contractIds.length &&
+            !dotloopRequested)
           ? "Obtain executed contract"
           : data.contractSource === "dotloop"
             ? data.dotloopLoopId
@@ -395,6 +502,14 @@ export async function submitIntake(
         add("Review broker compliance file", "compliance");
       if (data.gift.requested)
         add("Confirm gift catalog and payment before ordering", "gift");
+      if (data.referenceIntake)
+        for (const followup of referenceFollowups(data.referenceIntake))
+          tasks.push({
+            title: followup.title,
+            kind: followup.kind,
+            visibility: "agent",
+            details: { intakeDraftId: id, referenceField: followup.field },
+          });
       await tx.task.createMany({
         data: tasks.map((task) => ({ ...task, matterId: matter.id })),
       });
@@ -413,7 +528,7 @@ export async function submitIntake(
           idempotencyKey,
           userId: draft.userId,
           matterId: matter.id,
-          snapshot: data as Prisma.InputJsonValue,
+          snapshot: snapshot as Prisma.InputJsonValue,
         },
       });
       await tx.intakeDraft.update({

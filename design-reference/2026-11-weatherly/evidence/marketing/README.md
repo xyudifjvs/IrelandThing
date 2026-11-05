@@ -1,0 +1,15 @@
+# Process design comparison
+
+Compared the safely extracted Process canvas with the implementation in Chrome at 1280×1200 and 390×844 viewports. Both full-page screenshots have **zero differing pixels**, including header, content, footer and responsive wrapping. `comparison.json` records image dimensions and DOM measurements. The side-by-side images show the supplied reference on the left and implemented route on the right.
+
+The source canvas is identified as 1280×1200, but its naturally flowing rendered page is 1358 pixels tall at a 1280-pixel viewport. No content is clipped to force a 1200-pixel page. At 390 pixels wide, both pages are 2441 pixels tall with no horizontal overflow.
+
+Reference preparation decoded only the JSON template, removed every script, and replaced the three embedded Latin font UUIDs with their byte-identical locally extracted WOFF2 files. No export runtime was executed or copied into the application. The original single-page document remains preserved under `originals/` with SHA-256 provenance. The production body uses its static section markup. Header/footer use equivalent accessible React markup and functional internal navigation, mail and phone links.
+
+Reproduce against a running local web build with `WEATHERLY_COMPARE_ORIGIN=http://127.0.0.1:3000 node tools/design/compare-process.mjs`. The script safely strips the original template at runtime and serves only that template plus its three fonts on an ephemeral loopback port. Raw screenshots and comparison output are saved under ignored `.local/weatherly-redesign/marketing/`. The script used Chrome, device scale factor 1, awaited `document.fonts.ready`, removed the development-only Next indicator, and compared full-page raw RGBA bytes using Sharp. The committed images and JSON were captured on November 4, 2026. Re-run against the final production build before claiming release-wide parity.
+
+Only the **Process** marketing replacement was supplied. About Me, Services, New Agent Onboarding, Agent Portal, FAQ, Contact and Testimonials retain their existing body content. All marketing routes share the supplied header/footer treatment. The six navigation labels match the new reference; `FAQ & CONTACT` targets the existing Contact page, while `/faq` remains available. A combined FAQ/Contact body or replacement designs for the other pages still require source references or an explicit business decision.
+
+The Process client-view promise is presentation only. This change adds no public matter route, changes no checklist token permissions, and does not expose private transaction records. Existing revocable/expiring read-only checklist links remain the available no-login sharing mechanism.
+
+All eight retained marketing routes returned HTTP 200 at both 1280- and 390-pixel widths. Each had the supplied six navigation labels and contact footer, and none exceeded its viewport width. TypeScript and `git diff --check` passed after the marketing changes. This does not establish visual parity for pages without replacement references.

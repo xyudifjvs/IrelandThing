@@ -11,6 +11,10 @@ Weatherly Transaction Co. — the website and transaction-coordination system fo
 
 The original HTML mockups and supplied JPEG assets are preserved in the repository root. A working local application now implements the website, onboarding, intake, coordinator workspace, agent/client portals, private versioned documents, reviewed deadlines, email templates, billing workflows, and a saved-record assistant/API/MCP layer. Live providers remain disabled until their account and privacy requirements are verified.
 
+## Supplied redesign
+
+Ireland’s November 4 Process page and four intake forms are implemented in the redesign candidate. Originals, hashes and visual evidence are in [design references](design-reference/2026-11-weatherly/README.md); [release notes](docs/release/weatherly-redesign.md) record verification, unresolved business inputs and deployment status.
+
 ## Run locally
 
 Requires Node 22 and PostgreSQL 17. `infra/compose.local.yml` can start a new disposable PostgreSQL instance on loopback port 55442. The existing preview uses its separate container on 55432; do not replace its volume.
@@ -26,7 +30,7 @@ Tests require a separate database whose name ends in `_test`. Copy `.env.test.ex
 
 Production uses **PostgreSQL on Railway**, a private Railway document bucket, separate API/worker processes, and the web application. A staging environment is now hosted at [Weatherly staging](https://web-staging-be4e.up.railway.app). It builds from the GitHub repository with production authentication settings and disabled live integrations. See the [staging deployment record](docs/release/railway-staging.md), [deployment instructions](docs/runbooks/deployment.md) and [environment mapping](docs/runbooks/environment.md). Hosting does not complete the remaining production acceptance work.
 
-Ireland must create her **own Stripe account**. The adapter requires her configured account ID and checks the credential's actual Stripe account before creating a checkout/refund. Service prices are approved at **$375 / $475 / $625 USD**. Service payment requests are explicit coordinator actions; gifts require an individually approved description, total and fulfillment/refund policy before checkout, then verified payment before ordering. No gift catalog or automatic fee timing has been invented.
+Ireland must create her **own Stripe account**. The adapter requires her configured account ID and checks the credential's actual Stripe account before creating a checkout/refund. New service prices are **Contract to Close $425 / Contract to Close + Compliance $515 USD**, for buyers or sellers. Full Listing is coming soon and cannot be newly ordered; historical snapshots and orders are preserved. Service payment requests are explicit coordinator actions; gifts require an individually approved description, total and fulfillment/refund policy before checkout, then verified payment before ordering. No gift catalog or automatic fee timing has been invented.
 
 The first owner is created with the one-time `npm run db:bootstrap` command. Supply the approved `BOOTSTRAP_OWNER_EMAIL`, `BOOTSTRAP_OWNER_NAME` (defaults to Ireland), a strong `BOOTSTRAP_OWNER_PASSWORD`, and `BOOTSTRAP_OWNER_CONFIRMED` matching the exact owner email through private process environment inputs. It refuses a placeholder email or an existing coordinator, creates no sample matters, and allows email/password sign-in. Authenticator enrollment is optional. Remove any persisted bootstrap password afterward. Never run the synthetic seed in production.
 

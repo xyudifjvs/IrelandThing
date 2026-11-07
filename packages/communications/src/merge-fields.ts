@@ -1,6 +1,6 @@
 import { prisma, Prisma } from "@weatherly/db";
 import { type Principal } from "@weatherly/platform";
-import { requireMatter, approvedWorkflowTaskDates } from "@weatherly/matters";
+import { requireMatter, approvedWorkflowTaskDates, canonicalDeadlineLabel } from "@weatherly/matters";
 import { asRecord } from "./policy";
 import { contactMergeFields } from "./contact-fields";
 export interface MergeField {
@@ -123,7 +123,7 @@ export async function mergeFields(
     add(
       key,
       key,
-      deadlines.filter((d) => labels.includes(normalize(d.label))),
+      deadlines.filter((d) => labels.includes(normalize(d.label)) || labels.some(value => canonicalDeadlineLabel(value) === canonicalDeadlineLabel(d.label))),
     );
   for (const d of deadlines)
     add(

@@ -10,7 +10,7 @@ type TaskSource = {
   visibility: string;
   details: Prisma.JsonValue;
 };
-type DeadlineSource = { label: string; details: Prisma.JsonValue };
+type DeadlineSource = { id?: string; label: string; details: Prisma.JsonValue };
 const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -73,10 +73,12 @@ function deadlineAudience(
       .filter(Boolean),
   );
   const matches = tasks.filter((task) =>
-    directKey
+    (deadline.id && Array.isArray(record(task.details).confirmedDeadlineIds) &&
+      (record(task.details).confirmedDeadlineIds as unknown[]).includes(deadline.id)) ||
+    (directKey
       ? normalized(record(task.details).workflowKey) === directKey
       : keys.has(normalized(record(task.details).workflowKey)) ||
-        normalized(task.title) === normalized(deadline.label),
+        normalized(task.title) === normalized(deadline.label)),
   );
   const linkedToTask = !!directKey || keys.size > 0 || matches.length > 0;
   // Missing or duplicate associations are not permission to publish a private date.
@@ -116,7 +118,7 @@ export function deadlineProjection<
   const hiddenTaskIds = new Set(
     states
       .filter(({ state }) => !audienceAllows(state.visibility, audience))
-      .flatMap(({ state }) => state.taskIds),
+      .flatMap(({ deadline, state }) => [...state.taskIds, ...tasks.filter(task => deadline.id && Array.isArray(record(task.details).confirmedDeadlineIds) && (record(task.details).confirmedDeadlineIds as unknown[]).includes(deadline.id)).map(task => task.id)]),
   );
   return {
     deadlines:

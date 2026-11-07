@@ -48,7 +48,7 @@ export function createAIRouter() {
   router.get(
     "/reviews",
     asyncHandler(async (req, res) =>
-      res.json(await listReviews(principal(req))),
+      res.json(await listReviews(principal(req), typeof req.query.matterId === "string" ? req.query.matterId : undefined)),
     ),
   );
   router.post(

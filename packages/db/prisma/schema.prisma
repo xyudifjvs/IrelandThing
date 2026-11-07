@@ -276,7 +276,11 @@ model IntakeSubmission {
   userId         String
   matterId       String
   snapshot       Json
+  processedAt    DateTime?
+  processedById  String?
   createdAt      DateTime @default(now())
+
+  @@index([processedAt, createdAt, id])
 }
 
 model Inquiry {

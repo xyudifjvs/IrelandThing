@@ -6,6 +6,7 @@ import {
   confirmFile,
   getFileReview,
   updateDeadline,
+  updateTask,
   createChecklistShare,
   getPublicChecklist,
   getMatter,
@@ -140,6 +141,13 @@ describe("Ireland confirms the initial file before activating its timeline", () 
     expect((await getMatter(actors.agent, matter.id)).deadlines[0].date).toBe(
       "2026-11-20",
     );
+    // The source now belongs to the canonical agent-only closing milestone.
+    expect((await getPublicChecklist(token)).deadlines).toEqual([]);
+    const closing = confirmed.tasks.find(task => task.title === "Closing date")!;
+    await updateTask(actors.coordinator, matter.id, closing.id, {
+      expectedRevision: closing.revision,
+      visibility: "client",
+    });
     expect((await getPublicChecklist(token)).deadlines[0].date).toBe(
       "2026-11-20",
     );

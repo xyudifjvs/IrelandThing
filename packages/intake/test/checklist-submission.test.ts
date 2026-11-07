@@ -13,18 +13,20 @@ import {
 } from "@weatherly/documents";
 import { getMatter } from "@weatherly/matters";
 import { queryStoredRecords } from "../../assistant/src/records";
-import { saveIntakeDraft, submitIntake } from "../src/index";
+import { saveIntakeDraft, submitIntake, listIntakeSubmissions, createTransactionFromIntake, getIntakeSubmission } from "../src/index";
 import { completedReference } from "./reference-fixture";
+import { createCommunicationsService, createCommunicationJobHandlers } from "@weatherly/communications";
+import { notifyIntakeReceived } from "../src/notifications";
 
 const runId = randomUUID();
-const actors = ["agent", "agent"].map((role, index): Principal => ({
+const actors = ["agent", "agent", "coordinator"].map((role, index): Principal => ({
   id: `intake-batch-${runId}-${index}`,
   name: `Synthetic intake ${index}`,
   email: `intake-batch-${runId}-${index}@example.test`,
   role: role as Principal["role"],
   sessionId: `intake-batch-${runId}`,
 }));
-const [agent, outsider] = actors;
+const [agent, outsider, coordinator] = actors;
 const draftIds: string[] = [];
 const matterIds: string[] = [];
 let directory = "";
@@ -134,13 +136,17 @@ afterAll(async () => {
   await prisma.outboxJob.deleteMany({
     where: {
       idempotencyKey: {
-        in: receipts.map((receipt) => `intake-submitted:${receipt.id}`),
+        in: receipts.flatMap((receipt) => [`intake-submitted:${receipt.id}`, `intake-received:${receipt.id}`]),
       },
     },
   });
   await prisma.intakeSubmission.deleteMany({
     where: { draftId: { in: draftIds } },
   });
+  await prisma.outboxJob.deleteMany({ where: {
+    topic: "system.email",
+    payload: { path: ["to"], equals: coordinator.email },
+  } });
   await prisma.intakeDraft.deleteMany({ where: { id: { in: draftIds } } });
   await prisma.document.deleteMany({
     where: { createdById: { in: actors.map((actor) => actor.id) } },
@@ -157,6 +163,83 @@ afterAll(async () => {
 });
 
 describe("durable intake document batch submissions", () => {
+  it("queues one intake notification across retries and delivers through the system-email handler", async () => {
+    const contract = await upload(agent, "notification-contract.pdf", "contract");
+    const saved = await draft(payload([contract.id], {}));
+    const submitted = await submitIntake(agent, saved.id, { expectedRevision: 1, idempotencyKey: `notify-${saved.id}` });
+    matterIds.push(submitted.matter.id);
+    const previous = process.env.INTAKE_NOTIFICATION_EMAIL;
+    process.env.INTAKE_NOTIFICATION_EMAIL = coordinator.email;
+    let deliveries = 0;
+    const service = createCommunicationsService({
+      config: { enabled: false, outboundEnabled: true, resendApiKey: "synthetic-key", systemFrom: "review@example.test" },
+      fetch: async () => { deliveries++; return Response.json({ id: "synthetic-intake-notification" }); },
+    });
+    try {
+      const event = { submissionId: submitted.submission.id };
+      const disabled = createCommunicationsService({ config: { enabled: false, outboundEnabled: false } });
+      expect(await notifyIntakeReceived(event, disabled)).toEqual({ skipped: "email_not_configured" });
+      await notifyIntakeReceived(event, service);
+      await notifyIntakeReceived(event, service);
+      const jobs = await prisma.outboxJob.findMany({ where: { topic: "system.email", payload: { path: ["to"], equals: coordinator.email } } });
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0].payload).toMatchObject({ purpose: "intake_received" });
+      const handlers = createCommunicationJobHandlers(service);
+      await handlers["system.email"](jobs[0].payload);
+      const completed = await prisma.outboxJob.findUniqueOrThrow({ where: { id: jobs[0].id } });
+      await handlers["system.email"](completed.payload);
+      expect(deliveries).toBe(1);
+      await createTransactionFromIntake(coordinator, submitted.submission.id);
+      expect(await notifyIntakeReceived(event, service)).toEqual({ skipped: "already_processed" });
+    } finally {
+      if (previous === undefined) delete process.env.INTAKE_NOTIFICATION_EMAIL;
+      else process.env.INTAKE_NOTIFICATION_EMAIL = previous;
+    }
+  });
+
+  it("keeps private transaction document metadata out of the agent intake receipt", async () => {
+    const contract = await upload(agent, "receipt-contract.pdf", "contract");
+    const saved = await draft(payload([contract.id], {}));
+    const submitted = await submitIntake(agent, saved.id, { expectedRevision: 1, idempotencyKey: `private-${saved.id}` });
+    matterIds.push(submitted.matter.id);
+    const privateDocument = await prisma.document.create({ data: {
+      matterId: submitted.matter.id,
+      name: "Private coordinator analysis.pdf",
+      category: "other",
+      mimeType: "application/pdf",
+      visibility: "coordinator",
+      createdById: coordinator.id,
+    } });
+    expect((await getIntakeSubmission(coordinator, submitted.submission.id)).documents.map(d => d.id)).toContain(privateDocument.id);
+    const visible = (await getIntakeSubmission(agent, submitted.submission.id)).documents.map(d => d.id);
+    expect(visible).toContain(contract.id);
+    expect(visible).not.toContain(privateDocument.id);
+  });
+
+  it("keeps new intakes first and converts exactly once with the original contract and contacts", async () => {
+    const contract = await upload(agent, "queue-contract.pdf", "contract");
+    const first = await draft(payload([contract.id], {}));
+    const one = await submitIntake(agent, first.id, {expectedRevision:1,idempotencyKey:`queue-${first.id}`});
+    matterIds.push(one.matter.id);
+    const secondPayload={...payload([], {}),contractSource:"dotloop",dotloopLoopId:"queue-loop"};
+    const second = await draft(secondPayload);
+    const two = await submitIntake(agent, second.id, {expectedRevision:1,idempotencyKey:`queue-${second.id}`});
+    matterIds.push(two.matter.id);
+    expect(one.submission.processedAt).toBeNull();
+    await expect(createTransactionFromIntake(agent,one.submission.id)).rejects.toMatchObject({status:403});
+    await expect(getIntakeSubmission(outsider,one.submission.id)).rejects.toMatchObject({status:404});
+    await expect(saveIntakeDraft(coordinator,first.id,{expectedRevision:1,payload:payload([], {})})).rejects.toMatchObject({status:403});
+    const results=await Promise.all([createTransactionFromIntake(coordinator,one.submission.id),createTransactionFromIntake(coordinator,one.submission.id)]);
+    expect(results.map(r=>r.alreadyCreated).sort()).toEqual([false,true]);
+    const detail=await getIntakeSubmission(coordinator,one.submission.id);
+    expect(detail.documents.map(d=>d.id)).toContain(contract.id);
+    expect(detail.documents.find(d=>d.id===contract.id)?.versions).toHaveLength(1);
+    expect(results[0].matter.details).toMatchObject({contacts:expect.arrayContaining([expect.objectContaining({role:"my_agent",email:agent.email}),expect.objectContaining({role:"title_rep",name:"Synthetic Title"})])});
+    const queue=await listIntakeSubmissions(coordinator);
+    expect(queue.items.findIndex(i=>i.id===two.submission.id)).toBeLessThan(queue.items.findIndex(i=>i.id===one.submission.id));
+    expect(await prisma.aIProposal.count({where:{matterId:one.matter.id,kind:"contract"}})).toBe(1);
+  });
+
   it("saves blank drafts and requires a contract location before creating a transaction", async () => {
     const savedPayload = {
       ...payload([], {}),
@@ -1090,8 +1173,7 @@ describe("durable intake document batch submissions", () => {
           idempotencyKey: `complete-${created.id}`,
         }),
       ).rejects.toMatchObject({
-        code:
-          compliance && !contract ? "CONTRACT_REQUIRED" : "INTAKE_INCOMPLETE",
+        code: "INTAKE_INCOMPLETE",
         status: 422,
       });
       expect(

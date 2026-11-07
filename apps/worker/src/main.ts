@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { notifyIntakeReceived } from "@weatherly/intake";
 import { createServer } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
@@ -31,6 +32,7 @@ let lastCleanup = 0;
 let lastReminderCheck = 0;
 const privateReminders = createPrivateReminderService();
 const handlers: JobRegistry = {
+  "intake.received": notifyIntakeReceived,
   "billing.expire_checkout": (payload) => expireTerminatedServiceCheckout(payload),
   "reminder.digest": (payload) => privateReminders.handleDigest(payload),
   "dotloop.sync": async (payload) => {

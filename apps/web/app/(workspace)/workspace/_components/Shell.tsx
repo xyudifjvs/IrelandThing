@@ -22,6 +22,7 @@ import { api, useData, type Session } from "./data";
 import s from "./workspace.module.css";
 const nav = [
   { href: "/workspace", label: "Overview", icon: LayoutDashboard },
+  { href: "/workspace/intakes", label: "Submitted intakes", icon: Inbox },
   { href: "/workspace/transactions", label: "Transactions", icon: FolderOpen },
   {
     href: "/workspace/contacts",
@@ -99,9 +100,9 @@ export default function Shell({ children }: { children: ReactNode }) {
               </Link>
             ))}
           <div className={s.navLabel}>Quick actions</div>
-          <Link href="/workspace/new" title="New transaction">
+          <Link href="/workspace/new" title="Start a transaction manually">
             <Plus />
-            New transaction
+            Start manually
           </Link>
         </nav>
         <div className={s.bottom}>

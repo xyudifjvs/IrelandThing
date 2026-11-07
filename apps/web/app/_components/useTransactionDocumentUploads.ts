@@ -33,11 +33,11 @@ export function useTransactionDocumentUploads(
   active.current = { ...context, key };
   const [boundKey, setBoundKey] = useState(key);
   const [visibility, setVisibility] = useState("agent");
-  const refreshRef = useRef<(() => Promise<void>) | null>(null);
+  const refreshRef = useRef(new Set<() => Promise<void>>());
   const registerRefresh = useCallback((refresh: () => Promise<void>) => {
-    refreshRef.current = refresh;
+    refreshRef.current.add(refresh);
     return () => {
-      if (refreshRef.current === refresh) refreshRef.current = null;
+      refreshRef.current.delete(refresh);
     };
   }, []);
 
@@ -69,7 +69,7 @@ export function useTransactionDocumentUploads(
       return { id: saved.id };
     },
     onBatchComplete: async () => {
-      await refreshRef.current?.();
+      await Promise.all([...refreshRef.current].map(refresh => refresh()));
     },
   });
   const matchesContext = boundKey === key;

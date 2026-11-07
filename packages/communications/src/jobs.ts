@@ -1004,7 +1004,7 @@ export function createCommunicationJobHandlers(
         to: z.email(),
         subject: z.string().max(998),
         text: z.string().max(20000),
-        purpose: z.literal("password_reset"),
+        purpose: z.enum(["password_reset", "intake_received"]),
         expiresAt: z.iso.datetime().optional(),
       })
       .parse(payload);

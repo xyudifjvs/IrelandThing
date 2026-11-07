@@ -180,7 +180,12 @@ try {
     notes: "Synthetic acceptance record only.",
     gift: { requested: false },
   };
-  const draft = await request("/api/v1/intake/drafts", { payload }, owner);
+  assert.equal(
+    (await request("/api/v1/intake/drafts", { payload }, owner)).res.status,
+    403,
+    "Coordinators review submitted intakes instead of using the agent form.",
+  );
+  const draft = await request("/api/v1/intake/drafts", { payload }, agent);
   assert.equal(
     draft.res.status,
     201,
@@ -190,16 +195,35 @@ try {
   const submitted = await request(
     `/api/v1/intake/drafts/${draft.data.id}/submit`,
     { expectedRevision: draft.data.revision, idempotencyKey: key },
-    owner,
+    agent,
   );
   assert.equal(submitted.res.status, 200, JSON.stringify(submitted.data));
   const matterId = submitted.data.matter.id;
   const again = await request(
     `/api/v1/intake/drafts/${draft.data.id}/submit`,
     { expectedRevision: draft.data.revision, idempotencyKey: key },
-    owner,
+    agent,
   );
   assert.equal(again.data.matter.id, matterId);
+  const submissionId = submitted.data.submission.id;
+  assert.equal(
+    (await request(`/api/v1/intakes/submissions/${submissionId}/create-transaction`, {}, agent)).res.status,
+    403,
+  );
+  assert.equal(
+    (await request("/api/v1/intakes/submissions", undefined, client)).res.status,
+    403,
+  );
+  const queue = await request("/api/v1/intakes/submissions", undefined, owner);
+  assert.equal(queue.res.status, 200);
+  assert.ok(queue.data.items.some((item: { id: string; processedAt: string | null }) => item.id === submissionId && !item.processedAt));
+  const portfolio = await request("/api/v1/matters", undefined, owner);
+  assert.ok(!portfolio.data.some((item: { id: string }) => item.id === matterId));
+  const created = await request(`/api/v1/intakes/submissions/${submissionId}/create-transaction`, {}, owner);
+  assert.equal(created.res.status, 200, JSON.stringify(created.data));
+  assert.equal(created.data.matter.id, matterId);
+  assert.equal(created.data.alreadyCreated, false);
+  assert.equal((await request(`/api/v1/intakes/submissions/${submissionId}/create-transaction`, {}, owner)).data.alreadyCreated, true);
   let matter = (await request(`/api/v1/matters/${matterId}`, undefined, owner))
     .data;
   assert.equal(matter.stage, "pending_review");
@@ -223,12 +247,12 @@ try {
     "Generated tasks must use canonical workflow states.",
   );
   checks.push(
-    "contract-location submission, canonical follow-ups and duplicate-submit idempotency",
+    "agent submission, coordinator-only transaction handoff, canonical follow-ups and replay idempotency",
   );
   const invalid = await request(
     "/api/v1/intake/drafts",
     { payload: { ...payload, side: "buyer", packageCode: "full_listing" } },
-    owner,
+    agent,
   );
   assert.equal(
     (
@@ -238,7 +262,7 @@ try {
           expectedRevision: invalid.data.revision,
           idempotencyKey: randomUUID(),
         },
-        owner,
+        agent,
       )
     ).res.status,
     422,

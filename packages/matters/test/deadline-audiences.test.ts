@@ -403,8 +403,27 @@ it("copies confirmed aliases to checklist and email fields, preserves manual edi
  expect((await getMatter(agent,matter.id)).tasks.find(t=>t.id===task.id)?.dueDate).toBeNull();
  expect(await mergeFields(owner,matter.id)).toEqual(expect.arrayContaining([expect.objectContaining({key:"closingDate",value:"2026-12-10"})]));
  const saved=await prisma.task.findUniqueOrThrow({where:{id:task.id}});
- await updateTask(owner,matter.id,task.id,{expectedRevision:saved.revision,dueDate:"2026-12-12"});
+ await updateTask(owner,matter.id,task.id,{expectedRevision:saved.revision,dueDate:"2026-12-12",note:"Coordinator confirmed the appointment.",appointmentAt:"2026-12-12T15:00:00Z"});
+ expect((await getMatter(owner,matter.id)).tasks.find(t=>t.id===task.id)).toMatchObject({note:"Coordinator confirmed the appointment.",appointmentAt:"2026-12-12T15:00:00Z"});
  await prisma.deadline.update({where:{id:deadline.id},data:{date:"2026-12-15"}});
  await prisma.$transaction(tx=>recalculateWorkflow(tx,owner,matter.id));
  expect((await getMatter(owner,matter.id)).tasks.find(t=>t.id===task.id)?.dueDate).toBe("2026-12-12");
+});
+
+it("inherits a narrowed task audience for an aliased source deadline", async () => {
+  const { matter, token } = await fixture();
+  await prisma.matter.update({ where: { id: matter.id }, data: { details: {
+    workflow: { definition: { steps: [{ key: "closing", title: "Closing date", kind: "checklist", visibility: "client" }] } },
+  } } });
+  const task = await prisma.task.create({ data: { matterId: matter.id, title: "Closing date", visibility: "client", details: { workflowKey: "closing" } } });
+  const deadline = await prisma.deadline.create({ data: { matterId: matter.id, label: "Closing deadline", date: "2026-12-10", status: "confirmed", details: { visibility: "client" } } });
+  await prisma.$transaction(tx => recalculateWorkflow(tx, owner, matter.id));
+  const saved = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });
+  expect(saved.dueDate).toBe(deadline.date);
+  await updateTask(owner, matter.id, task.id, { expectedRevision: saved.revision, visibility: "coordinator" });
+  for (const actor of [agent, client]) {
+    expect((await getMatter(actor, matter.id)).deadlines).toEqual([]);
+    expect((await listMatters(actor)).find(m => m.id === matter.id)?.deadlines).toEqual([]);
+  }
+  expect((await getPublicChecklist(token)).deadlines).toEqual([]);
 });

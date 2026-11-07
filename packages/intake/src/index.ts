@@ -650,7 +650,10 @@ export async function getIntakeSubmission(actor: Principal, id: string) {
   const submission = await prisma.intakeSubmission.findFirst({ where: { id, ...(actor.role === "agent" ? { userId: actor.id } : {}) } });
   if (!submission) throw new HttpError(404, "INTAKE_NOT_FOUND", "Intake not found.");
   await requireMatter(actor, submission.matterId);
-  const documents = await prisma.document.findMany({ where: { matterId: submission.matterId }, select: {
+  const documents = await prisma.document.findMany({ where: {
+    matterId: submission.matterId,
+    ...(actor.role === "coordinator" ? {} : { visibility: { in: ["agent", "client"] } }),
+  }, select: {
     id: true, name: true, category: true, mimeType: true,
     versions: { orderBy: { version: "desc" }, select: { id: true, version: true, processingStatus: true, error: true } },
   } });

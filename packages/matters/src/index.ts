@@ -858,7 +858,12 @@ async function updateChild(
       };
       delete patch.visibility;
     }
-    if (kind === "task" && "dueDate" in data) patch.details = { ...(old.details as Record<string, Prisma.InputJsonValue>), ...("details" in data ? data.details : {}), manualOverride: true };
+    if (kind === "task" && "dueDate" in data)
+      patch.details = {
+        ...(old.details as Record<string, Prisma.InputJsonValue>),
+        ...((patch.details as Record<string, Prisma.InputJsonValue>) || {}),
+        manualOverride: true,
+      };
     const changed = await delegate.updateMany({
       where: { id, matterId, revision: expectedRevision },
       data: {

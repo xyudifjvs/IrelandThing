@@ -58,7 +58,7 @@ describe("supplied Weatherly intake records", () => {
     }
   });
 
-  it("requires uploads for plain service and accepts a fully answered compliance loop", () => {
+  it("requires uploads for plain service and allows compliance contracts to be added later", () => {
     for (const variant of [
       "buyer",
       "seller",
@@ -134,7 +134,7 @@ describe("supplied Weatherly intake records", () => {
               },
             }),
           ),
-        ).toThrow("identify the transaction loop");
+        ).not.toThrow();
       }
     }
     expect(() =>

@@ -13,18 +13,18 @@ import {
 } from "@weatherly/documents";
 import { getMatter } from "@weatherly/matters";
 import { queryStoredRecords } from "../../assistant/src/records";
-import { saveIntakeDraft, submitIntake } from "../src/index";
+import { saveIntakeDraft, submitIntake, listIntakeSubmissions, createTransactionFromIntake, getIntakeSubmission } from "../src/index";
 import { completedReference } from "./reference-fixture";
 
 const runId = randomUUID();
-const actors = ["agent", "agent"].map((role, index): Principal => ({
+const actors = ["agent", "agent", "coordinator"].map((role, index): Principal => ({
   id: `intake-batch-${runId}-${index}`,
   name: `Synthetic intake ${index}`,
   email: `intake-batch-${runId}-${index}@example.test`,
   role: role as Principal["role"],
   sessionId: `intake-batch-${runId}`,
 }));
-const [agent, outsider] = actors;
+const [agent, outsider, coordinator] = actors;
 const draftIds: string[] = [];
 const matterIds: string[] = [];
 let directory = "";
@@ -134,7 +134,7 @@ afterAll(async () => {
   await prisma.outboxJob.deleteMany({
     where: {
       idempotencyKey: {
-        in: receipts.map((receipt) => `intake-submitted:${receipt.id}`),
+        in: receipts.flatMap((receipt) => [`intake-submitted:${receipt.id}`, `intake-received:${receipt.id}`]),
       },
     },
   });
@@ -157,6 +157,30 @@ afterAll(async () => {
 });
 
 describe("durable intake document batch submissions", () => {
+  it("keeps new intakes first and converts exactly once with the original contract and contacts", async () => {
+    const contract = await upload(agent, "queue-contract.pdf", "contract");
+    const first = await draft(payload([contract.id], {}));
+    const one = await submitIntake(agent, first.id, {expectedRevision:1,idempotencyKey:`queue-${first.id}`});
+    matterIds.push(one.matter.id);
+    const secondPayload={...payload([], {}),contractSource:"dotloop",dotloopLoopId:"queue-loop"};
+    const second = await draft(secondPayload);
+    const two = await submitIntake(agent, second.id, {expectedRevision:1,idempotencyKey:`queue-${second.id}`});
+    matterIds.push(two.matter.id);
+    expect(one.submission.processedAt).toBeNull();
+    await expect(createTransactionFromIntake(agent,one.submission.id)).rejects.toMatchObject({status:403});
+    await expect(getIntakeSubmission(outsider,one.submission.id)).rejects.toMatchObject({status:404});
+    await expect(saveIntakeDraft(coordinator,first.id,{expectedRevision:1,payload:payload([], {})})).rejects.toMatchObject({status:403});
+    const results=await Promise.all([createTransactionFromIntake(coordinator,one.submission.id),createTransactionFromIntake(coordinator,one.submission.id)]);
+    expect(results.map(r=>r.alreadyCreated).sort()).toEqual([false,true]);
+    const detail=await getIntakeSubmission(coordinator,one.submission.id);
+    expect(detail.documents.map(d=>d.id)).toContain(contract.id);
+    expect(detail.documents.find(d=>d.id===contract.id)?.versions).toHaveLength(1);
+    expect(results[0].matter.details).toMatchObject({contacts:expect.arrayContaining([expect.objectContaining({role:"my_agent",email:agent.email}),expect.objectContaining({role:"title_rep",name:"Synthetic Title"})])});
+    const queue=await listIntakeSubmissions(coordinator);
+    expect(queue.items.findIndex(i=>i.id===two.submission.id)).toBeLessThan(queue.items.findIndex(i=>i.id===one.submission.id));
+    expect(await prisma.aIProposal.count({where:{matterId:one.matter.id,kind:"contract"}})).toBe(1);
+  });
+
   it("saves blank drafts and requires a contract location before creating a transaction", async () => {
     const savedPayload = {
       ...payload([], {}),
@@ -1090,8 +1114,7 @@ describe("durable intake document batch submissions", () => {
           idempotencyKey: `complete-${created.id}`,
         }),
       ).rejects.toMatchObject({
-        code:
-          compliance && !contract ? "CONTRACT_REQUIRED" : "INTAKE_INCOMPLETE",
+        code: "INTAKE_INCOMPLETE",
         status: 422,
       });
       expect(

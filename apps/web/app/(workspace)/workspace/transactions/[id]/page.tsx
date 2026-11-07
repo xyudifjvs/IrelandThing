@@ -320,7 +320,7 @@ function TransactionDetail({ id }: { id: string }) {
               <section className={s.section}>
                 <div className={s.sectionHead}>
                   <div>
-                    <h2>Dates & deadlines</h2>
+                    <h2 id="dates">Dates & deadlines</h2>
                     <p>
                       Confirm contract dates before relying on the timeline.
                     </p>

@@ -164,10 +164,12 @@ export async function listMatters(
     .default(200)
     .parse(query.limit);
   if (query.cursor) await requireMatter(actor, query.cursor);
+  const waitingIntakes = actor.role === "coordinator" ? await prisma.intakeSubmission.findMany({where:{processedAt:null},select:{matterId:true}}) : [];
   const rows = await prisma.matter.findMany({
     where: {
       AND: [
         matterScope(actor),
+        ...(waitingIntakes.length ? [{ id: { notIn: waitingIntakes.map(i => i.matterId) } }] : []),
         query.q
           ? {
               OR: [
@@ -856,6 +858,7 @@ async function updateChild(
       };
       delete patch.visibility;
     }
+    if (kind === "task" && "dueDate" in data) patch.details = { ...(old.details as Record<string, Prisma.InputJsonValue>), ...("details" in data ? data.details : {}), manualOverride: true };
     const changed = await delegate.updateMany({
       where: { id, matterId, revision: expectedRevision },
       data: {
@@ -1266,6 +1269,7 @@ export async function confirmFile(
         "REVISION_CONFLICT",
         "The file changed. Review its current version before confirming.",
       );
+    await tx.intakeSubmission.updateMany({where:{matterId,processedAt:null},data:{processedAt:new Date(),processedById:actor.id}});
     await applyInitialWorkflow(tx, actor, matterId);
     await tx.task.updateMany({
       where: { matterId, kind: "manual_review" },

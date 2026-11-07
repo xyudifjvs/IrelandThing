@@ -68,7 +68,7 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
   const session = useData<Session>("/api/v1/session");
   const actor = session.data?.user;
   const allowed =
-    !!actor && ["agent", "coordinator"].includes(actor.role || "");
+    !!actor && actor.role === "agent";
   const drafts = useData<Draft[]>(allowed ? "/api/v1/intake/drafts" : null);
   const root = useRef<HTMLDivElement>(null),
     ref = useRef<ReferenceIntake>(blank("buyer")),
@@ -389,9 +389,7 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
     const value = snapshot();
     const uploaded=Boolean(value.uploads.contractDocs?.length);
     const compliance=value.variant.endsWith('compliance');
-    const loopNamed=Boolean(String(value.fields.contractLocation||value.fields.transactionName||'').trim());
-    const loopAtProperty=value.fields.docsDotloop===true&&['a_num','a_street','a_city','a_state','a_zip'].some(k=>String(value.fields[k]||'').trim());
-    if(!uploaded&&(!compliance||!loopNamed&&!loopAtProperty))throw Error(compliance?'Upload the executed contract or identify its transaction loop by name or property address. Save a draft at any point.':'Contract to Close requires an uploaded executed contract. Save a draft at any point.');
+    if(!uploaded&&!compliance)throw Error('Contract to Close requires an uploaded executed contract. Save a draft at any point.');
     const current = await persist();
     const result = await mutate<{
       submission: { id: string };
@@ -753,8 +751,8 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
       {receipt && (
         <p className="save-message" role="status">
           Saved receipt {receipt.id} ·{" "}
-          <Link href={`/portal/transactions/${receipt.matterId}`}>
-            Open transaction
+          <Link href="/portal">
+            Return to your portal
           </Link>
         </p>
       )}

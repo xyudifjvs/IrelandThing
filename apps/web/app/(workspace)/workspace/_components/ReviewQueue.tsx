@@ -36,7 +36,7 @@ type Proposal = {
   };
 };
 export default function ReviewQueue({ matterId,onReviewed }: { matterId?: string; onReviewed?:()=>Promise<void> }) {
-  const q = useData<Proposal[]>("/api/v1/ai/reviews");
+  const q = useData<Proposal[]>(`/api/v1/ai/reviews${matterId ? `?matterId=${encodeURIComponent(matterId)}` : ""}`);
   const hasPending = q.data?.some((p) =>
     ["queued", "processing"].includes(p.status),
   );

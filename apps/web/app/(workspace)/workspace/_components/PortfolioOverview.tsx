@@ -30,7 +30,7 @@ export default function PortfolioOverview() {
         {
           label: "Files awaiting review",
           count: data.transactions.pendingReview,
-          href: "/workspace/transactions",
+          href: "/workspace/intakes",
           hint: "Intake files waiting for Ireland's review",
         },
         {

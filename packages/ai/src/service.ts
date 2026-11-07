@@ -343,10 +343,10 @@ export async function processReview(
     });
   });
 }
-export async function listReviews(actor: Principal) {
+export async function listReviews(actor: Principal, matterId?: string) {
   assertCoordinator(actor);
   return prisma.aIProposal.findMany({
-    where: { kind: "contract" },
+    where: { kind: "contract", ...(matterId ? { matterId } : {}) },
     orderBy: { createdAt: "desc" },
     take: 100,
   });

@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@weatherly/db";
+import { recalculateWorkflow } from "../src/rules";
+import { mergeFields } from "@weatherly/communications";
 import type { Principal } from "@weatherly/platform";
 import {
   addDeadline,
@@ -389,4 +391,20 @@ describe("canonical deadline audiences", () => {
     expect((await getPublicChecklist(token)).deadlines).toEqual([]);
     expect((await getPublicChecklist(token)).tasks[0].dueDate).toBeNull();
   });
+});
+
+it("copies confirmed aliases to checklist and email fields, preserves manual edits, and keeps private dates private", async () => {
+ const {matter}=await fixture();
+ await prisma.matter.update({where:{id:matter.id},data:{details:{workflow:{definition:{steps:[{key:"closing",title:"Closing date",kind:"checklist",visibility:"client"}]}}}}});
+ const task=await prisma.task.create({data:{matterId:matter.id,title:"Closing date",visibility:"client",details:{workflowKey:"closing"}}});
+ const deadline=await prisma.deadline.create({data:{matterId:matter.id,label:"Closing deadline",date:"2026-12-10",status:"confirmed",details:{visibility:"coordinator"}}});
+ await prisma.$transaction(tx=>recalculateWorkflow(tx,owner,matter.id));
+ expect((await getMatter(owner,matter.id)).tasks.find(t=>t.id===task.id)?.dueDate).toBe("2026-12-10");
+ expect((await getMatter(agent,matter.id)).tasks.find(t=>t.id===task.id)?.dueDate).toBeNull();
+ expect(await mergeFields(owner,matter.id)).toEqual(expect.arrayContaining([expect.objectContaining({key:"closingDate",value:"2026-12-10"})]));
+ const saved=await prisma.task.findUniqueOrThrow({where:{id:task.id}});
+ await updateTask(owner,matter.id,task.id,{expectedRevision:saved.revision,dueDate:"2026-12-12"});
+ await prisma.deadline.update({where:{id:deadline.id},data:{date:"2026-12-15"}});
+ await prisma.$transaction(tx=>recalculateWorkflow(tx,owner,matter.id));
+ expect((await getMatter(owner,matter.id)).tasks.find(t=>t.id===task.id)?.dueDate).toBe("2026-12-12");
 });

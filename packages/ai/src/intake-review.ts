@@ -6,8 +6,10 @@ import { aiConfigured } from "./gateway";
 export async function prepareIntakeReview(
   matterId: string,
   submissionId: string,
+  transaction?: Prisma.TransactionClient,
+  requestedById?: string,
 ) {
-  return prisma.$transaction(async (tx) => {
+  const prepare = async (tx: Prisma.TransactionClient) => {
     await tx.$queryRaw`SELECT "id" FROM "Matter" WHERE "id" = ${matterId} FOR UPDATE`;
     const matter = await tx.matter.findUniqueOrThrow({
       where: { id: matterId },
@@ -42,8 +44,8 @@ export async function prepareIntakeReview(
     const candidates = await tx.user.findMany({
       where: {
         role: "coordinator",
-        ...(process.env.AI_REVIEW_OWNER_ID
-          ? { id: process.env.AI_REVIEW_OWNER_ID }
+        ...((requestedById || process.env.AI_REVIEW_OWNER_ID)
+          ? { id: requestedById || process.env.AI_REVIEW_OWNER_ID }
           : {}),
       },
     });
@@ -188,5 +190,6 @@ export async function prepareIntakeReview(
       result.push({ id: proposal.id, status: proposal.status });
     }
     return { matterId, submissionId, proposals: result };
-  });
+  };
+  return transaction ? prepare(transaction) : prisma.$transaction(prepare);
 }

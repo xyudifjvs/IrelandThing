@@ -1,4 +1,5 @@
 "use client";
+import type { IntakePage } from "../../(workspace)/workspace/_components/IntakeInbox";
 import Link from "next/link";
 import { useState } from "react";
 import { Plus, ArrowUpRight, FolderHeart, LockKeyhole } from "lucide-react";
@@ -17,6 +18,7 @@ import s from "./_components/portal.module.css";
 export default function Portal() {
   const session = useData<Session>("/api/v1/session");
   const q = useAllMatters();
+  const receipts = useData<IntakePage>(session.data?.user?.role === "agent" ? "/api/v1/intakes/submissions?limit=100" : null);
   const [search, setSearch] = useState("");
   const filtered = q.data.filter((m) =>
     `${address(m)} ${m.title || ""}`
@@ -38,7 +40,7 @@ export default function Portal() {
               : "Submit new transactions and review updates from Ireland."}
           </p>
         </div>
-        {!client && session.data && (
+        {session.data?.user?.role === "agent" && (
           <Link className={s.button} href="/portal/intake">
             <Plus size={13} />
             New transaction
@@ -72,6 +74,7 @@ export default function Portal() {
           placeholder="Property address or transaction name"
         />
       </label>
+      {receipts.data?.items.some(x => !x.processedAt) && <section className={s.card} style={{marginBottom:24}}><h2>Intakes awaiting Ireland</h2>{receipts.data.items.filter(x => !x.processedAt).map(x => <p key={x.id}><strong>{String(x.snapshot.propertyAddress || "Address not provided")}</strong><br/>Submitted · waiting for Ireland to create the transaction. Your uploaded files are saved.</p>)}</section>}
       {q.loading ? (
         <div className={s.loading}>Opening your transactions…</div>
       ) : filtered.length ? (

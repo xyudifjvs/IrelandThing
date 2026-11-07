@@ -1,4 +1,5 @@
 "use client";
+import type { IntakePage } from "./IntakeInbox";
 import Link from "next/link";
 import { useState } from "react";
 import {
@@ -135,6 +136,7 @@ export default function Dashboard({
       setSaving(false);
     }
   }
+  const intakes = useData<IntakePage>("/api/v1/intakes/submissions?limit=3");
   return (
     <>
       <div className={s.heading}>
@@ -151,10 +153,7 @@ export default function Dashboard({
               : `${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Here’s where things stand.`}
           </p>
         </div>
-        <Link className={s.button} href="/workspace/new">
-          <Plus />
-          New transaction
-        </Link>
+        <div className={s.formRow}><Link className={s.button} href="/workspace/intakes">Review submitted intakes{intakes.data?.newCount ? ` (${intakes.data.newCount} new)` : ""}</Link><Link className={s.buttonSecondary} href="/workspace/new">Start manually</Link></div>
       </div>
       {!transactions && <PortfolioOverview />}
       {query.error && (
@@ -377,10 +376,10 @@ export default function Dashboard({
                 <BriefcaseBusiness />
                 No transactions yet.
                 <br />
-                Your transactions will appear here when you submit an intake.
+                Review an agent’s submitted intake to create a transaction.
                 <p>
-                  <Link className={s.buttonSmall} href="/workspace/new">
-                    Start a transaction <ArrowRight size={12} />
+                  <Link className={s.buttonSmall} href="/workspace/intakes">
+                    Review submitted intakes <ArrowRight size={12} />
                   </Link>
                 </p>
               </div>

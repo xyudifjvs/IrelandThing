@@ -341,6 +341,17 @@ async function syncApprovedTaskDate(
     );
 }
 
+export function canonicalDeadlineLabel(label: string) {
+  const normalized = label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const groups = [
+    ["closing", "closing date", "closing deadline"], ["possession", "possession date", "possession date and time"],
+    ["inspection", "inspections", "inspection deadline", "inspection date"],
+    ["earnest money", "earnest money emd", "earnest money deadline", "emd"],
+    ["title", "title commitment"], ["appraisal", "appraisal completed", "appraisal date"],
+  ];
+  return groups.find(group => group.includes(normalized))?.[0] || normalized;
+}
+
 /** Recomputes rule-owned dates after anchor changes. Explicit manual overrides are preserved. */
 export async function recalculateWorkflow(
   tx: Prisma.TransactionClient,
@@ -369,6 +380,22 @@ export async function recalculateWorkflow(
       );
     ordered.push(...ready);
     for (const step of ready) remaining.splice(remaining.indexOf(step), 1);
+  }
+  const deadlines = await tx.deadline.findMany({where:{matterId}});
+  for (const step of definition.steps.filter(step => !step.rule)) {
+    {
+      const confirmed = deadlines.filter(d => canonicalDeadlineLabel(d.label) === canonicalDeadlineLabel(step.title) && d.status === "confirmed" && d.date);
+      const dates = [...new Set(confirmed.map(d => d.date!))];
+      const dueDate = dates.length === 1 ? dates[0] : null;
+      const tasks = await tx.task.findMany({ where: { matterId, details: { path: ["workflowKey"], equals: step.key }, status: { notIn: ["completed", "signed", "not_applicable"] } } });
+      for (const task of tasks) {
+        const metadata = task.details as Record<string, Prisma.InputJsonValue>;
+        if (metadata.manualOverride === true || (task.dueDate && !metadata.confirmedDeadlineIds)) continue;
+        if (!confirmed.length && !metadata.confirmedDeadlineIds) continue;
+        if (task.dueDate === dueDate && JSON.stringify(metadata.confirmedDeadlineIds) === JSON.stringify(confirmed.map(d => d.id))) continue;
+        await tx.task.update({ where: { id: task.id }, data: { dueDate, revision: { increment: 1 }, details: { ...metadata, confirmedDeadlineIds: confirmed.map(d => d.id) } } });
+      }
+    }
   }
   const changes: { label: string; date: string | null; preserved?: boolean }[] =
     [];

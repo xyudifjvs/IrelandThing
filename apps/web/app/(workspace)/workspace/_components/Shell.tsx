@@ -1,190 +1,176 @@
 "use client";
+
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  CalendarDays,
-  FolderOpen,
-  Inbox,
-  Settings2,
-  CreditCard,
-  Sparkles,
-  ArrowUpRight,
-  Bell,
-  HelpCircle,
-  Plus,
-  LogOut,
-  ContactRound,
-} from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { WeatherlyBrand } from "../../../_components/WeatherlyBrand";
 import RouteFocus from "./RouteFocus";
 import { api, useData, type Session } from "./data";
+import {
+  workspaceAccountLinks,
+  workspaceNavigation,
+  type WorkspaceLink,
+} from "./workspace-navigation";
 import s from "./workspace.module.css";
-const nav = [
-  { href: "/workspace", label: "Overview", icon: LayoutDashboard },
-  { href: "/workspace/intakes", label: "Submitted intakes", icon: Inbox },
-  { href: "/workspace/transactions", label: "Transactions", icon: FolderOpen },
-  {
-    href: "/workspace/contacts",
-    label: "Business contacts",
-    icon: ContactRound,
-  },
-  { href: "/workspace/inbox", label: "Inbox", icon: Inbox },
-  { href: "/workspace/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/workspace/onboarding", label: "Onboarding", icon: HelpCircle },
-  { href: "/workspace/review", label: "AI review", icon: Sparkles },
-  { href: "/workspace/payments", label: "Payments", icon: CreditCard },
-];
+import shell from "./workspace-shell.module.css";
+
+function NavigationLink({
+  href,
+  label,
+  pathname,
+}: WorkspaceLink & { pathname: string }) {
+  const current =
+    pathname === href ||
+    (href !== "/workspace" && pathname.startsWith(`${href}/`));
+  return (
+    <Link href={href} aria-current={current ? "page" : undefined}>
+      {label}
+    </Link>
+  );
+}
+
+function WorkspaceLinks({ pathname }: { pathname: string }) {
+  return workspaceNavigation.map(({ label, links }) => (
+    <div className={shell.navGroup} key={label ?? links[0]?.href}>
+      {label && <p className={shell.navLabel}>{label}</p>}
+      {links.map((link) => (
+        <NavigationLink key={link.href} {...link} pathname={pathname} />
+      ))}
+    </div>
+  ));
+}
+
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const session = useData<Session>("/api/v1/session");
   const user = session.data?.user;
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState("");
+
   async function signOut() {
     setSigningOut(true);
     setSignOutError("");
     try {
       await api("/api/auth/sign-out", { method: "POST", body: "{}" });
       window.location.href = "/login";
-    } catch (e) {
-      setSignOutError((e as Error).message);
+    } catch (error) {
+      setSignOutError((error as Error).message);
       setSigningOut(false);
     }
   }
-  const current =
-    nav.find((n) => n.href === pathname)?.label ||
-    (pathname.includes("settings")
-      ? "Settings"
-      : pathname.includes("new")
-        ? "New transaction"
-        : "Transaction workspace");
-  if (!user || user.role !== "coordinator")
-    return <main className={s.content}><h1>{session.loading ? "Opening your workspace…" : "Ireland’s workspace"}</h1>{!session.loading && <><p>{user ? "Your shared transactions are available in your portal." : "Sign in to open the coordinator workspace."}</p><Link href={user ? "/portal" : "/login"}>{user ? "Open your portal" : "Sign in"}</Link></>}{session.error && <p role="alert">{session.error}<button onClick={()=>void session.refresh()}>Retry</button></p>}</main>;
-  return (
-    <div className={s.shell}>
-      <aside className={s.sidebar}>
-        <Link href="/" className={s.brand} aria-label="Weatherly home">
-          <div className={s.brandTop}>WEATHERLY</div>
-          <div className={s.brandSub}>TRANSACTION CO.</div>
-        </Link>
-        <nav className={s.nav} aria-label="Workspace">
-          <div className={s.navLabel}>Your workspace</div>
-          {nav
-            .filter(
-              (n) =>
-                n.href !== "/workspace/contacts" ||
-                user?.role === "coordinator",
-            )
-            .map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                title={n.label}
-                aria-label={n.label}
-                aria-current={
-                  pathname === n.href ||
-                  (n.href !== "/workspace" && pathname.startsWith(n.href))
-                    ? "page"
-                    : undefined
-                }
-                className={
-                  pathname === n.href ||
-                  (n.href != "/workspace" && pathname.startsWith(n.href))
-                    ? s.active
-                    : ""
-                }
-              >
-                <n.icon />
-                {n.label}
+
+  if (!user || user.role !== "coordinator") {
+    return (
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className={`weatherly-theme ${shell.workspaceGate}`}
+      >
+        <div className={s.content}>
+          <h1>
+            {session.loading
+              ? "Opening your workspace…"
+              : "Ireland’s workspace"}
+          </h1>
+          {!session.loading && (
+            <>
+              <p>
+                {user
+                  ? "Your shared transactions are available in your portal."
+                  : "Sign in to open the coordinator workspace."}
+              </p>
+              <Link href={user ? "/portal" : "/login"}>
+                {user ? "Open your portal" : "Sign in"}
               </Link>
-            ))}
-          <div className={s.navLabel}>Quick actions</div>
-          <Link href="/workspace/new" title="Start a transaction manually">
-            <Plus />
-            Start manually
-          </Link>
+            </>
+          )}
+          {session.error && (
+            <p role="alert">
+              {session.error}{" "}
+              <button onClick={() => void session.refresh()}>Retry</button>
+            </p>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <div className={`weatherly-theme ${shell.shell}`}>
+      <aside className={shell.sidebar}>
+        <Link href="/" className={shell.brand} aria-label="Weatherly home">
+          <WeatherlyBrand decorative />
+        </Link>
+        <nav className={shell.nav} aria-label="Workspace">
+          <WorkspaceLinks pathname={pathname} />
         </nav>
-        <div className={s.bottom}>
-          <Link
-            href="/workspace/settings"
-            className={pathname.includes("settings") ? s.active : ""}
-          >
-            <Settings2 />
-            Settings
-          </Link>
-          <Link href="/portal">
-            <ArrowUpRight />
-            Agent & client portal
-          </Link>
-          <Link href="/contact">
-            <HelpCircle />
-            Contact & support
-          </Link>
-          <div className={s.user}>
-            <div className={s.avatar}>{(user?.name || "W").slice(0, 1)}</div>
-            <div>
-              <strong>{user?.name || "Your workspace"}</strong>
-              <small>{user?.role || "Secure access"}</small>
+        <div className={shell.bottom}>
+          <div className={shell.mark}>
+            <WeatherlyBrand variant="mark" decorative />
+          </div>
+          <nav aria-label="Account and support" className={shell.accountLinks}>
+            {workspaceAccountLinks.map((link) => (
+              <NavigationLink key={link.href} {...link} pathname={pathname} />
+            ))}
+          </nav>
+          <div className={shell.user}>
+            <span className={s.avatar} aria-hidden="true">
+              {(user.name || "W").slice(0, 1)}
+            </span>
+            <div className={shell.userDetails}>
+              <strong>{user.name || "Your workspace"}</strong>
+              <small>Coordinator</small>
             </div>
             <button
-              aria-label="Sign out"
+              type="button"
+              aria-label={signingOut ? "Signing out" : "Sign out"}
               title="Sign out"
-              className={s.buttonSmall}
+              className={shell.signOut}
               disabled={signingOut}
               onClick={() => void signOut()}
             >
-              <LogOut size={12} />
+              <LogOut size={16} aria-hidden="true" />
             </button>
           </div>
         </div>
       </aside>
-      <main className={s.main} id="main-content" tabIndex={-1}>
+      <header className={shell.mobileHeader}>
+        <Link href="/" className={shell.brand} aria-label="Weatherly home">
+          <WeatherlyBrand decorative />
+        </Link>
+        <details
+          className={shell.mobileMenu}
+          key={pathname}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && event.currentTarget.open) {
+              event.preventDefault();
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector("summary")?.focus();
+            }
+          }}
+        >
+          <summary>Menu</summary>
+          <nav aria-label="Workspace and account">
+            <WorkspaceLinks pathname={pathname} />
+            <div className={shell.mobileAccountLinks}>
+              {workspaceAccountLinks.map((link) => (
+                <NavigationLink key={link.href} {...link} pathname={pathname} />
+              ))}
+              <Link href="/account">Your profile</Link>
+              <button
+                type="button"
+                disabled={signingOut}
+                onClick={() => void signOut()}
+              >
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
+          </nav>
+        </details>
+      </header>
+      <main className={shell.main} id="main-content" tabIndex={-1}>
         <RouteFocus />
-        <header className={s.topbar}>
-          <div className={s.breadcrumb}>
-            Workspace <span>/</span> <span>{current}</span>
-          </div>
-          <div className={s.topActions}>
-            <details
-              className={s.mobileAccount}
-              key={pathname}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.currentTarget.open = false;
-                  e.currentTarget.querySelector("summary")?.focus();
-                }
-              }}
-            >
-              <summary>Account</summary>
-              <nav aria-label="Account and support">
-                <Link href="/workspace/settings">Settings</Link>
-                <Link href="/account">Your profile</Link>
-                <Link href="/portal">Agent and client portal</Link>
-                <Link href="/contact">Contact and support</Link>
-                <button disabled={signingOut} onClick={() => void signOut()}>
-                  {signingOut ? "Signing out…" : "Sign out"}
-                </button>
-              </nav>
-            </details>
-            <span className={s.topDate}>
-              {new Date().toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-            <Link href="/workspace/inbox" aria-label="Open inbox">
-              <Bell />
-            </Link>
-            <span
-              className={s.avatar}
-              style={{ width: 28, height: 28, fontSize: 12 }}
-            >
-              {(user?.name || "W").slice(0, 1)}
-            </span>
-          </div>
-        </header>
         <div className={s.content}>
           {signOutError && (
             <p className={s.error} role="alert">

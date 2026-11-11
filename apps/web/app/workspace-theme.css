@@ -1,0 +1,78 @@
+.weatherly-theme {
+  --weatherly-color-background: #f6f3ee;
+  --weatherly-color-surface: #ffffff;
+  --weatherly-color-border: #e6dfd4;
+  --weatherly-color-border-strong: #ddd4c7;
+  --weatherly-color-dark: #1b1a18;
+  --weatherly-color-on-dark: #ede7de;
+  --weatherly-color-text: #1e1c1a;
+  --weatherly-color-secondary: #5e564e;
+  --weatherly-color-faint: #8a8178;
+  --weatherly-color-accent: #6b4f2e;
+  --weatherly-color-warning: #a33a12;
+  --weatherly-color-warning-surface: #fbede6;
+  --weatherly-color-success: #496144;
+  --weatherly-color-success-surface: #eaf0e5;
+  --weatherly-color-accent-surface: color-mix(
+    in srgb,
+    var(--weatherly-color-accent) 8%,
+    var(--weatherly-color-background)
+  );
+  --weatherly-color-accent-hover: color-mix(
+    in srgb,
+    var(--weatherly-color-accent) 85%,
+    var(--weatherly-color-dark)
+  );
+  --weatherly-color-dark-hover: color-mix(
+    in srgb,
+    var(--weatherly-color-on-dark) 12%,
+    var(--weatherly-color-dark)
+  );
+  --weatherly-font-heading: var(--weatherly-serif), Georgia, serif;
+  --weatherly-font-body:
+    var(--weatherly-montserrat), "Helvetica Neue", Arial, sans-serif;
+  --weatherly-type-body: 14px;
+  --weatherly-type-detail: 13px;
+  --weatherly-type-small: 12px;
+  --weatherly-type-label: 11px;
+  --weatherly-type-card-title: 24px;
+  --weatherly-type-file-title: 32px;
+  --weatherly-type-page-title: clamp(30px, 3.2vw, 46px);
+  --weatherly-letter-label: 0.12em;
+  --weatherly-radius-control: 6px;
+  --weatherly-radius-panel: 8px;
+  --weatherly-radius-pill: 999px;
+
+  background: var(--weatherly-color-background);
+  color: var(--weatherly-color-text);
+  font-family: var(--weatherly-font-body);
+  font-size: var(--weatherly-type-body);
+  accent-color: var(--weatherly-color-accent);
+}
+
+.weatherly-theme :is(h1, h2, h3, h4) {
+  font-family: var(--weatherly-font-heading);
+  font-weight: 600;
+}
+
+.weatherly-theme :is(input, select, textarea) {
+  color: var(--weatherly-color-text);
+}
+
+.weatherly-theme :focus-visible {
+  outline: 2px solid var(--weatherly-color-accent);
+  outline-offset: 2px;
+}
+
+.weatherly-theme .weatherly-brand-tile {
+  display: block;
+  padding: 8px 10px;
+  background: var(--weatherly-color-background);
+  line-height: 0;
+}
+
+.weatherly-brand-tile img {
+  display: block;
+  width: 100%;
+  height: auto;
+}

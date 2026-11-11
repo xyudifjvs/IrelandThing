@@ -142,6 +142,12 @@ export default function Shell({ children }: { children: ReactNode }) {
         <details
           className={shell.mobileMenu}
           key={pathname}
+          onBlur={(event) => {
+            const { currentTarget, relatedTarget } = event;
+            if (relatedTarget && !currentTarget.contains(relatedTarget)) {
+              currentTarget.open = false;
+            }
+          }}
           onKeyDown={(event) => {
             if (event.key === "Escape" && event.currentTarget.open) {
               event.preventDefault();

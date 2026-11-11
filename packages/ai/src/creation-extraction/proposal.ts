@@ -44,6 +44,13 @@ const supported = <T extends z.ZodType>(value: T) =>
 const name = z.string().trim().min(1).max(200);
 const cents = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 
+const [fixed, relative, earliest] = checklistDateRuleSchema.options;
+const extractedRuleSchema = z.discriminatedUnion("kind", [
+  fixed,
+  relative.omit({ adjustments: true }),
+  earliest.omit({ adjustments: true }),
+]);
+
 export const creationProposalSchema = z
   .object({
     propertyAddress: supported(z.string().trim().min(1).max(500)),
@@ -62,7 +69,7 @@ export const creationProposalSchema = z
           .object({
             key: extractionDateKeySchema,
             date: dateValueSchema.nullable(),
-            rule: checklistDateRuleSchema.nullable(),
+        rule: extractedRuleSchema.nullable(),
             evidence: evidenceSchema,
           })
           .strict(),

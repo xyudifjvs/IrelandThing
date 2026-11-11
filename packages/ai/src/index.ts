@@ -9,3 +9,4 @@ export * from "./intake-review";
 export * from "./creation-extraction/source-bundle";
 export * from "./creation-extraction/extract";
 export { creationPromptVersion } from "./creation-extraction/prompt";
+export { processCreationExtraction } from "./creation-extraction/worker";

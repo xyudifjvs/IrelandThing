@@ -8,4 +8,4 @@ Source assembly requires every pinned version and ordered readable pages. Missin
 
 TypeScript passed. The extraction and gateway suites passed 21 tests with injected providers. The counteroffer fixture checks the structured proposal path and source quoting. A real account acceptance run remains part of Ireland's laptop handoff.
 
-The worker still needs the C01 review and extraction models and C05's source ownership, generation and revision checks. The reviewed core can then be connected without accepting late results after Skip or confirmation.
+The worker uses the C01 review and extraction models. It claims one generation, reads only pinned versions belonging to the current review or its intake, and rechecks ownership, revocation and generation after inference. The worker and gateway passed 23 tests on a synthetic database. C05 must connect review creation, Skip and confirmation. C00 owns registration for the `creation.extract` job with `{ reviewId, generation }`.

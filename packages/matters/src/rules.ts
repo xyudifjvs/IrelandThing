@@ -9,8 +9,8 @@ import {
   type Principal,
   validDate,
 } from "@weatherly/platform";
-import { requireMatter, audit } from "./index";
-import { taskVisibility } from "./task-fields";
+import { requireMatter, audit } from "./access";
+import { taskVisibility } from "./validation/task-fields";
 const stepSchema = z
   .object({
     key: z.string().regex(/^[a-z0-9_-]{1,80}$/),

@@ -10,10 +10,10 @@ import {
   principal,
   type Principal,
 } from "@weatherly/platform";
-import { audit, requireMatter } from "./index";
+import { audit, requireMatter } from "./access";
 import { approvedWorkflowTaskDates } from "./rules";
-import { sharedTaskFields } from "./task-fields";
-import { audienceAllows, deadlineProjection } from "./deadline-fields";
+import { sharedTaskFields } from "./projections/task-fields";
+import { audienceAllows, deadlineProjection } from "./projections/deadline-fields";
 import { fileReviewPending } from "./file-review";
 
 /** Apply before authentication/rate limiting as well when mounting these routes. */

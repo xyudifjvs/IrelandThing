@@ -70,13 +70,32 @@ const offsetSchema = z
     }
   });
 
+const adjustmentsSchema = z
+  .array(
+    z
+      .object({
+        amount: z.number().int().positive().max(3650),
+        unit: z.enum(["days", "hours"]),
+      })
+      .strict(),
+  )
+  .max(100)
+  .optional();
+
 export const checklistDateRuleSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("fixed") }).strict(),
-  z.object({ kind: z.literal("relative"), offset: offsetSchema }).strict(),
+  z
+    .object({
+      kind: z.literal("relative"),
+      offset: offsetSchema,
+      adjustments: adjustmentsSchema,
+    })
+    .strict(),
   z
     .object({
       kind: z.literal("earliest"),
       offsets: z.tuple([offsetSchema, offsetSchema]),
+      adjustments: adjustmentsSchema,
     })
     .strict(),
 ]);

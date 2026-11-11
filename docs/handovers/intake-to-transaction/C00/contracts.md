@@ -38,6 +38,8 @@ Every mutation checks current permission and revision at the authoritative recor
 
 `DateValue.date` is the operational civil date in the file's deadline timezone. `instant` is optional exact time evidence. A request supplying both must resolve to the same civil date in that timezone, otherwise the coordinator receives a validation error. An AI proposal with conflicting values remains unresolved until reviewed. Hour offsets require an exact anchor instant and a known timezone. Business-hour offsets require an explicit hours calendar, which the present weekday calendar cannot represent, so those rules remain blank or manual. An appointment may be displayed separately and never substitutes for an actual event date or contract deadline.
 
+Extend retains a linked rule and adds an ordered adjustment to its result. A calendar-day adjustment shifts the civil date and preserves a known local clock where it resolves uniquely. An hours adjustment requires an exact instant and timezone. A direct date edit sets a fixed date. Each committed extension records its previous date, adjustment and result for the amendment email.
+
 ## Decisions at this checkpoint
 
 - C00 uses versioned canonical task dates so deploying the schema by itself cannot rewrite a legacy deadline.

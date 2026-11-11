@@ -6,3 +6,6 @@ export * from "./http";
 export * from "./email";
 
 export * from "./intake-review";
+export * from "./creation-extraction/source-bundle";
+export * from "./creation-extraction/extract";
+export { creationPromptVersion } from "./creation-extraction/prompt";

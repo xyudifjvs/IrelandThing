@@ -86,6 +86,7 @@ export async function generateStructured<T>(
     data: unknown;
     schema: z.ZodType<T>;
     maxTokens?: number;
+    signal?: AbortSignal;
   },
   fetcher: typeof fetch = fetch,
 ) {
@@ -123,7 +124,9 @@ export async function generateStructured<T>(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
-        signal: AbortSignal.timeout(90000),
+        signal: input.signal
+          ? AbortSignal.any([input.signal, AbortSignal.timeout(90000)])
+          : AbortSignal.timeout(90000),
         headers: {
           Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",

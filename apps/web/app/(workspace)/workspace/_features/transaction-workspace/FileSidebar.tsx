@@ -7,7 +7,7 @@ import { hasVersionedChecklist } from "../checklist/canonical-checklist-model";
 import { PeopleOnFilePanel } from "../people/PeopleOnFilePanel";
 import { PrivateTodoPanel } from "../private-notes/PrivateTodoPanel";
 import { SavedTask } from "./SavedTask";
-import { legacyPeople, type TransactionFile } from "./file-model";
+import { isLegacyFileTask, legacyPeople, type TransactionFile } from "./file-model";
 import styles from "./file-workspace.module.css";
 
 export function FileSidebar({
@@ -25,9 +25,12 @@ export function FileSidebar({
 }) {
   const saved = legacyPeople(file);
   const savedNotes = file.notes ?? [];
-  const savedTodos = hasVersionedChecklist(file)
+  const versioned = hasVersionedChecklist(file);
+  const savedTodos = versioned
     ? []
-    : (file.tasks ?? []).filter(({ visibility }) => visibility === "coordinator");
+    : (file.tasks ?? [])
+        .filter(isLegacyFileTask)
+        .filter(({ visibility }) => visibility === "coordinator");
   const rosterUrl = file.agentRosterId
     ? `/workspace/roster?agent=${encodeURIComponent(file.agentRosterId)}`
     : "/workspace/roster";
@@ -64,7 +67,9 @@ export function FileSidebar({
         <ChecklistShare
           matterId={file.id}
           tasks={(file.tasks ?? []).filter(
-            ({ status }) => status !== "not_applicable",
+            (task) =>
+              task.status !== "not_applicable" &&
+              (versioned || isLegacyFileTask(task)),
           )}
         />
         <Link href={rosterUrl} className={styles.textButton}>

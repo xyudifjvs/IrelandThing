@@ -14,7 +14,7 @@ import {
 import { ChecklistEmailPrompt } from "../emails/ChecklistEmailPrompt";
 import { FileActions } from "./FileActions";
 import { SavedTask } from "./SavedTask";
-import type { TransactionFile } from "./file-model";
+import { isLegacyFileTask, type TransactionFile } from "./file-model";
 import styles from "./file-workspace.module.css";
 
 export function FileChecklist({
@@ -89,6 +89,7 @@ export function FileChecklist({
           <div className={s.sectionBody}>
             <ul className={styles.readOnlyChecklist}>
               {(file.tasks ?? [])
+                .filter(isLegacyFileTask)
                 .filter(({ visibility }) => visibility !== "coordinator")
                 .map((task) => (
                   <SavedTask key={task.id} task={task} />
@@ -105,6 +106,7 @@ export function FileChecklist({
           act={act}
           draft={legacyDraft}
           standaloneDates={dateRows}
+          includeTask={isLegacyFileTask}
         />
       )}
       <FileActions

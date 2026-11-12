@@ -119,11 +119,22 @@ export function closingDate(file: Matter) {
   );
 }
 
+const retiredTaskKinds = new Set([
+  "broker",
+  "compliance",
+  "manual_review",
+  "unresolved_date",
+]);
+
+export function isLegacyFileTask({ kind }: Task) {
+  return !retiredTaskKinds.has(kind ?? "");
+}
+
 export function nextChecklistDate(file: Matter) {
   if (!isActiveFile(file)) return;
   const dated: Task[] = hasVersionedChecklist(file)
     ? (file.tasks ?? []).filter(isChecklistTask)
-    : (file.tasks ?? []);
+    : (file.tasks ?? []).filter(isLegacyFileTask);
   return dated
     .filter(
       (task) =>

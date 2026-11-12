@@ -9,7 +9,7 @@ import {
   clientCanSee,
   audienceVisibility,
 } from "../../../../_lib/checklist-audiences";
-import { mutate, label, date, type Matter } from "../../_components/data";
+import { mutate, label, date, type Matter, type Task } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import {
   BusyForm,
@@ -48,6 +48,7 @@ export function TransactionChecklistPanel({
   act,
   draft,
   standaloneDates,
+  includeTask,
 }: {
   matter: Matter;
   id: string;
@@ -55,6 +56,7 @@ export function TransactionChecklistPanel({
   act: TransactionAction;
   draft: ReturnType<typeof useChecklistDraft>;
   standaloneDates?: ReactNode;
+  includeTask?: (task: Task) => boolean;
 }) {
   if (hasVersionedChecklist(m))
     return <CanonicalChecklistPanel matter={m} busy={!!busy} act={act} />;
@@ -73,7 +75,9 @@ export function TransactionChecklistPanel({
     setTaskAppointmentValue,
   } = draft;
   const tasks = m.tasks || [];
-  const sharedTasks = tasks.filter((t) => t.visibility !== "coordinator");
+  const sharedTasks = tasks.filter(
+    (t) => t.visibility !== "coordinator" && (includeTask?.(t) ?? true),
+  );
   async function moveTask(taskId: string, targetId: string) {
     const taskIds = tasks.map((t) => t.id);
     const from = taskIds.indexOf(taskId),

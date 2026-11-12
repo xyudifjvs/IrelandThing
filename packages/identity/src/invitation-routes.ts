@@ -11,7 +11,12 @@ import { hashPassword } from "better-auth/crypto";
 import { randomBytes, createHash } from "node:crypto";
 import { rateLimit } from "express-rate-limit";
 import { requireMatter } from "@weatherly/matters";
-import { lockRosterEmail, normalizeRosterEmail } from "./roster-registry";
+import {
+  lockRosterEmail,
+  matchingRosterInvitations,
+  newestRosterInvitations,
+  normalizeRosterEmail,
+} from "./roster-registry";
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -88,17 +93,26 @@ export function registerInvitationRoutes(
         const invitedUser = await tx.user.findUnique({
           where: { email: data.email },
         });
-        const prior = roster
-          ? await tx.invitation.findFirst({
-              where: {
-                rosterAgentId: roster.id,
-                role: "agent",
-                email: { equals: data.email, mode: "insensitive" },
-                acceptedAt: null,
-              },
-              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            })
-          : null;
+        const priorInvitations = roster
+          ? matchingRosterInvitations(
+              await tx.invitation.findMany({
+                where: {
+                  role: "agent",
+                  email: { equals: data.email, mode: "insensitive" },
+                  acceptedAt: null,
+                },
+                orderBy: newestRosterInvitations,
+                select: {
+                  id: true,
+                  email: true,
+                  rosterAgentId: true,
+                  matterId: true,
+                },
+              }),
+              roster,
+            )
+          : [];
+        const [prior] = priorInvitations;
         let approvedAgreementId: string | undefined;
         let approvalOverrideReason = data.approvalOverrideReason;
         if (data.role === "agent" && roster?.business !== "hto") {
@@ -132,15 +146,30 @@ export function registerInvitationRoutes(
             );
         }
 
+        if (
+          prior &&
+          data.matterId !== undefined &&
+          data.matterId !== prior.matterId
+        )
+          throw new HttpError(
+            422,
+            "INVITATION_SCOPE_MISMATCH",
+            "Use the selected invitation’s original file.",
+          );
         const now = new Date();
-        const matterId = data.matterId ?? prior?.matterId ?? undefined;
+        const matterId = prior?.matterId ?? data.matterId;
         if (matterId && !data.matterId)
           await requireMatter(actor, matterId, true, tx);
-        if (roster) {
+        if (roster && prior) {
+          // Legacy invitations for other files still carry their own authorization.
+          const replaced = priorInvitations.filter(
+            (invitation) =>
+              invitation.rosterAgentId === roster.id ||
+              invitation.matterId === prior.matterId,
+          );
           await tx.invitation.updateMany({
             where: {
-              rosterAgentId: roster.id,
-              email: { equals: data.email, mode: "insensitive" },
+              id: { in: replaced.map(({ id }) => id) },
               acceptedAt: null,
               expiresAt: { gt: now },
             },

@@ -4,6 +4,24 @@ export function normalizeRosterEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+export const newestRosterInvitations = [
+  { createdAt: "desc" },
+  { id: "desc" },
+] satisfies Prisma.InvitationOrderByWithRelationInput[];
+
+export function matchingRosterInvitations<
+  T extends { email: string; rosterAgentId: string | null },
+>(invitations: readonly T[], roster: { id: string; email: string | null }) {
+  if (!roster.email) return [];
+  const email = normalizeRosterEmail(roster.email);
+  return invitations.filter(
+    (invitation) =>
+      (invitation.rosterAgentId === null ||
+        invitation.rosterAgentId === roster.id) &&
+      normalizeRosterEmail(invitation.email) === email,
+  );
+}
+
 /** The email key serializes lead capture, roster enrollment and invite acceptance. */
 export async function lockRosterEmail(
   tx: Prisma.TransactionClient,

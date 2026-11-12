@@ -1,5 +1,9 @@
 import { prisma, type Prisma } from "@weatherly/db";
-import { normalizeRosterEmail } from "@weatherly/identity/roster";
+import {
+  matchingRosterInvitations,
+  newestRosterInvitations,
+  normalizeRosterEmail,
+} from "@weatherly/identity/roster";
 import {
   assertCoordinator,
   HttpError,
@@ -142,7 +146,7 @@ async function loadRoster(
         acceptedAt: true,
         createdAt: true,
       },
-      orderBy: [...byNewest],
+      orderBy: newestRosterInvitations,
     }),
     selected
       ? []
@@ -276,7 +280,14 @@ async function loadRoster(
       );
       const inquiryHistory = inquiries.filter(matches);
       const booking = bookings.find(matches) ?? null;
-      const invitation = invitations.find(matches) ?? null;
+      const recipientInvitations = matchingRosterInvitations(
+        invitations,
+        candidate,
+      );
+      const pendingInvitation = recipientInvitations.find(
+        (record) => !record.acceptedAt,
+      );
+      const invitation = pendingInvitation ?? recipientInvitations.at(0) ?? null;
       const sentRecord = attachedAgreements.find(
         (record) => record.status === "sent",
       );
@@ -306,12 +317,15 @@ async function loadRoster(
         phase = "access_revoked";
       } else if (authorized) {
         phase = "active";
-        phaseOn = civilDay(invitation?.acceptedAt ?? account.createdAt);
+        const accepted = recipientInvitations.find(
+          (record) => record.acceptedAt,
+        );
+        phaseOn = civilDay(accepted?.acceptedAt ?? account.createdAt);
       } else if (candidate.business === "hto") {
         phase = "team_member";
-      } else if (invitation && !invitation.acceptedAt) {
+      } else if (pendingInvitation) {
         phase = "invited";
-        phaseOn = civilDay(invitation.createdAt);
+        phaseOn = civilDay(pendingInvitation.createdAt);
       } else if (signed.length) {
         phase = "agreement_signed";
         phaseOn = signed[0].signedOn ?? civilDay(signed[0].createdAt);

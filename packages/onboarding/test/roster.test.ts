@@ -53,6 +53,16 @@ beforeAll(async () => {
       name: owner.name,
       email: owner.email,
       role: owner.role,
+      emailVerified: true,
+    },
+  });
+  await prisma.account.create({
+    data: {
+      id: randomUUID(),
+      accountId: owner.id,
+      userId: owner.id,
+      providerId: "credential",
+      password: await hashPassword(password),
     },
   });
   coordinator.use(express.json());
@@ -537,79 +547,166 @@ it("materializes and invites a signed-agreement-only legacy signup without chang
   ).toBe(user.id);
 });
 
-it("imports an unaccepted invite-only signup and preserves its recorded approval on resend", async () => {
-  const recipient = email("invite-only");
-  const [original, other] = await Promise.all(
-    ["Original synthetic invite file", "Other synthetic file"].map((title) =>
-      prisma.matter.create({
-        data: {
-          title,
-          propertyAddress: "Synthetic Only",
-          packageCode: "essentials",
-          side: "buyer",
-        },
-      }),
-    ),
-  );
-  rows.fileIds.push(original.id, other.id);
-  const approvalOverrideReason =
-    "Synthetic approval previously recorded by the coordinator";
-  const first = await request(coordinator)
-    .post("/identity/invitations")
-    .send({
+it.each(["import", "website inquiry"])(
+  "preserves recorded invitation approval when resending after %s",
+  async (source) => {
+    const fromInquiry = source === "website inquiry";
+    const recipient = email(fromInquiry ? "invite-inquiry" : "invite-import");
+    const otherRecipient = email(
+      fromInquiry ? "other-inquiry" : "other-import",
+    );
+    const session = await request(authenticated)
+      .post("/api/auth/sign-in/email")
+      .send({ email: owner.email, password })
+      .expect(200);
+    const cookie = session.headers["set-cookie"];
+    expect(cookie).toBeDefined();
+    const invite = (body: Record<string, unknown>) =>
+      request(authenticated)
+        .post("/api/v1/invitations")
+        .set("Cookie", cookie)
+        .send(body);
+    const [original, other] = await Promise.all(
+      ["Original synthetic invite file", "Other synthetic file"].map((title) =>
+        prisma.matter.create({
+          data: {
+            title,
+            propertyAddress: "Synthetic Only",
+            packageCode: "essentials",
+            side: "buyer",
+          },
+        }),
+      ),
+    );
+    rows.fileIds.push(original.id, other.id);
+    const approvalOverrideReason =
+      "Synthetic approval previously recorded by the coordinator";
+    const first = await invite({
       email: recipient,
       role: "agent",
       approvalOverrideReason,
       matterId: original.id,
-    })
-    .expect(201);
-  const roster = await request(coordinator)
-    .get("/onboarding/roster")
-    .expect(200);
-  const entry = roster.body.find(
-    (row: { email: string }) => row.email === recipient,
-  );
-  expect(entry).toMatchObject({
-    phase: "invited",
-    canArchive: false,
-    source: { kind: "invitation", id: first.body.id },
-  });
-  const imported = await request(coordinator)
-    .post("/onboarding/roster/import")
-    .send(entry.source)
-    .expect(200);
-  await request(coordinator)
-    .post("/identity/invitations")
-    .send({
+    }).expect(201);
+    const client = await invite({
       email: recipient,
-      role: "agent",
-      rosterAgentId: imported.body.id,
+      role: "client",
       matterId: other.id,
-    })
-    .expect(422);
-  const second = await request(coordinator)
-    .post("/identity/invitations")
-    .send({ email: recipient, role: "agent", rosterAgentId: imported.body.id })
-    .expect(201);
-  expect(second.body.id).not.toBe(first.body.id);
-  const old = await prisma.invitation.findUniqueOrThrow({
-    where: { id: first.body.id },
-  });
-  expect(old.rosterAgentId).toBe(imported.body.id);
-  expect(old.expiresAt.getTime()).toBeLessThanOrEqual(Date.now());
-  const approval = await prisma.auditEvent.findFirstOrThrow({
-    where: {
-      entityType: "Invitation",
-      entityId: second.body.id,
-      action: "invitation.created",
-    },
-  });
-  expect(approval.details).toMatchObject({
-    approvalOverrideReason,
-    priorInvitationId: first.body.id,
-  });
-  const resent = await prisma.invitation.findUniqueOrThrow({
-    where: { id: second.body.id },
-  });
-  expect(resent.matterId).toBe(original.id);
-});
+    }).expect(201);
+    if (fromInquiry) {
+      await prisma.invitation.update({
+        where: { id: first.body.id },
+        data: { email: recipient.toUpperCase() },
+      });
+      await createInquiry({
+        name: "Synthetic Invite Recipient",
+        email: recipient,
+        kind: "contact",
+        payload: {},
+      });
+    }
+    const roster = await request(authenticated)
+      .get("/api/v1/onboarding/roster")
+      .set("Cookie", cookie)
+      .expect(200);
+    const entry = roster.body.find(
+      (row: { email: string }) => row.email === recipient,
+    );
+    expect(entry).toMatchObject({
+      phase: "invited",
+      canArchive: false,
+      invitation: { id: first.body.id },
+      source: fromInquiry ? null : { kind: "invitation", id: first.body.id },
+    });
+    const rosterAgentId = fromInquiry
+      ? entry.id
+      : (
+          await request(authenticated)
+            .post("/api/v1/onboarding/roster/import")
+            .set("Cookie", cookie)
+            .send(entry.source)
+            .expect(200)
+        ).body.id;
+    const otherRoster = await prisma.rosterAgent.create({
+      data: {
+        name: "Different roster recipient",
+        email: otherRecipient,
+        normalizedEmail: otherRecipient,
+      },
+    });
+    const misdirectedInvites = await Promise.all(
+      [
+        { email: recipient, rosterAgentId: otherRoster.id },
+        { email: otherRecipient, rosterAgentId },
+      ].map((target) =>
+        prisma.invitation.create({
+          data: {
+            ...target,
+            role: "agent",
+            matterId: other.id,
+            tokenHash: randomUUID(),
+            expiresAt: new Date(Date.now() + 3600000),
+            invitedById: owner.id,
+          },
+        }),
+      ),
+    );
+    const detail = await request(authenticated)
+      .get(`/api/v1/onboarding/roster/${rosterAgentId}`)
+      .set("Cookie", cookie)
+      .expect(200);
+    expect(detail.body.invitation.id).toBe(first.body.id);
+
+    const resend = { email: recipient, role: "agent", rosterAgentId };
+    await invite({ ...resend, matterId: other.id }).expect(422);
+    await invite({ ...resend, email: otherRoster.email }).expect(422);
+    await invite({ ...resend, role: "client" }).expect(422);
+    const second = await invite(resend).expect(201);
+    expect(second.body.id).not.toBe(first.body.id);
+    const old = await prisma.invitation.findUniqueOrThrow({
+      where: { id: first.body.id },
+    });
+    expect(old.rosterAgentId).toBe(fromInquiry ? null : rosterAgentId);
+    expect(old.expiresAt.getTime()).toBeLessThanOrEqual(Date.now());
+    const unrelatedActive = await prisma.invitation.count({
+      where: {
+        id: { in: [client.body.id, ...misdirectedInvites.map(({ id }) => id)] },
+        expiresAt: { gt: new Date() },
+      },
+    });
+    expect(unrelatedActive).toBe(3);
+    const approval = await prisma.auditEvent.findFirstOrThrow({
+      where: {
+        entityType: "Invitation",
+        entityId: second.body.id,
+        action: "invitation.created",
+      },
+    });
+    expect(approval.details).toMatchObject({
+      approvalOverrideReason,
+      priorInvitationId: first.body.id,
+    });
+    const resent = await prisma.invitation.findUniqueOrThrow({
+      where: { id: second.body.id },
+    });
+    expect(resent).toMatchObject({ matterId: original.id, rosterAgentId });
+
+    const register = (token: string) =>
+      request(authenticated)
+        .post("/api/v1/invitations/register")
+        .send({ token, name: "Synthetic Invite Recipient", password });
+    if (fromInquiry) {
+      await register(first.body.acceptanceToken).expect(400);
+      await register(second.body.acceptanceToken).expect(201);
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email: recipient },
+      });
+      expect(await getAgentMembership(user.id)).toMatchObject({
+        rosterAgentId,
+      });
+      const files = await prisma.matterParticipant.findMany({
+        where: { userId: user.id },
+      });
+      expect(files.map(({ matterId }) => matterId)).toEqual([original.id]);
+    }
+  },
+);

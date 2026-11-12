@@ -19,6 +19,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx packages/db/src/seed.ts",
+    "db:seed-email-templates": "tsx packages/db/src/seed-email-templates.ts",
     "db:bootstrap": "tsx packages/db/src/bootstrap.ts"
   },
   "dependencies": {

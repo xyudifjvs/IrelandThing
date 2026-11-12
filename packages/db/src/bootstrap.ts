@@ -2,6 +2,7 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { z } from "zod";
+import { seedPlaceholderEmailTemplates } from "@weatherly/communications";
 import { prisma } from "./index";
 import { approvedCatalog } from "../../billing/src/contracts";
 
@@ -66,6 +67,7 @@ await prisma.$transaction(async (tx) => {
       create: { ...item },
       update: {},
     });
+  await seedPlaceholderEmailTemplates(tx);
   await tx.auditEvent.create({
     data: {
       actorId: id,

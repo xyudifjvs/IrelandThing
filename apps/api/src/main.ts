@@ -36,6 +36,7 @@ import {
   listMessages,
   connectionStatus,
   sendSystemEmail,
+  queueAgentInvitation,
   refreshTemplateDrafts,
 } from "@weatherly/communications";
 import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
@@ -47,19 +48,17 @@ import {
   createIdentityRouter,
 } from "@weatherly/identity";
 import {
-  createMattersRouter,
   createPublicChecklistRouter,
   checklistPrivacyHeaders,
   registerMatterChangeHook,
 } from "@weatherly/matters";
 import { createDotloopRouter, dotloopConfigured } from "@weatherly/dotloop";
 import { createDocumentsRouter, createObjectStore } from "@weatherly/documents";
-import { createIntakeRouter } from "@weatherly/intake";
 import { createOnboardingRouter, calendlyWebhook } from "@weatherly/onboarding";
 import { createContactsRouter } from "../../../packages/contacts/src/index";
 import { createPrivateNotesRouter } from "../../../packages/matters/src/private-notes/router";
 import { syncHtoClosing } from "../../../packages/matters/src/hto-operations";
-import { mountCreationAndOperations } from "./handoff";
+import { mountFileWorkspace } from "./handoff";
 const app = express();
 configureNetworkBoundary(app);
 app.disable("x-powered-by");
@@ -159,14 +158,11 @@ app.use(
   requestLimiter("assistant", 10, { authenticatedOnly: true }),
 );
 app.use("/api/v1/operations", createOperationsRouter());
-app.use("/api/v1", createIdentityRouter(auth));
-app.use("/api/v1/matters", createMattersRouter());
+app.use("/api/v1", createIdentityRouter(auth, { queueAgentInvitation }));
 app.use("/api/v1/contacts", createContactsRouter());
 app.use("/api/v1/documents", createDocumentsRouter(documents));
 app.use("/api/v1/private-notes", createPrivateNotesRouter());
-app.use("/api/v1/intakes", createIntakeRouter());
-app.use("/api/v1/intake", createIntakeRouter());
-mountCreationAndOperations(app);
+mountFileWorkspace(app);
 app.use("/api/v1/onboarding", createOnboardingRouter());
 app.use("/api/v1/billing", createBillingRouter());
 app.use("/api/v1/ai", createAIRouter());

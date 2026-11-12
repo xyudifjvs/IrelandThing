@@ -10,14 +10,13 @@ export const workspaceNavigation: readonly WorkspaceNavigationGroup[] = [
     links: [
       { href: "/workspace", label: "Overview" },
       { href: "/workspace/transactions", label: "Transactions" },
-      { href: "/workspace/intakes", label: "Submitted intakes" },
-      { href: "/workspace/onboarding", label: "Onboarding" },
       { href: "/workspace/calendar", label: "Calendar" },
+      { href: "/workspace/notes", label: "Notes" },
       { href: "/workspace/inbox", label: "Inbox" },
       { href: "/workspace/contacts", label: "Contacts" },
       { href: "/workspace/payments", label: "Payments" },
-      { href: "/workspace/review", label: "AI review" },
-      { href: "/workspace/new", label: "Start manually" },
+      { href: "/workspace/roster", label: "Agent roster" },
+      { href: "/workspace/hto-operations", label: "HTO Operations" },
     ],
   },
 ];

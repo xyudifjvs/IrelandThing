@@ -24,5 +24,5 @@ export function NotesHistoryBoundary({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return visible ? children : <p role="status">Opening your notes…</p>;
+  return visible ? children : <p role="status">Opening your workspace…</p>;
 }

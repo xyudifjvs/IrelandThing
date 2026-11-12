@@ -33,6 +33,7 @@ import {
   sourcesStillCurrent,
 } from "./private-reminder/deadline-collection";
 import { renderDigest } from "./private-reminder/content";
+import { intakeDatabaseClock } from "../../intake/src/receipt-clock";
 export {
   reminderLocalClock,
   reminderScheduleDue,
@@ -179,6 +180,9 @@ type Dependencies = {
 export function createPrivateReminderService(dependencies: Dependencies = {}) {
   const env = dependencies.env || (() => process.env);
   const now = dependencies.now || (() => new Date());
+  // Production cutoff and receipt timestamps come from the same database clock.
+  const scheduleClock = async () =>
+    dependencies.now ? now() : intakeDatabaseClock(prisma);
   const send = dependencies.fetch || fetch;
   const readMatters = dependencies.listMatters || listMatters;
   const approvedEmail =
@@ -305,10 +309,13 @@ export function createPrivateReminderService(dependencies: Dependencies = {}) {
   }
   const jobKey = (input: Pick<Payload, "recipientUserId" | "dateKey">) =>
     `private-reminder:${input.recipientUserId}:${input.dateKey}`;
-  async function enqueueScheduled(at = now()) {
+  async function enqueueScheduled(at?: Date) {
     const ready = await readiness();
     if (!ready.ready) return { enqueued: false, reason: "NOT_DELIVERING" };
-    const clock = reminderScheduleDue(ready.settings, at);
+    const clock = reminderScheduleDue(
+      ready.settings,
+      at ?? (await scheduleClock()),
+    );
     if (!clock.due) return { enqueued: false, reason: "NOT_DUE" };
     const payload: Payload = {
       recipientUserId: ready.user.id,
@@ -389,10 +396,11 @@ export function createPrivateReminderService(dependencies: Dependencies = {}) {
         input.settingsFingerprint !== current.fingerprint
       )
         return { skipped: "SETTINGS_CHANGED" } as const;
-      const clock = reminderScheduleDue(current.settings, now());
+      const at = await scheduleClock();
+      const clock = reminderScheduleDue(current.settings, at);
       if (!dispatch && (!clock.due || clock.dateKey !== input.dateKey))
         return { skipped: "STALE_SCHEDULE" } as const;
-      return { current } as const;
+      return { current, at } as const;
     };
     let check = await eligible();
     if ("skipped" in check) {
@@ -409,10 +417,14 @@ export function createPrivateReminderService(dependencies: Dependencies = {}) {
       request = openDigestRequest(dispatch.request, check.current.apiKey, key);
     } else {
       const collectCurrent = () =>
-        collect(asActor(check.current!.user), {
-          timeZone: check.current!.settings.timeZone,
-          leadDays: check.current!.settings.leadDays,
-        });
+        collect(
+          asActor(check.current!.user),
+          {
+            timeZone: check.current!.settings.timeZone,
+            leadDays: check.current!.settings.leadDays,
+          },
+          check.at,
+        );
       let prepared = await collectCurrent();
       const intakes = window ? await listDigestIntakes(window) : [];
       for (let attempt = 0; ; attempt++) {

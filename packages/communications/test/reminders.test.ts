@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@weatherly/db";
 import { listMatters, updateTask } from "@weatherly/matters";
 import { HttpError, type Principal } from "@weatherly/platform";
+import { intakeReceiptTime } from "../../intake/src/receipt-clock";
 import {
   createPrivateReminderService,
   reminderLocalClock,
@@ -576,6 +577,86 @@ describe("private Ireland-only reminder digests", () => {
         (request!.headers as Record<string, string>)["Idempotency-Key"],
     );
     expect(keys[0]).toBe(keys[1]);
+  });
+
+  it("includes a pre-cutoff receipt that commits after the digest begins exactly once", async () => {
+    const f = fixture({ date: "2027-03-15T12:01:00Z" });
+    const id = "cross-cutoff-" + run;
+    let markInserted!: () => void;
+    let releaseWriter!: () => void;
+    const inserted = new Promise<void>((resolve) => {
+      markInserted = resolve;
+    });
+    const canCommit = new Promise<void>((resolve) => {
+      releaseWriter = resolve;
+    });
+    const writer = prisma.$transaction(async (tx) => {
+      const [{ started }] = await tx.$queryRaw<
+        { started: Date }[]
+      >`SELECT transaction_timestamp() AS started`;
+      await tx.$executeRaw`SELECT pg_sleep(0.020)`;
+      const stamped = await intakeReceiptTime(tx);
+      // Verify the writer's shared seam samples the DB wall clock rather than
+      // its transaction timestamp. Use a synthetic cutoff date for this fixture.
+      expect(stamped.getTime()).toBeGreaterThan(started.getTime() + 10);
+      await tx.intakeSubmission.create({
+        data: {
+          id,
+          draftId: id,
+          idempotencyKey: id,
+          userId: ownerId,
+          matterId: id,
+          snapshot: { propertyAddress: "Across the cutoff", side: "buyer" },
+          createdAt: new Date("2027-03-15T11:59:59.999Z"),
+        },
+      });
+      markInserted();
+      await canCommit;
+    });
+
+    try {
+      await Promise.race([writer, inserted]);
+      await f.service.enqueueScheduled();
+      const { payload } = await queued();
+      const delivery = f.service.handleDigest(payload).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      );
+      try {
+        await expect
+          .poll(async () => {
+            const [{ blocked }] = await prisma.$queryRaw<
+              { blocked: boolean }[]
+            >`
+            SELECT EXISTS (
+              SELECT 1 FROM pg_locks WHERE locktype = 'advisory'
+              AND mode = 'ExclusiveLock' AND NOT granted
+              AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+            ) AS blocked
+          `;
+            return blocked;
+          })
+          .toBe(true);
+        expect(f.send).not.toHaveBeenCalled();
+      } finally {
+        releaseWriter();
+        await writer;
+        expect(await delivery).toEqual({ value: { providerAccepted: true } });
+      }
+      expect(JSON.parse(String(f.send.mock.calls[0][1]!.body)).text).toContain(
+        "Across the cutoff",
+      );
+      f.setClock("2027-03-16T12:01:00Z");
+      await f.service.enqueueScheduled();
+      expect(await f.service.handleDigest((await queued()).payload)).toEqual({
+        skipped: "NO_DUE_ITEMS",
+      });
+      expect(f.send).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseWriter();
+      await writer;
+      await prisma.intakeSubmission.deleteMany({ where: { id } });
+    }
   });
 
   it("freezes the Monday intake window over DST, includes processed intakes, and replays the same request", async () => {

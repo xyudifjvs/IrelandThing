@@ -31,11 +31,9 @@ async function portfolioEvents(actor: Principal, history: boolean) {
       return tx.matter.findMany({
         where: {
           id: { notIn: pending.map((row) => row.matterId) },
-          stage: {
-            in: history
-              ? [...activePortfolioStages, "closed"]
-              : activePortfolioStages,
-          },
+          stage: history
+            ? { not: "pending_review" }
+            : { in: activePortfolioStages },
         },
         include: milestoneInclude,
       });

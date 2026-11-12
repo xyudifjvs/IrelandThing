@@ -28,6 +28,7 @@ let target: string;
 let legacy: string;
 let intake: string;
 let rosterId: string;
+const historical: string[] = [];
 const work: PortfolioDependencies = {
   listEmailWork: async (_actor, query) => [
     {
@@ -149,10 +150,26 @@ beforeAll(async () => {
         business: "hto" as const,
         agentRosterId: rosterId,
       })),
-      { ...base, stage: "terminated" },
       { ...base, stage: "pre_listing" },
     ],
   });
+  for (const stage of ["terminated", "archived"]) {
+    const matter = await prisma.matter.create({
+      data: {
+        ...base,
+        stage,
+        checklistVersion: 1,
+        tasks: {
+          create: {
+            stepKey: "closing",
+            title: stage + " Closing",
+            dueDate: "2027-01-08",
+          },
+        },
+      },
+    });
+    historical.push(matter.id);
+  }
   const pending = await prisma.matter.create({
     data: { ...base, stage: "pending_review" },
   });
@@ -252,7 +269,7 @@ it("counts a combined search before pagination and identifies the serving agent 
   ]);
 });
 
-it("uses canonical active dates for Due this week and preserves completed appointments on the range calendar", async () => {
+it("uses active dates for Due this week and preserves terminal history on the range calendar", async () => {
   const due = await listPortfolioDue(
     owner,
     work,
@@ -264,10 +281,18 @@ it("uses canonical active dates for Due this week and preserves completed appoin
       .map(({ label }) => label),
   ).toEqual(["Inspections", "Closing prep", "Closing", "Closing appointment"]);
   expect(due.items.some((item) => item.matterId === legacy)).toBe(false);
+  expect(due.items.some((item) => historical.includes(item.matterId))).toBe(
+    false,
+  );
   const calendar = await listPortfolioCalendar(owner, {
     from: "2027-01-01",
     through: "2027-01-10",
   });
+  expect(
+    calendar
+      .filter((item) => historical.includes(item.matterId))
+      .map((item) => item.label),
+  ).toEqual(["archived Closing", "terminated Closing"]);
   expect(
     calendar
       .filter((item) => item.matterId === target)

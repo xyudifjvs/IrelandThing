@@ -7,6 +7,7 @@ import { audit, revision, requireMatter } from "@weatherly/matters";
 import { referenceDocumentIds, referenceFollowups } from "./reference";
 import { intakePayload, assertSubmissionReady } from "./validation";
 import { currentSubmitter } from "./submitter";
+import { intakeReceiptTime } from "./receipt-clock";
 
 export async function draftFor(
   actor: Principal,
@@ -362,6 +363,7 @@ export async function submitIntake(
         })),
       });
       // Ireland confirms the saved intake before the matter workflow becomes active.
+      const createdAt = await intakeReceiptTime(tx);
       const submission = await tx.intakeSubmission.create({
         data: {
           draftId: id,
@@ -369,6 +371,7 @@ export async function submitIntake(
           userId: draft.userId,
           matterId: matter.id,
           business,
+          createdAt,
           snapshot: snapshot as Prisma.InputJsonValue,
         },
       });

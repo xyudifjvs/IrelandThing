@@ -7,6 +7,7 @@ import {
 import { prisma, type Prisma } from "@weatherly/db";
 import { jsonObject } from "../../../intake/src/snapshot";
 import { projectSubmitter } from "../../../intake/src/submitter";
+import { lockIntakeReceiptWindow } from "../../../intake/src/receipt-clock";
 
 const stream = "private-reminder";
 const cursorWhere = (recipientId: string) => ({
@@ -147,9 +148,12 @@ export async function finalizeDigestWindow(
 }
 
 export async function listDigestIntakes(window: { start: Date; end: Date }) {
-  return prisma.$transaction(
+  const rows = await prisma.$transaction(
     async (tx) => {
-      const rows = await tx.intakeSubmission.findMany({
+      await lockIntakeReceiptWindow(tx);
+      // This statement must take its snapshot after the exclusive lock has
+      // waited for intake writers, including those crossing the cutoff.
+      return tx.intakeSubmission.findMany({
         where: {
           deletedAt: null,
           createdAt: { gte: window.start, lt: window.end },
@@ -157,23 +161,21 @@ export async function listDigestIntakes(window: { start: Date; end: Date }) {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { snapshot: true, userId: true, createdAt: true },
       });
-      return Promise.all(
-        rows.map(async (row) => {
-          const data = jsonObject(row.snapshot);
-          const { agent } = await projectSubmitter(tx, row);
-          return {
-            agent: agent?.name ?? "",
-            createdAt: row.createdAt,
-            property:
-              typeof data.propertyAddress === "string"
-                ? data.propertyAddress
-                : "",
-            side: typeof data.side === "string" ? data.side : "",
-          };
-        }),
-      );
     },
-    { isolationLevel: "RepeatableRead" },
+    { isolationLevel: "ReadCommitted" },
+  );
+  return Promise.all(
+    rows.map(async (row) => {
+      const data = jsonObject(row.snapshot);
+      const { agent } = await projectSubmitter(prisma, row);
+      return {
+        agent: agent?.name ?? "",
+        createdAt: row.createdAt,
+        property:
+          typeof data.propertyAddress === "string" ? data.propertyAddress : "",
+        side: typeof data.side === "string" ? data.side : "",
+      };
+    }),
   );
 }
 

@@ -304,7 +304,13 @@ function FileWorkspace({ id, actorId }: { id: string; actorId: string }) {
                 </div>
               ))}
             </div>
-            <FileSidebar file={file} readOnly={!active} refresh={refresh} />
+            <FileSidebar
+              file={file}
+              readOnly={!active}
+              busy={!!busy}
+              act={act}
+              refresh={refresh}
+            />
           </div>
         </>
       )}

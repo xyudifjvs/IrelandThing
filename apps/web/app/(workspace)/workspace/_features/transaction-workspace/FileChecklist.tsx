@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { date } from "../../_components/data";
+import { parseDate } from "../../_components/data";
 import type { TransactionAction } from "../../_components/transaction-controls";
 import s from "../../_components/workspace.module.css";
 import { CanonicalChecklistPanel } from "../checklist/CanonicalChecklistPanel";
@@ -13,6 +13,7 @@ import {
 } from "../checklist/TransactionChecklistPanel";
 import { ChecklistEmailPrompt } from "../emails/ChecklistEmailPrompt";
 import { FileActions } from "./FileActions";
+import { SavedTask } from "./SavedTask";
 import type { TransactionFile } from "./file-model";
 import styles from "./file-workspace.module.css";
 
@@ -35,6 +36,26 @@ export function FileChecklist({
 }) {
   const legacyDraft = useChecklistDraft();
   const [prompt, setPrompt] = useState<{ stepKey: string; attempt: number }>();
+  const standaloneDates = (file.deadlines ?? []).flatMap(
+    ({ id, label, status, date, linkedToTask }) =>
+      status === "confirmed" && date && !linkedToTask ? [{ id, label, date }] : [],
+  );
+  const dateRows = standaloneDates.length ? (
+    <ul className={styles.readOnlyChecklist} aria-label="Other confirmed dates">
+      {standaloneDates.map(({ id, label, date }) => (
+        <li key={id}>
+          <strong>{label}</strong>
+          <time dateTime={date}>
+            {parseDate(date).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </time>
+        </li>
+      ))}
+    </ul>
+  ) : null;
   return (
     <>
       {hasVersionedChecklist(file) ? (
@@ -70,17 +91,10 @@ export function FileChecklist({
               {(file.tasks ?? [])
                 .filter(({ visibility }) => visibility !== "coordinator")
                 .map((task) => (
-                  <li key={task.id}>
-                    <strong>{task.title}</strong>
-                    {task.status === "not_applicable" && (
-                      <span>Not needed</span>
-                    )}
-                    {isComplete(task) && <span>Complete</span>}
-                    {task.dueDate && <span>{date(task.dueDate)}</span>}
-                    {task.note && <p>{task.note}</p>}
-                  </li>
+                  <SavedTask key={task.id} task={task} />
                 ))}
             </ul>
+            {dateRows}
           </div>
         </section>
       ) : (
@@ -90,6 +104,7 @@ export function FileChecklist({
           busy={busy}
           act={act}
           draft={legacyDraft}
+          standaloneDates={dateRows}
         />
       )}
       <FileActions

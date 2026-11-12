@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Plus } from "lucide-react";
 import ChecklistTask from "../../../../_components/ChecklistTask";
 import cs from "../../../../_components/checklist.module.css";
@@ -47,12 +47,14 @@ export function TransactionChecklistPanel({
   busy,
   act,
   draft,
+  standaloneDates,
 }: {
   matter: Matter;
   id: string;
   busy: string;
   act: TransactionAction;
   draft: ReturnType<typeof useChecklistDraft>;
+  standaloneDates?: ReactNode;
 }) {
   if (hasVersionedChecklist(m))
     return <CanonicalChecklistPanel matter={m} busy={!!busy} act={act} />;
@@ -112,11 +114,12 @@ export function TransactionChecklistPanel({
               }
             />
           ))
-        ) : (
+        ) : !standaloneDates && (
           <div className={s.empty}>
             No checklist steps yet. Add the first step below.
           </div>
         )}
+        {standaloneDates}
         <BusyForm
           busy={!!busy}
           className={cs.addForm}

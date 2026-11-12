@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { LockKeyhole } from "lucide-react";
 import { useLiveData } from "../../../../_components/useLiveData";
@@ -23,10 +23,12 @@ export function PrivateTodoPanel({
   matterId,
   overview = false,
   allowAdding = true,
+  existingItems,
 }: {
   matterId?: string;
   overview?: boolean;
   allowAdding?: boolean;
+  existingItems?: ReactNode;
 }) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -137,7 +139,7 @@ export function PrivateTodoPanel({
           </p>
         )}
         {query.loading && !query.data && <p role="status">Loading notes…</p>}
-        {query.data?.total === 0 && (
+        {query.data?.total === 0 && !existingItems && (
           <p className={s.muted}>No notes or to-dos yet.</p>
         )}
         <ul className={styles.todos}>
@@ -239,6 +241,7 @@ export function PrivateTodoPanel({
             )}
           </div>
         )}
+        {existingItems}
       </div>
     </section>
   );

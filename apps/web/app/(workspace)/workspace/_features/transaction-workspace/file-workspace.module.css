@@ -217,6 +217,20 @@
   margin: 0;
 }
 
+.savedItems {
+  margin-top: 14px;
+  overflow-wrap: anywhere;
+}
+
+.savedItems h3 {
+  margin: 0;
+  font-size: var(--weatherly-type-small);
+}
+
+.savedItems p {
+  white-space: pre-wrap;
+}
+
 .fileActions {
   margin-top: 16px;
 }

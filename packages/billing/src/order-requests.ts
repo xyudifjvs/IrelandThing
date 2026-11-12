@@ -3,7 +3,10 @@ import { prisma, type Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
 import { audit, requireMatter, fileReviewPending } from "@weatherly/matters";
 import { checkoutInput } from "./contracts";
-import { assertServiceCheckoutAllowed } from "./checkout-policy";
+import {
+  assertServiceCheckoutAllowed,
+  replaceableServiceOrderStatuses,
+} from "./checkout-policy";
 import { paymentMode } from "./mode";
 
 const serviceTerms = z.object({
@@ -121,7 +124,7 @@ export async function findOrCreatePaymentOrder(
       where: {
         matterId: matter.id,
         kind: "service",
-        status: { notIn: ["expired", "failed", "refunded", "cancelled"] },
+        status: { notIn: replaceableServiceOrderStatuses },
       },
       orderBy: { createdAt: "desc" },
     });

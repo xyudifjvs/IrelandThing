@@ -22,6 +22,12 @@ export const settledStatuses = [
   "partially_refunded",
   "disputed",
 ];
+export const replaceableServiceOrderStatuses = [
+  "expired",
+  "failed",
+  "refunded",
+  "cancelled",
+];
 
 export function paymentDetails(value: unknown): Prisma.InputJsonObject {
   return value && typeof value === "object" && !Array.isArray(value)

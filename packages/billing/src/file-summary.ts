@@ -8,9 +8,9 @@ import {
 } from "@weatherly/matters";
 import {
   paymentDetails,
+  replaceableServiceOrderStatuses,
   savedPaidAt,
   serviceCheckoutCancellation,
-  settledStatuses,
 } from "./checkout-policy";
 import { savedPaymentEnvironment } from "./mode";
 
@@ -39,12 +39,6 @@ const giftQuote = z.object({
   amountCents: z.number().int().positive(),
   currency: z.literal("USD"),
 });
-const inProgress = new Set([
-  "creating",
-  "pending",
-  "void_pending",
-  "requires_reconciliation",
-]);
 type File = Pick<
   Prisma.MatterGetPayload<object>,
   "id" | "propertyAddress" | "business" | "stage" | "details" | "packageCode"
@@ -66,17 +60,32 @@ type Payment = {
   details: unknown;
   amountCents: number;
   currency: string;
+  stripeSessionId: string | null;
 };
 
-function fromOrder(order: Payment, name: string): FeeSummary {
+function hasUncertainCreation(order: Payment) {
+  return (
+    order.stripeSessionId === null &&
+    paymentDetails(paymentDetails(order.details).terminationVoid)
+      .creationOutcomeUncertain === true
+  );
+}
+
+function fromOrder(
+  order: Payment,
+  name: string,
+  environment: "test" | "live",
+): FeeSummary {
   const savedName = paymentDetails(order.snapshot).name;
-  const known = savedPaymentEnvironment(order.details) !== "unknown";
+  const current =
+    savedPaymentEnvironment(order.details) === environment &&
+    !hasUncertainCreation(order);
   return {
     name: typeof savedName === "string" && savedName.trim() ? savedName : name,
     amountCents: order.amountCents,
     currency: order.currency,
-    status: known ? order.status : "requires_reconciliation",
-    paidAt: known ? savedPaidAt(order.details) : null,
+    status: current ? order.status : "requires_reconciliation",
+    paidAt: current ? savedPaidAt(order.details) : null,
   };
 }
 
@@ -98,6 +107,7 @@ async function summarize(
         details: true,
         amountCents: true,
         currency: true,
+        stripeSessionId: true,
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }),
@@ -111,8 +121,6 @@ async function summarize(
   const environment = process.env.STRIPE_MODE === "live" ? "live" : "test";
   const byMatter = new Map<string, typeof orders>();
   for (const order of orders) {
-    const saved = savedPaymentEnvironment(order.details);
-    if (saved !== environment && saved !== "unknown") continue;
     const group = byMatter.get(order.matterId) ?? [];
     group.push(order);
     byMatter.set(order.matterId, group);
@@ -122,8 +130,11 @@ async function summarize(
     const current = byMatter.get(file.id) ?? [];
     const serviceOrders = current.filter((order) => order.kind === "service");
     const serviceOrder =
-      serviceOrders.find((order) => settledStatuses.includes(order.status)) ??
-      serviceOrders.find((order) => inProgress.has(order.status));
+      serviceOrders.find(hasUncertainCreation) ??
+      serviceOrders.find(
+        ({ status }) => !replaceableServiceOrderStatuses.includes(status),
+      ) ??
+      serviceOrders.find(({ status }) => status === "refunded");
     const terms = serviceSnapshot.safeParse(
       paymentDetails(file.details).serviceSnapshot,
     );
@@ -134,7 +145,11 @@ async function summarize(
     let service: FeeSummary | null = null;
     if (eligibleService && (!obligationsOnly || !serviceOrder)) {
       if (serviceOrder)
-        service = fromOrder(serviceOrder, "Transaction coordination");
+        service = fromOrder(
+          serviceOrder,
+          "Transaction coordination",
+          environment,
+        );
       else if (terms.success && terms.data.code === file.packageCode)
         service = {
           name: terms.data.name,
@@ -155,7 +170,7 @@ async function summarize(
         paymentDetails(giftRequest.selection).approvedQuote,
       );
       gift = giftOrder
-        ? fromOrder(giftOrder, "Closing gift")
+        ? fromOrder(giftOrder, "Closing gift", environment)
         : {
             name: quote.success ? quote.data.description : "Closing gift",
             amountCents: quote.success ? quote.data.amountCents : null,

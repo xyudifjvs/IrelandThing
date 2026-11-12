@@ -195,3 +195,63 @@ it("shows verified paid dates and excludes a represented fee from the obligation
     ),
   ).toEqual([htoId]);
 });
+
+it("uses the current retained Checkout request before refunds and holds uncertain or other-mode orders for review", async () => {
+  await prisma.paymentOrder.update({
+    where: { id: orderId },
+    data: { status: "refunded" },
+  });
+  const replacement = await prisma.paymentOrder.create({
+    data: {
+      matterId: weatherlyId,
+      createdById: owner.id,
+      idempotencyKey: `replacement-${nonce}`,
+      kind: "service",
+      status: "pending",
+      amountCents: 42500,
+      currency: "USD",
+      snapshot: terms,
+      details: { paymentEnvironment: "test" },
+    },
+  });
+  expect(
+    (await accountFileSummary(agent, { matterId: weatherlyId })).service,
+  ).toMatchObject({ status: "pending", paidAt: null });
+  await prisma.paymentOrder.update({
+    where: { id: replacement.id },
+    data: {
+      status: "cancelled",
+      details: {
+        paymentEnvironment: "test",
+        terminationVoid: { creationOutcomeUncertain: true },
+      },
+    },
+  });
+  expect(
+    (await accountFileSummary(agent, { matterId: weatherlyId })).service,
+  ).toMatchObject({ status: "requires_reconciliation", paidAt: null });
+  const otherMode = await prisma.paymentOrder.create({
+    data: {
+      matterId: htoId,
+      createdById: owner.id,
+      idempotencyKey: `other-mode-gift-${nonce}`,
+      kind: "gift",
+      status: "paid",
+      amountCents: 6800,
+      currency: "USD",
+      snapshot: { name: "Synthetic gift" },
+      details: {
+        paymentEnvironment: "live",
+        paidAt: "2026-11-11T12:00:00.000Z",
+      },
+    },
+  });
+  await prisma.giftOrder.update({
+    where: { id: giftOrderId },
+    data: { paymentOrderId: otherMode.id, status: "paid" },
+  });
+  expect(
+    (await accountFileSummary(agent, { matterId: htoId })).gift,
+  ).toMatchObject({ status: "requires_reconciliation", paidAt: null });
+  expect((await listAccountObligations(agent, {})).items).toEqual([]);
+});

@@ -15,6 +15,7 @@ const owner: Principal = {
   sessionId: fixture,
 };
 const fileId = `business-file-${fixture}`;
+const legacyId = `business-legacy-${fixture}`;
 const orderId = `business-order-${fixture}`;
 const terms = {
   code: "essentials",
@@ -76,9 +77,45 @@ beforeAll(async () => {
 afterEach(() => registerMatterChangeHook());
 afterAll(async () => {
   await prisma.paymentOrder.deleteMany({ where: { matterId: fileId } });
-  await prisma.matter.deleteMany({ where: { id: fileId } });
+  await prisma.matter.deleteMany({ where: { id: { in: [fileId, legacyId] } } });
   await prisma.auditEvent.deleteMany({ where: { actorId: owner.id } });
   await prisma.user.deleteMany({ where: { id: owner.id } });
+});
+
+it("preserves a historically agreed price when classifying a legacy file or returning it from HTO", async () => {
+  const historical = {
+    ...terms,
+    priceCents: 39000,
+    capturedAt: "2026-05-01T12:00:00.000Z",
+  };
+  const file = await prisma.matter.create({
+    data: {
+      id: legacyId,
+      title: "Synthetic legacy terms",
+      propertyAddress: "21 Legacy Lane",
+      side: "buyer",
+      packageCode: "essentials",
+      details: { serviceSnapshot: historical },
+    },
+  });
+  const classified = await changeFileBusiness(owner, file.id, {
+    expectedRevision: file.revision,
+    business: essentials,
+  });
+  expect(
+    (await prisma.matter.findUniqueOrThrow({ where: { id: file.id } })).details,
+  ).toMatchObject({ serviceSnapshot: historical });
+  const switched = await changeFileBusiness(owner, file.id, {
+    expectedRevision: classified.revision,
+    business: hto,
+  });
+  await changeFileBusiness(owner, file.id, {
+    expectedRevision: switched.revision,
+    business: essentials,
+  });
+  expect(
+    (await prisma.matter.findUniqueOrThrow({ where: { id: file.id } })).details,
+  ).toMatchObject({ serviceSnapshot: historical });
 });
 
 it("checks the coordinator, revision and pending service terms and rolls back the entire business switch if a hook fails", async () => {

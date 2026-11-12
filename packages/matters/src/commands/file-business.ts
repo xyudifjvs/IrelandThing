@@ -20,12 +20,15 @@ const existingTerms = z.object({
   priceCents: z.number().int().positive(),
   currency: z.literal("USD"),
   revision: z.number().int().positive(),
+  capturedAt: z.iso.datetime().optional(),
 });
 
 async function termsForPackage(
   tx: Prisma.TransactionClient,
   matterId: string,
   packageCode: string,
+  currentTerms: unknown,
+  fromHto: boolean,
 ) {
   // All payment writers take the file lock before deciding which service order is current.
   const orders = await tx.paymentOrder.findMany({
@@ -61,6 +64,7 @@ async function termsForPackage(
         return (
           !terms.success ||
           terms.data.code !== packageCode ||
+          terms.data.priceCents !== order.amountCents ||
           order.amountCents !== saved.data.priceCents ||
           order.currency !== saved.data.currency
         );
@@ -72,6 +76,23 @@ async function termsForPackage(
         "Resolve the current service payment request before changing its approved package.",
       );
     return { ...saved.data, capturedAt: retained.createdAt.toISOString() };
+  }
+  const stored = existingTerms.safeParse(currentTerms);
+  if (stored.success && stored.data.code === packageCode) return stored.data;
+  if (fromHto) {
+    const history = await tx.auditEvent.findFirst({
+      where: {
+        matterId,
+        action: "matter.business_changed",
+        details: { path: ["previousPackageCode"], equals: packageCode },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { details: true },
+    });
+    const prior = existingTerms.safeParse(
+      json.safeParse(history?.details).data?.previousServiceSnapshot,
+    );
+    if (prior.success && prior.data.code === packageCode) return prior.data;
   }
   const catalog = await tx.catalogItem.findUnique({
     where: { code: packageCode },
@@ -120,7 +141,13 @@ export async function changeFileBusiness(
     );
     const terms =
       business.business === "weatherly"
-        ? await termsForPackage(tx, matterId, business.packageCode)
+        ? await termsForPackage(
+            tx,
+            matterId,
+            business.packageCode,
+            priorTerms,
+            matter.business === "hto",
+          )
         : null;
     const next = await tx.matter.update({
       where: { id: matterId },

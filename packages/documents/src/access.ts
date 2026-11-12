@@ -177,6 +177,7 @@ export async function requireUploadMatter(
   );
   if (
     (actor.role === "agent" && (!active || fileReviewPending(matter))) ||
+    ["closed", "terminated", "archived"].includes(matter.stage) ||
     (matter.checklistVersion !== null && !active)
   ) {
     throw new HttpError(

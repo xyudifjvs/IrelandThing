@@ -665,6 +665,10 @@ describe("canonical client checklist sharing", () => {
       const current = await prisma.document.findUniqueOrThrow({
         where: { id: doc.id },
       });
+      const changeCategory = await request(server)
+        .patch(`/documents/${doc.id}`)
+        .send({ expectedRevision: current.revision, category: "contract" });
+      expect(changeCategory.status).toBe(409);
       const withdraw = await request(server)
         .patch(`/documents/${doc.id}`)
         .send({ expectedRevision: current.revision, shareWithClient: false });

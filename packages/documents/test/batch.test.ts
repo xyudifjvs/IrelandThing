@@ -1121,12 +1121,20 @@ describe("independent batch upload backend checks", () => {
     const unsafeLink = await request(server)
       .post("/onboarding/agreements")
       .set("x-review-actor", coordinator.id)
-      .send({ ...input, documentId: unsafeLegacy.id });
+      .send({
+        ...input,
+        agreementRequestId: randomUUID(),
+        documentId: unsafeLegacy.id,
+      });
     expect(unsafeLink.status, unsafeLink.text).toBe(422);
     const unsafeSupport = await request(server)
       .post("/onboarding/agreements")
       .set("x-review-actor", coordinator.id)
-      .send({ ...input, supportingDocumentIds: [unsafeLegacy.id] });
+      .send({
+        ...input,
+        agreementRequestId: randomUUID(),
+        supportingDocumentIds: [unsafeLegacy.id],
+      });
     expect(unsafeSupport.status, unsafeSupport.text).toBe(422);
     const projections = await queryStoredRecords(coordinator, {
       kind: "agreements",

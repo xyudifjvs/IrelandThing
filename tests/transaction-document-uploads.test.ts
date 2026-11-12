@@ -194,7 +194,7 @@ describe("hoisted authenticated transaction upload controller", () => {
     expect(result).toEqual({ id: "durable-upload" });
     const body = api.mock.calls[0][1].body as FormData;
     expect(body.get("matterId")).toBe(context.matterId);
-    expect(body.get("visibility")).toBe("coordinator");
+    expect(body.has("visibility")).toBe(false);
     expect(body.get("uploadRequestId")).toBe("stable-receipt");
     expect((body.get("file") as File).name).toBe("Synthetic contract.pdf");
     queue.hasPending = true;

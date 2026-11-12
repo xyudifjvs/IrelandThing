@@ -213,7 +213,7 @@ describe("real PostgreSQL services and Better Auth", () => {
     });
     const view = await getMatter(client, m.id);
     expect(view).not.toHaveProperty("details");
-    expect(view.notes.map((n) => n.body)).toEqual(["shared timeline update"]);
+    expect(view.notes).toEqual([]);
     expect(
       (await listMatters(client)).find((x) => x.id === m.id),
     ).not.toHaveProperty("details");

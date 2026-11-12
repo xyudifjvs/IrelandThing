@@ -74,10 +74,12 @@ export async function applyStripeEvent(event: Stripe.Event) {
           ? serviceCheckoutCancellation(matter)
           : null);
       const details = paymentDetails(order.details);
+      const previousCancellation = paymentDetails(details.terminationVoid);
       if (
         trigger &&
         !order.stripeSessionId &&
-        !details.checkoutCreationStartedAt
+        !details.checkoutCreationStartedAt &&
+        previousCancellation.creationOutcomeUncertain !== true
       )
         throw new HttpError(
           400,
@@ -91,10 +93,24 @@ export async function applyStripeEvent(event: Stripe.Event) {
         if (session.payment_status === "paid") status = "paid";
         else if (status !== "paid" && (expired || failed))
           status = trigger ? "cancelled" : expired ? "expired" : "failed";
+        else if (
+          !trigger &&
+          ["creating", "requires_reconciliation"].includes(status) &&
+          session.status === "open" &&
+          session.payment_status === "unpaid"
+        )
+          status = "pending";
       }
       const reconciliation = Boolean(
         trigger && session.payment_status === "paid",
       );
+      const resolvedCreation =
+        (previousCancellation.creationOutcomeUncertain === true &&
+          (expired || failed)) ||
+        (!trigger &&
+          !order.stripeSessionId &&
+          Boolean(details.checkoutCreationStartedAt) &&
+          ["pending", "paid", "expired", "failed"].includes(status));
       const saved = await tx.paymentOrder.update({
         where: { id: order.id },
         data: {
@@ -108,14 +124,18 @@ export async function applyStripeEvent(event: Stripe.Event) {
             ...details,
             paymentEnvironment: event.livemode ? "live" : "test",
             lastStripeEvent: event.id,
-            ...(reconciliation ? { requiresReconciliation: true } : {}),
+            ...(reconciliation ||
+            (details.requiresReconciliation === true && resolvedCreation)
+              ? { requiresReconciliation: reconciliation }
+              : {}),
             ...(trigger &&
             (reconciliation ||
               (!settledStatuses.includes(status) && (expired || failed)))
               ? {
                   terminationVoid: {
-                    ...paymentDetails(details.terminationVoid),
+                    ...previousCancellation,
                     trigger,
+                    creationOutcomeUncertain: false,
                     state: reconciliation
                       ? "requires_reconciliation"
                       : expired

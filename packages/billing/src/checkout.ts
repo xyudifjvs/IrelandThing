@@ -8,6 +8,7 @@ import { requireMatter } from "@weatherly/matters";
 import { checkoutInput } from "./contracts";
 import {
   assertServiceCheckoutAllowed,
+  checkoutSessionMatches,
   lockPaymentMatter,
   lockPaymentOrder,
   paymentDetails,
@@ -21,6 +22,11 @@ import {
   assertSavedPaymentEnvironment,
   savedPaymentEnvironment,
 } from "./mode";
+import {
+  issueSavedCheckout,
+  newCheckoutRequest,
+  replayableCheckoutRequest,
+} from "./checkout-request";
 import { findOrCreatePaymentOrder } from "./order-requests";
 import { verifiedStripe } from "./provider";
 import { queuePaymentCancellation } from "./termination";
@@ -30,6 +36,14 @@ function closedPayment() {
     409,
     "PAYMENT_CLOSED",
     "This request changed while checkout was opening. Review the current payment record.",
+  );
+}
+
+function mismatchedPayment() {
+  return new HttpError(
+    409,
+    "PAYMENT_MISMATCH",
+    "The provider checkout does not match this saved payment request.",
   );
 }
 
@@ -95,19 +109,8 @@ export async function createCheckout(
         (payment.kind === "service" && serviceCheckoutCancellation(matter))
       )
         throw closedPayment();
-      if (
-        payment.stripeSessionId !== session.id ||
-        session.metadata?.paymentOrderId !== payment.id ||
-        session.livemode !== (environment === "live") ||
-        session.amount_total !== payment.amountCents ||
-        session.currency?.toUpperCase() !== payment.currency
-      ) {
-        throw new HttpError(
-          409,
-          "PAYMENT_MISMATCH",
-          "The provider checkout does not match this saved payment request.",
-        );
-      }
+      if (!checkoutSessionMatches(session, payment, environment))
+        throw mismatchedPayment();
       return payment;
     });
     return {
@@ -120,7 +123,7 @@ export async function createCheckout(
     };
   }
 
-  await prisma.$transaction(async (tx) => {
+  const request = await prisma.$transaction(async (tx) => {
     const matter = await lockPaymentMatter(tx, order.matterId);
     const current = await lockPaymentOrder(tx, order.id);
     if (
@@ -131,43 +134,41 @@ export async function createCheckout(
     )
       throw closedPayment();
     const details = paymentDetails(current.details);
-    if (!details.checkoutCreationStartedAt) {
-      await tx.paymentOrder.update({
-        where: { id: current.id },
-        data: {
-          details: {
-            ...details,
-            checkoutCreationStartedAt: new Date().toISOString(),
+    if (details.checkoutCreationStartedAt) {
+      const saved = replayableCheckoutRequest(current);
+      if (!saved) {
+        await tx.paymentOrder.update({
+          where: { id: current.id },
+          data: {
+            status: "requires_reconciliation",
+            details: { ...details, requiresReconciliation: true },
           },
-        },
-      });
+        });
+      }
+      return saved;
     }
-  });
-
-  const origin = process.env.WEB_ORIGIN!;
-  const snapshot = order.snapshot as { name: string };
-  const session = await stripe.checkout.sessions.create(
-    {
-      mode: "payment",
-      client_reference_id: order.id,
-      metadata: { paymentOrderId: order.id },
-      payment_intent_data: { metadata: { paymentOrderId: order.id } },
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: order.currency.toLowerCase(),
-            unit_amount: order.amountCents,
-            product_data: { name: `Weatherly ${snapshot.name}` },
-          },
+    const created = newCheckoutRequest(current);
+    await tx.paymentOrder.update({
+      where: { id: current.id },
+      data: {
+        details: {
+          ...details,
+          checkoutCreationStartedAt: new Date().toISOString(),
+          checkoutCreationRequest: created,
         },
-      ],
-      success_url: `${origin}/portal?payment=received`,
-      cancel_url: `${origin}/portal?payment=cancelled`,
-      integration_identifier: "weatherly_service_hqazmwrp",
-    },
-    { idempotencyKey: `checkout:${order.id}` },
-  );
+      },
+    });
+    return created;
+  });
+  if (!request)
+    throw new HttpError(
+      409,
+      "PAYMENT_CREATION_UNCERTAIN",
+      "Reconcile the original checkout before preparing a payment link.",
+    );
+  const session = await issueSavedCheckout(stripe, request);
+  if (!checkoutSessionMatches(session, order, environment))
+    throw mismatchedPayment();
 
   // A file can be terminated, converted or deleted while Stripe creates the
   // session. Persist the ID and enqueue cancellation even after Matter deletion.

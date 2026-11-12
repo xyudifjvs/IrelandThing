@@ -103,6 +103,20 @@ export async function findOrCreatePaymentOrder(
       );
       return result;
     }
+    // Earlier releases could store a dispatched but unverified creation as
+    // cancelled. It still blocks a replacement until Stripe evidence resolves it.
+    const unresolved = await tx.paymentOrder.findFirst({
+      where: {
+        matterId: matter.id,
+        kind: "service",
+        stripeSessionId: null,
+        details: {
+          path: ["terminationVoid", "creationOutcomeUncertain"],
+          equals: true,
+        },
+      },
+    });
+    if (unresolved) return unresolved;
     const existing = await tx.paymentOrder.findFirst({
       where: {
         matterId: matter.id,

@@ -9,7 +9,12 @@ type Payment = {
   amountCents: number;
   currency: string;
   status: string;
-  details?: { refundedCents?: number };
+  stripeSessionId?: string | null;
+  details?: {
+    refundedCents?: number;
+    checkoutCreationStartedAt?: string;
+    terminationVoid?: { creationOutcomeUncertain?: boolean };
+  };
 };
 type Quote = {
   description: string;
@@ -374,6 +379,7 @@ function PaymentFollowUp({
   refresh: () => Promise<void>;
 }) {
   const [amount, setAmount] = useState("");
+  const [sessionId, setSessionId] = useState("");
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [key] = useState(() => crypto.randomUUID());
@@ -385,6 +391,12 @@ function PaymentFollowUp({
     0,
     p.amountCents - (p.details?.refundedCents || 0),
   );
+  const needsOriginalSession =
+    !p.stripeSessionId &&
+    Boolean(
+      p.details?.checkoutCreationStartedAt ||
+      p.details?.terminationVoid?.creationOutcomeUncertain,
+    );
   async function request(refund: boolean) {
     setBusy(true);
     setError("");
@@ -399,7 +411,9 @@ function PaymentFollowUp({
               idempotencyKey: key,
               confirmed: true,
             }
-          : {},
+          : needsOriginalSession
+            ? { sessionId: sessionId.trim() }
+            : {},
       );
       if (refund) setSent(true);
       setMessage(
@@ -425,9 +439,23 @@ function PaymentFollowUp({
       {!!p.details?.refundedCents && (
         <p>Verified refunded: {money(p.details.refundedCents, p.currency)}</p>
       )}
+      {needsOriginalSession && (
+        <label className={s.field}>
+          Original Stripe Checkout Session ID
+          <input
+            className={s.input}
+            value={sessionId}
+            onChange={(event) => setSessionId(event.target.value)}
+          />
+        </label>
+      )}
       <button
         className={s.buttonSecondary}
-        disabled={!ready || busy}
+        disabled={
+          !ready ||
+          busy ||
+          (needsOriginalSession && !/^cs_[A-Za-z0-9_]+$/.test(sessionId.trim()))
+        }
         onClick={() => void request(false)}
       >
         Reconcile Stripe status

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { asyncHandler, principal, HttpError } from "@weatherly/platform";
 import {
   createCheckout,
@@ -85,9 +86,26 @@ export function createBillingRouter() {
   );
   router.post(
     "/payments/:id/reconcile",
-    asyncHandler(async (req, res) =>
-      res.json(await reconcilePayment(principal(req), String(req.params.id))),
-    ),
+    asyncHandler(async (req, res) => {
+      const { sessionId } = z
+        .object({
+          sessionId: z
+            .string()
+            .trim()
+            .max(200)
+            .regex(/^cs_[A-Za-z0-9_]+$/)
+            .optional(),
+        })
+        .parse(req.body ?? {});
+      res.json(
+        await reconcilePayment(
+          principal(req),
+          String(req.params.id),
+          undefined,
+          sessionId,
+        ),
+      );
+    }),
   );
   router.get(
     "/catalog",

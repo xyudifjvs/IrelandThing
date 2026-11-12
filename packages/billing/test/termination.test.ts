@@ -468,7 +468,9 @@ describe("pre-closing termination checkout expiration", () => {
           },
         });
         await queue(matter.id);
-        expect((await retained(issuedOrderId)).status).toBe("cancelled");
+        expect((await retained(issuedOrderId)).status).toBe(
+          "requires_reconciliation",
+        );
         return session({ id: issuedOrderId, stripeSessionId: externalSession });
       },
     );
@@ -488,14 +490,22 @@ describe("pre-closing termination checkout expiration", () => {
       amountCents: 42500,
     });
     expect(
-      await prisma.outboxJob.count({
-        where: {
-          idempotencyKey: {
-            startsWith: `billing-expire-checkout:${issued.id}:`,
+      (
+        await prisma.outboxJob.findMany({
+          where: {
+            idempotencyKey: {
+              startsWith: `billing-expire-checkout:${issued.id}:`,
+            },
           },
-        },
-      }),
-    ).toBe(1);
+          select: { idempotencyKey: true },
+        })
+      )
+        .map((job) => job.idempotencyKey)
+        .sort(),
+    ).toEqual([
+      `billing-expire-checkout:${issued.id}:${externalSession}`,
+      `billing-expire-checkout:${issued.id}:recover`,
+    ]);
     const expiration = providerFor(issued);
     expect(
       await expireTerminatedServiceCheckout(

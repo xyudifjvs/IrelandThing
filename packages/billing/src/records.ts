@@ -2,7 +2,7 @@ import { z } from "zod";
 import { prisma, type Prisma } from "@weatherly/db";
 import { type Principal } from "@weatherly/platform";
 import { requireMatter, matterScope } from "@weatherly/matters";
-import { lockPaymentMatter } from "./checkout-policy";
+import { lockPaymentMatter, paymentOrderForRead } from "./checkout-policy";
 
 export async function listCatalog() {
   return prisma.catalogItem.findMany({
@@ -26,7 +26,7 @@ export async function listPayments(
     where: { ...matterScope(actor), ...(matterId ? { id: matterId } : {}) },
     select: { id: true, business: true },
   });
-  return prisma.paymentOrder.findMany({
+  const orders = await prisma.paymentOrder.findMany({
     where:
       actor.role === "coordinator"
         ? matterId
@@ -52,6 +52,7 @@ export async function listPayments(
     take: page.limit,
     ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
   });
+  return orders.map(paymentOrderForRead);
 }
 
 export async function listGifts(

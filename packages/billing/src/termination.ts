@@ -9,9 +9,14 @@ import {
 import { requireMatter } from "@weatherly/matters";
 import { verifiedStripe } from "./provider";
 import { paymentMode, savedPaymentEnvironment } from "./mode";
+import {
+  issueSavedCheckout,
+  replayableCheckoutRequest,
+} from "./checkout-request";
 
 import {
   type CheckoutCancellation,
+  checkoutSessionMatches,
   isPreClosingTermination,
   lockPaymentMatter,
   lockPaymentOrder,
@@ -50,15 +55,58 @@ export async function queuePaymentCancellation(
   order: Prisma.PaymentOrderGetPayload<object>,
   trigger: CheckoutCancellation,
 ) {
+  const details = object(order.details);
+  const previous = object(details.terminationVoid);
   if (
     settledStatuses.includes(order.status) ||
-    ["expired", "failed", "requires_reconciliation"].includes(order.status)
+    ["expired", "failed"].includes(order.status) ||
+    (order.status === "requires_reconciliation" &&
+      order.stripeSessionId !== null &&
+      previous.creationOutcomeUncertain !== true)
   )
     return { queued: 0, cancelledLocally: 0 };
 
-  const details = object(order.details);
-  const previous = object(details.terminationVoid);
   if (!order.stripeSessionId) {
+    if (
+      details.checkoutCreationStartedAt ||
+      previous.creationOutcomeUncertain === true
+    ) {
+      if (
+        order.status !== "requires_reconciliation" ||
+        previous.state !== "creation_outcome_unknown" ||
+        previous.trigger !== trigger
+      ) {
+        await tx.paymentOrder.update({
+          where: { id: order.id },
+          data: {
+            status: "requires_reconciliation",
+            details: {
+              ...details,
+              requiresReconciliation: true,
+              terminationVoid: {
+                ...previous,
+                trigger,
+                state: "creation_outcome_unknown",
+                creationOutcomeUncertain: true,
+                requestedById: actorId,
+                requestedAt: new Date().toISOString(),
+              },
+            },
+          },
+        });
+      }
+      const idempotencyKey = jobKey(order.id, "recover");
+      await tx.outboxJob.upsert({
+        where: { idempotencyKey },
+        create: {
+          topic: "billing.expire_checkout",
+          idempotencyKey,
+          payload: { paymentOrderId: order.id },
+        },
+        update: {},
+      });
+      return { queued: 1, cancelledLocally: 0 };
+    }
     if (order.status === "cancelled") return { queued: 0, cancelledLocally: 0 };
     await tx.paymentOrder.update({
       where: { id: order.id },
@@ -72,9 +120,6 @@ export async function queuePaymentCancellation(
             state: "no_session_saved",
             requestedById: actorId,
             requestedAt: new Date().toISOString(),
-            ...(details.checkoutCreationStartedAt
-              ? { creationOutcomeUncertain: true }
-              : {}),
           },
         },
       },
@@ -244,10 +289,13 @@ async function outcome(
             : "cancelled",
         details: {
           ...details,
-          ...(reconcile ? { requiresReconciliation: true } : {}),
+          ...(reconcile || details.requiresReconciliation === true
+            ? { requiresReconciliation: reconcile }
+            : {}),
           terminationVoid: {
             ...object(details.terminationVoid),
             state: reconcile ? "requires_reconciliation" : "expired",
+            creationOutcomeUncertain: false,
             reason,
             checkedAt: new Date().toISOString(),
             stripeSessionId: sessionId,
@@ -275,6 +323,54 @@ async function outcome(
   });
 }
 
+async function recoverSession(
+  order: Prisma.PaymentOrderGetPayload<object>,
+  stripe: Stripe,
+  environment: "test" | "live",
+) {
+  const request = replayableCheckoutRequest(order);
+  if (!request) return null;
+  const session = await issueSavedCheckout(stripe, request);
+  if (!checkoutSessionMatches(session, order, environment))
+    throw new HttpError(
+      409,
+      "PAYMENT_MISMATCH",
+      "The original checkout could not be verified.",
+    );
+  return prisma.$transaction(async (tx) => {
+    await lockPaymentMatter(tx, order.matterId);
+    const current = await lockPaymentOrder(tx, order.id);
+    if (current.stripeSessionId) {
+      if (current.stripeSessionId !== session.id)
+        throw new HttpError(
+          409,
+          "CHECKOUT_CHANGED",
+          "A different checkout was recorded during recovery.",
+        );
+      return current;
+    }
+    const details = object(current.details);
+    return tx.paymentOrder.update({
+      where: { id: current.id },
+      data: {
+        stripeSessionId: session.id,
+        status: settledStatuses.includes(current.status)
+          ? current.status
+          : "void_pending",
+        details: {
+          ...details,
+          terminationVoid: {
+            ...object(details.terminationVoid),
+            state: "pending",
+            creationOutcomeUncertain: false,
+            stripeSessionId: session.id,
+          },
+        },
+      },
+    });
+  });
+}
+
 /** Public provider contract: only an open Checkout Session can be expired.
  * https://docs.stripe.com/api/checkout/sessions/expire
  * Completed/paid and settlement races require Ireland's reconciliation, never a refund. */
@@ -286,17 +382,24 @@ export async function expireTerminatedServiceCheckout(
   let { order, matter } = await lockedOrder(paymentOrderId);
   if (!canExpire(order, matter))
     return { skipped: "TERMINATION_NOT_CONFIRMED" };
-  if (!order.stripeSessionId) return { skipped: "NO_SAVED_CHECKOUT" };
-  const sessionId = order.stripeSessionId;
-  if (settledStatuses.includes(order.status))
+  if (!order.stripeSessionId) {
+    if (
+      object(object(order.details).terminationVoid).creationOutcomeUncertain !==
+      true
+    )
+      return { skipped: "NO_SAVED_CHECKOUT" };
+    if (!replayableCheckoutRequest(order))
+      return { requiresReconciliation: true };
+  }
+  if (object(object(order.details).terminationVoid).state === "expired")
+    return { expired: true };
+  if (order.stripeSessionId && settledStatuses.includes(order.status))
     return outcome(
       order.id,
-      sessionId,
+      order.stripeSessionId,
       "requires_reconciliation",
       "payment_or_refund_record_exists",
     );
-  if (object(object(order.details).terminationVoid).state === "expired")
-    return { expired: true };
   const environment = savedPaymentEnvironment(order.details);
   if (environment === "unknown" || environment !== paymentMode())
     throw new HttpError(
@@ -305,12 +408,26 @@ export async function expireTerminatedServiceCheckout(
       "Reconcile the request in its original payment environment before expiring checkout.",
     );
   const stripe = await provider(); // Existing adapter verifies Ireland's configured account.
+  if (!order.stripeSessionId) {
+    const latest = await lockedOrder(paymentOrderId);
+    order = latest.order;
+    if (!order.stripeSessionId) {
+      const recovered = await recoverSession(order, stripe, environment);
+      if (!recovered) return { requiresReconciliation: true };
+      order = recovered;
+    }
+  }
+  const sessionId = order.stripeSessionId!;
+  if (settledStatuses.includes(order.status))
+    return outcome(
+      order.id,
+      sessionId,
+      "requires_reconciliation",
+      "payment_or_refund_record_exists",
+    );
   const matches = (session: Stripe.Checkout.Session) =>
     session.id === sessionId &&
-    session.metadata?.paymentOrderId === order.id &&
-    session.livemode === (environment === "live") &&
-    session.amount_total === order.amountCents &&
-    session.currency?.toUpperCase() === order.currency;
+    checkoutSessionMatches(session, order, environment);
   let session = await stripe.checkout.sessions.retrieve(sessionId);
   if (!matches(session))
     return outcome(

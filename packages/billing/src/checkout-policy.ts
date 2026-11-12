@@ -1,4 +1,5 @@
 import type { Prisma } from "@weatherly/db";
+import type Stripe from "stripe";
 import { HttpError } from "@weatherly/platform";
 import {
   serviceFeeApplies,
@@ -25,6 +26,13 @@ export function paymentDetails(value: unknown): Prisma.InputJsonObject {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Prisma.InputJsonObject)
     : {};
+}
+
+export function paymentOrderForRead<T extends { details: unknown }>(order: T) {
+  const { checkoutCreationRequest: _, ...details } = paymentDetails(
+    order.details,
+  );
+  return { ...order, details };
 }
 
 export function isPreClosingTermination(matter: {
@@ -93,6 +101,27 @@ export function verifiedCheckoutUrl(value: string) {
       "The provider returned an invalid checkout address.",
     );
   return value;
+}
+
+export function checkoutSessionMatches(
+  session: Stripe.Checkout.Session,
+  order: {
+    id: string;
+    amountCents: number;
+    currency: string;
+    stripeSessionId: string | null;
+  },
+  environment: "live" | "test",
+) {
+  return (
+    Boolean(session.id) &&
+    (!order.stripeSessionId || session.id === order.stripeSessionId) &&
+    session.metadata?.paymentOrderId === order.id &&
+    session.livemode === (environment === "live") &&
+    (session.mode === undefined || session.mode === "payment") &&
+    session.amount_total === order.amountCents &&
+    session.currency?.toUpperCase() === order.currency
+  );
 }
 
 export async function lockPaymentOrder(

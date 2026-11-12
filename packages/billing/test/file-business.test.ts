@@ -8,6 +8,7 @@ import {
   deleteFile,
 } from "../../matters/src/commands/file-actions";
 import { listAccountPayments, resumeAccountPayment } from "../src/account";
+import { reconcilePayment } from "../src/operations";
 import {
   applyStripeEvent,
   createCheckout,
@@ -140,16 +141,21 @@ function session(
 }
 
 function checkoutProvider(order?: Order) {
-  const create = vi.fn(async (input: Stripe.Checkout.SessionCreateParams) => {
-    const id = input.client_reference_id!;
-    const saved = await prisma.paymentOrder.findUniqueOrThrow({
-      where: { id },
-    });
-    return session({
-      ...saved,
-      stripeSessionId: `cs_synthetic_${randomUUID()}`,
-    });
-  });
+  const create = vi.fn(
+    async (
+      input: Stripe.Checkout.SessionCreateParams,
+      _options?: Stripe.RequestOptions,
+    ) => {
+      const id = input.client_reference_id!;
+      const saved = await prisma.paymentOrder.findUniqueOrThrow({
+        where: { id },
+      });
+      return session({
+        ...saved,
+        stripeSessionId: `cs_synthetic_${randomUUID()}`,
+      });
+    },
+  );
   const retrieve = vi.fn(async () => session(order!));
   const expire = vi.fn(async () =>
     session(order!, { status: "expired", url: null }),
@@ -185,6 +191,208 @@ const coordinatorRequest = (
 });
 
 describe("file-business and closing payment boundaries", () => {
+  it("withholds and does not bind mismatched new Checkout responses", async () => {
+    for (const mismatched of [
+      { metadata: { paymentOrderId: "different-order" } },
+      { livemode: true },
+      { mode: "subscription" as const },
+      { amount_total: 1 },
+      { currency: "eur" },
+    ]) {
+      const matter = await file("weatherly");
+      const fake = checkoutProvider();
+      fake.create.mockImplementationOnce(async ({ client_reference_id }) => {
+        const order = await prisma.paymentOrder.findUniqueOrThrow({
+          where: { id: client_reference_id },
+        });
+        return session(
+          { ...order, stripeSessionId: `cs_synthetic_${randomUUID()}` },
+          mismatched,
+        );
+      });
+      await expect(
+        createCheckout(owner, coordinatorRequest(matter.id), fake.provider),
+      ).rejects.toMatchObject({ code: "PAYMENT_MISMATCH" });
+      expect(
+        await prisma.paymentOrder.findMany({ where: { matterId: matter.id } }),
+      ).toMatchObject([{ status: "creating", stripeSessionId: null }]);
+    }
+  });
+
+  it("blocks replacement after a lost Checkout response and recovers with the original provider request", async () => {
+    const matter = await file("weatherly");
+    const originalRequest = coordinatorRequest(matter.id);
+    const fake = checkoutProvider();
+    let originalSession!: Stripe.Checkout.Session;
+    fake.create.mockImplementationOnce(async ({ client_reference_id }) => {
+      const order = await prisma.paymentOrder.findUniqueOrThrow({
+        where: { id: client_reference_id },
+      });
+      originalSession = session({
+        ...order,
+        stripeSessionId: `cs_synthetic_${randomUUID()}`,
+      });
+      throw new Error(
+        "Synthetic connection lost after Checkout accepted the request",
+      );
+    });
+    await expect(
+      createCheckout(owner, originalRequest, fake.provider),
+    ).rejects.toThrow("connection lost");
+    const effects = {
+      async onTransition(
+        tx: Prisma.TransactionClient,
+        actor: Principal,
+        change: { matterId: string },
+      ) {
+        await queueTerminatedServiceCheckouts(tx, actor, change.matterId);
+      },
+    };
+    const terminated = await changeFileLifecycle(
+      owner,
+      matter.id,
+      {
+        action: "terminate",
+        expectedRevision: matter.revision,
+      },
+      effects,
+    );
+    await changeFileLifecycle(
+      owner,
+      matter.id,
+      {
+        action: "reopen",
+        expectedRevision: terminated.revision,
+      },
+      effects,
+    );
+    const unresolved = await prisma.paymentOrder.findFirstOrThrow({
+      where: { matterId: matter.id },
+    });
+    expect(unresolved).toMatchObject({
+      status: "requires_reconciliation",
+      stripeSessionId: null,
+      details: {
+        terminationVoid: {
+          state: "creation_outcome_unknown",
+          creationOutcomeUncertain: true,
+        },
+      },
+    });
+    await expect(
+      createCheckout(owner, coordinatorRequest(matter.id), fake.provider),
+    ).rejects.toMatchObject({ code: "PAYMENT_CLOSED" });
+    expect(fake.create).toHaveBeenCalledTimes(1);
+    const originalCall = fake.create.mock.calls[0];
+    const previousOrigin = process.env.WEB_ORIGIN;
+    try {
+      process.env.WEB_ORIGIN = "https://changed.example.test";
+      fake.create.mockResolvedValueOnce(originalSession);
+      fake.retrieve.mockResolvedValueOnce(originalSession);
+      fake.expire.mockResolvedValueOnce({
+        ...originalSession,
+        status: "expired",
+        url: null,
+      });
+      await expect(
+        expireTerminatedServiceCheckout(
+          { paymentOrderId: unresolved.id },
+          fake.provider,
+        ),
+      ).resolves.toMatchObject({ expired: true });
+      expect(fake.create.mock.calls[1]).toEqual(originalCall);
+      expect(fake.create.mock.calls[1][1]).toEqual({
+        idempotencyKey: `checkout:${unresolved.id}`,
+      });
+    } finally {
+      if (previousOrigin === undefined) delete process.env.WEB_ORIGIN;
+      else process.env.WEB_ORIGIN = previousOrigin;
+    }
+    expect(
+      await prisma.paymentOrder.findUniqueOrThrow({
+        where: { id: unresolved.id },
+      }),
+    ).toMatchObject({
+      status: "cancelled",
+      stripeSessionId: originalSession.id,
+      details: {
+        requiresReconciliation: false,
+        terminationVoid: { creationOutcomeUncertain: false, state: "expired" },
+      },
+    });
+    const fresh = await createCheckout(
+      owner,
+      coordinatorRequest(matter.id),
+      fake.provider,
+    );
+    expect(fresh.id).not.toBe(unresolved.id);
+  });
+
+  it("keeps legacy lost requests blocked without replay and accepts only matched manual evidence", async () => {
+    const matter = await file("weatherly");
+    const legacy = await oldOrder(matter.id, {
+      status: "cancelled",
+      stripeSessionId: null,
+      details: {
+        paymentEnvironment: "test",
+        checkoutCreationStartedAt: new Date(
+          Date.now() - 25 * 60 * 60 * 1000,
+        ).toISOString(),
+        terminationVoid: {
+          trigger: "termination",
+          state: "no_session_saved",
+          creationOutcomeUncertain: true,
+        },
+      },
+    });
+    const fake = checkoutProvider();
+    await expect(
+      expireTerminatedServiceCheckout(
+        { paymentOrderId: legacy.id },
+        fake.provider,
+      ),
+    ).resolves.toEqual({ requiresReconciliation: true });
+    expect(fake.provider).not.toHaveBeenCalled();
+    await expect(
+      createCheckout(owner, coordinatorRequest(matter.id), fake.provider),
+    ).rejects.toMatchObject({ code: "PAYMENT_CLOSED" });
+    const originalId = `cs_synthetic_${randomUUID()}`;
+    const providerSession = session(
+      { ...legacy, stripeSessionId: originalId },
+      { status: "expired", url: null },
+    );
+    fake.retrieve.mockResolvedValueOnce({
+      ...providerSession,
+      amount_total: 1,
+    });
+    await expect(
+      reconcilePayment(owner, legacy.id, fake.provider, originalId),
+    ).rejects.toMatchObject({ code: "PAYMENT_AMOUNT_MISMATCH" });
+    expect(
+      (
+        await prisma.paymentOrder.findUniqueOrThrow({
+          where: { id: legacy.id },
+        })
+      ).stripeSessionId,
+    ).toBeNull();
+    fake.retrieve.mockResolvedValueOnce(providerSession);
+    await expect(
+      reconcilePayment(owner, legacy.id, fake.provider, originalId),
+    ).resolves.toMatchObject({
+      status: "cancelled",
+      stripeSessionId: originalId,
+      details: {
+        terminationVoid: { creationOutcomeUncertain: false, state: "expired" },
+      },
+    });
+    const fresh = await createCheckout(
+      owner,
+      coordinatorRequest(matter.id),
+      fake.provider,
+    );
+    expect(fresh.id).not.toBe(legacy.id);
+  });
+
   it("rejects HTO service creation and old links before Stripe while retaining separate gifts", async () => {
     const hto = await file("hto");
     const { provider } = checkoutProvider();

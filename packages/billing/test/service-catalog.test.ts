@@ -16,9 +16,13 @@ const actor: Principal = {
   role: "coordinator",
   sessionId: runId,
 };
-const create = vi.fn(async () => ({
+const create = vi.fn(async (input: Stripe.Checkout.SessionCreateParams) => ({
   id: `cs_synthetic_${randomUUID()}`,
   status: "open",
+  metadata: input.metadata,
+  livemode: false,
+  amount_total: input.line_items?.[0]?.price_data?.unit_amount,
+  currency: input.line_items?.[0]?.price_data?.currency,
   url: "https://checkout.stripe.com/synthetic",
 }));
 const provider = async () =>

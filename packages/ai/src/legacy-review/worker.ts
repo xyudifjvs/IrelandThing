@@ -92,6 +92,11 @@ export async function processReview(
     checksum: string;
   }[];
   const actor = await currentReviewOwner(proposalId, proposal.requestedById);
+  const document = await getDocument(actor, refs[0].documentId);
+  const version = document.versions.find((v) => v.id === refs[0].versionId);
+  if (!version?.extractedText || version.checksum !== refs[0].checksum)
+    throw new Error("Review source unavailable");
+  await currentReviewOwner(proposalId, proposal.requestedById);
   const canProcess = await prisma.$transaction(async (tx) => {
     const current = await requireMatter(actor, proposal.matterId, true, tx);
     if (await retireLegacyReview(tx, current, proposal.id)) return false;
@@ -102,11 +107,6 @@ export async function processReview(
     return claimed.count > 0;
   });
   if (!canProcess) return;
-  const document = await getDocument(actor, refs[0].documentId);
-  const version = document.versions.find((v) => v.id === refs[0].versionId);
-  if (!version?.extractedText || version.checksum !== refs[0].checksum)
-    throw new Error("Review source unavailable");
-  await currentReviewOwner(proposalId, proposal.requestedById);
   if (!aiConfigured())
     throw new HttpError(
       503,

@@ -11,6 +11,7 @@ import {
 import { audit, revision } from "@weatherly/matters";
 import {
   captureRosterLead,
+  lockRosterEmail,
   normalizeRosterEmail,
 } from "@weatherly/identity/roster";
 
@@ -164,6 +165,11 @@ export function registerInquiryRoutes(r: Router) {
       const id = String(req.params.id);
       res.json(
         await prisma.$transaction(async (tx) => {
+          const inquiry = await tx.inquiry.findUnique({
+            where: { id },
+            select: { email: true },
+          });
+          if (inquiry) await lockRosterEmail(tx, inquiry.email);
           const changed = await tx.inquiry.updateMany({
             where: { id, revision: expectedRevision },
             data: { status, revision: { increment: 1 } },

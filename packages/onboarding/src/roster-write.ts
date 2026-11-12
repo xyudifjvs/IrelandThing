@@ -11,6 +11,7 @@ import {
   type Principal,
 } from "@weatherly/platform";
 import { z } from "zod";
+import { canArchiveRosterInquiry } from "./roster-read";
 
 const name = z.string().trim().min(1).max(150);
 const email = z.email().transform(normalizeRosterEmail);
@@ -166,7 +167,7 @@ export async function updateRosterAgent(
 
 const importInput = z
   .object({
-    kind: z.enum(["user", "inquiry", "booking"]),
+    kind: z.enum(["user", "inquiry", "booking", "agreement", "invitation"]),
     id: z.string().min(1).max(200),
   })
   .strict();
@@ -187,7 +188,24 @@ export async function importRosterAgent(actor: Principal, raw: unknown) {
       kind === "booking"
         ? await tx.schedulingBooking.findUnique({ where: { id } })
         : null;
-    const source = profile ?? inquiry ?? booking;
+    const agreement =
+      kind === "agreement"
+        ? await tx.agreement.findUnique({ where: { id } })
+        : null;
+    const invitation =
+      kind === "invitation"
+        ? await tx.invitation.findFirst({ where: { id, role: "agent" } })
+        : null;
+    const linkedId = agreement?.rosterAgentId ?? invitation?.rosterAgentId;
+    if (linkedId) return lockRosterAgent(tx, linkedId);
+    const source =
+      profile ??
+      inquiry ??
+      booking ??
+      (agreement && z.email().safeParse(agreement.userId).success
+        ? { name: "", email: agreement.userId }
+        : null) ??
+      (invitation ? { name: "", email: invitation.email } : null);
     if (!source)
       throw new HttpError(
         404,
@@ -221,6 +239,17 @@ export async function importRosterAgent(actor: Principal, raw: unknown) {
     });
     await tx.schedulingBooking.updateMany({
       where: { rosterAgentId: null, email: filter },
+      data: { rosterAgentId: row.id },
+    });
+    await tx.agreement.updateMany({
+      where: {
+        rosterAgentId: null,
+        OR: [{ userId: filter }, ...(profile ? [{ userId: profile.id }] : [])],
+      },
+      data: { rosterAgentId: row.id },
+    });
+    await tx.invitation.updateMany({
+      where: { role: "agent", rosterAgentId: null, email: filter },
       data: { rosterAgentId: row.id },
     });
     if (profile && !row.userId && row.business !== "hto")
@@ -269,33 +298,7 @@ export async function archiveRosterInquiry(
   return prisma.$transaction(async (tx) => {
     const row = await lockRosterAgent(tx, id);
     requireRevision(row.revision, expectedRevision);
-    const evidence = await tx.agreement.findFirst({
-      where: {
-        OR: [
-          { rosterAgentId: id },
-          ...(row.email ? [{ userId: row.email }] : []),
-        ],
-        status: { in: ["sent", "received", "approved"] },
-      },
-      select: { id: true },
-    });
-    const invitation = await tx.invitation.findFirst({
-      where: {
-        role: "agent",
-        OR: [
-          { rosterAgentId: id },
-          ...(row.email ? [{ email: row.email }] : []),
-        ],
-      },
-      select: { id: true },
-    });
-    if (
-      row.userId ||
-      row.business === "hto" ||
-      row.agreementSentOn ||
-      evidence ||
-      invitation
-    )
+    if (!(await canArchiveRosterInquiry(tx, row)))
       throw new HttpError(
         409,
         "INQUIRY_ARCHIVE_ONLY",

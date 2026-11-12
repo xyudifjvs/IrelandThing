@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { createHmac, randomUUID } from "node:crypto";
+import { hashPassword } from "better-auth/crypto";
 import express from "express";
 import request from "supertest";
 import { prisma } from "@weatherly/db";
@@ -24,7 +25,7 @@ const owner: Principal = {
   role: "coordinator",
   sessionId: "fixture",
 };
-const rows: { rosterId?: string; fileId?: string; documentId?: string } = {};
+const rows: { rosterId?: string; fileIds: string[] } = { fileIds: [] };
 const queue: { id: string; email: string }[] = [];
 const coordinator = express();
 const authenticated = express();
@@ -86,13 +87,17 @@ afterAll(async () => {
   await prisma.schedulingBooking.deleteMany({
     where: { email: email("lead") },
   });
-  await prisma.inquiry.deleteMany({ where: { email: email("lead") } });
+  await prisma.inquiry.deleteMany({ where: { email: { contains: key } } });
   await prisma.invitation.deleteMany({ where: { invitedById: owner.id } });
-  if (rows.fileId)
-    await prisma.matter.deleteMany({ where: { id: rows.fileId } });
-  if (rows.documentId)
-    await prisma.document.deleteMany({ where: { id: rows.documentId } });
-  await prisma.agreement.deleteMany({ where: { userId: email("weatherly") } });
+  await prisma.matter.deleteMany({ where: { id: { in: rows.fileIds } } });
+  const documents = await prisma.document.findMany({
+    where: { createdById: owner.id },
+    select: { id: true },
+  });
+  await prisma.agreement.deleteMany({
+    where: { documentId: { in: documents.map(({ id }) => id) } },
+  });
+  await prisma.document.deleteMany({ where: { createdById: owner.id } });
   await prisma.auditEvent.deleteMany({ where: { actorId: owner.id } });
   await prisma.rosterAgent.deleteMany({
     where: {
@@ -201,7 +206,7 @@ it("binds only the invited HTO account, preserves file business, and keeps the W
       agentRosterId: agent.id,
     },
   });
-  rows.fileId = file.id;
+  rows.fileIds.push(file.id);
   await request(coordinator)
     .patch(`/onboarding/roster/${agent.id}`)
     .send({
@@ -325,7 +330,6 @@ it("records actual signed versions and prevents archiving an agreement-bearing s
       createdById: owner.id,
     },
   });
-  rows.documentId = agreementDocument.id;
   const evidence = {
     rosterAgentId: roster.body.id,
     userId: invite.email,
@@ -359,4 +363,253 @@ it("records actual signed versions and prevents archiving an agreement-bearing s
     .post("/identity/invitations")
     .send(invite)
     .expect(201);
+});
+
+async function legacyAgreement(userId: string) {
+  const document = await prisma.document.create({
+    data: {
+      name: "Synthetic legacy evidence.pdf",
+      mimeType: "application/pdf",
+      category: "service_agreement",
+      visibility: "coordinator",
+      createdById: owner.id,
+    },
+  });
+  return (
+    await request(coordinator)
+      .post("/onboarding/agreements")
+      .send({
+        userId,
+        documentId: document.id,
+        version: "legacy-1",
+        status: "approved",
+      })
+      .expect(201)
+  ).body;
+}
+
+it("rejects archive after an unlinked legacy account or prior inquiry has advanced", async () => {
+  const legacyEmail = email("existing-agent");
+  const userId = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: userId,
+      name: "Existing Synthetic Agent",
+      email: legacyEmail,
+      role: "agent",
+      emailVerified: true,
+    },
+  });
+  await prisma.account.create({
+    data: {
+      id: randomUUID(),
+      userId,
+      providerId: "credential",
+      accountId: userId,
+      password: await hashPassword(password),
+    },
+  });
+  await legacyAgreement(userId);
+  const source = await createInquiry({
+    email: legacyEmail.toUpperCase(),
+    name: "Existing Synthetic Agent",
+    kind: "contact",
+    payload: {},
+  });
+  const receipt = await prisma.inquiry.findUniqueOrThrow({
+    where: { id: source.id },
+  });
+  const row = await prisma.rosterAgent.findUniqueOrThrow({
+    where: { id: receipt.rosterAgentId! },
+  });
+  expect(row.userId).toBeNull();
+  const detail = await request(coordinator)
+    .get(`/onboarding/roster/${row.id}`)
+    .expect(200);
+  expect(detail.body).toMatchObject({
+    phase: "active",
+    hasAccount: true,
+    canArchive: false,
+  });
+  const denied = await request(coordinator)
+    .post(`/onboarding/roster/${row.id}/archive`)
+    .send({ expectedRevision: row.revision })
+    .expect(409);
+  expect(denied.body.code).toBe("INQUIRY_ARCHIVE_ONLY");
+  expect(
+    (await prisma.rosterAgent.findUniqueOrThrow({ where: { id: row.id } }))
+      .archivedAt,
+  ).toBeNull();
+  const session = await request(authenticated)
+    .post("/api/auth/sign-in/email")
+    .send({ email: legacyEmail, password })
+    .expect(200);
+  await request(authenticated)
+    .get("/api/v1/private")
+    .set("Cookie", session.headers["set-cookie"])
+    .expect(200);
+
+  const legacySent = await createInquiry({
+    email: email("legacy-sent"),
+    name: "Sent Synthetic Agent",
+    kind: "contact",
+    payload: {},
+  });
+  const sentReceipt = await prisma.inquiry.findUniqueOrThrow({
+    where: { id: legacySent.id },
+  });
+  const sentRow = await prisma.rosterAgent.findUniqueOrThrow({
+    where: { id: sentReceipt.rosterAgentId! },
+  });
+  await request(coordinator)
+    .patch(`/onboarding/inquiries/${sentReceipt.id}`)
+    .send({ expectedRevision: sentReceipt.revision, status: "agreement_sent" })
+    .expect(200);
+  const sentDetail = await request(coordinator)
+    .get(`/onboarding/roster/${sentRow.id}`)
+    .expect(200);
+  expect(sentDetail.body).toMatchObject({
+    phase: "agreement_sent",
+    canArchive: false,
+  });
+  await request(coordinator)
+    .post(`/onboarding/roster/${sentRow.id}/archive`)
+    .send({ expectedRevision: sentRow.revision })
+    .expect(409);
+});
+
+it("materializes and invites a signed-agreement-only legacy signup without changing its evidence", async () => {
+  const recipient = email("agreement-only");
+  const agreement = await legacyAgreement(recipient.toUpperCase());
+  const roster = await request(coordinator)
+    .get("/onboarding/roster")
+    .expect(200);
+  const entry = roster.body.find(
+    (row: { email: string }) => row.email === recipient,
+  );
+  expect(entry).toMatchObject({
+    phase: "agreement_signed",
+    canArchive: false,
+    source: { kind: "agreement", id: agreement.id },
+  });
+  const detail = await request(coordinator)
+    .get(`/onboarding/roster/${entry.id}`)
+    .expect(200);
+  expect(detail.body.agreementHistory[0]).toMatchObject({
+    id: agreement.id,
+    documentId: agreement.documentId,
+  });
+  const imported = await request(coordinator)
+    .post("/onboarding/roster/import")
+    .send(entry.source)
+    .expect(200);
+  const replayed = await request(coordinator)
+    .post("/onboarding/roster/import")
+    .send(entry.source)
+    .expect(200);
+  expect(replayed.body.id).toBe(imported.body.id);
+  const linked = await prisma.agreement.findUniqueOrThrow({
+    where: { id: agreement.id },
+  });
+  expect(linked).toMatchObject({
+    documentId: agreement.documentId,
+    userId: recipient.toUpperCase(),
+    rosterAgentId: imported.body.id,
+  });
+  const invitation = await request(coordinator)
+    .post("/identity/invitations")
+    .send({ email: recipient, role: "agent", rosterAgentId: imported.body.id })
+    .expect(201);
+  await request(coordinator)
+    .post("/identity/invitations/register")
+    .send({
+      token: invitation.body.acceptanceToken,
+      name: "Synthetic Agreement Recipient",
+      password,
+    })
+    .expect(201);
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { email: recipient },
+  });
+  expect(
+    (await prisma.agreement.findUniqueOrThrow({ where: { id: agreement.id } }))
+      .userId,
+  ).toBe(user.id);
+});
+
+it("imports an unaccepted invite-only signup and preserves its recorded approval on resend", async () => {
+  const recipient = email("invite-only");
+  const [original, other] = await Promise.all(
+    ["Original synthetic invite file", "Other synthetic file"].map((title) =>
+      prisma.matter.create({
+        data: {
+          title,
+          propertyAddress: "Synthetic Only",
+          packageCode: "essentials",
+          side: "buyer",
+        },
+      }),
+    ),
+  );
+  rows.fileIds.push(original.id, other.id);
+  const approvalOverrideReason =
+    "Synthetic approval previously recorded by the coordinator";
+  const first = await request(coordinator)
+    .post("/identity/invitations")
+    .send({
+      email: recipient,
+      role: "agent",
+      approvalOverrideReason,
+      matterId: original.id,
+    })
+    .expect(201);
+  const roster = await request(coordinator)
+    .get("/onboarding/roster")
+    .expect(200);
+  const entry = roster.body.find(
+    (row: { email: string }) => row.email === recipient,
+  );
+  expect(entry).toMatchObject({
+    phase: "invited",
+    canArchive: false,
+    source: { kind: "invitation", id: first.body.id },
+  });
+  const imported = await request(coordinator)
+    .post("/onboarding/roster/import")
+    .send(entry.source)
+    .expect(200);
+  await request(coordinator)
+    .post("/identity/invitations")
+    .send({
+      email: recipient,
+      role: "agent",
+      rosterAgentId: imported.body.id,
+      matterId: other.id,
+    })
+    .expect(422);
+  const second = await request(coordinator)
+    .post("/identity/invitations")
+    .send({ email: recipient, role: "agent", rosterAgentId: imported.body.id })
+    .expect(201);
+  expect(second.body.id).not.toBe(first.body.id);
+  const old = await prisma.invitation.findUniqueOrThrow({
+    where: { id: first.body.id },
+  });
+  expect(old.rosterAgentId).toBe(imported.body.id);
+  expect(old.expiresAt.getTime()).toBeLessThanOrEqual(Date.now());
+  const approval = await prisma.auditEvent.findFirstOrThrow({
+    where: {
+      entityType: "Invitation",
+      entityId: second.body.id,
+      action: "invitation.created",
+    },
+  });
+  expect(approval.details).toMatchObject({
+    approvalOverrideReason,
+    priorInvitationId: first.body.id,
+  });
+  const resent = await prisma.invitation.findUniqueOrThrow({
+    where: { id: second.body.id },
+  });
+  expect(resent.matterId).toBe(original.id);
 });

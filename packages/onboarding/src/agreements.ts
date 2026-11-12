@@ -11,6 +11,7 @@ import {
 } from "@weatherly/platform";
 import { audit, revision } from "@weatherly/matters";
 import { lockRosterAgent } from "./roster-write";
+import { lockRosterEmail } from "@weatherly/identity/roster";
 
 async function validateAgreementEvidence(
   tx: Prisma.TransactionClient,
@@ -85,6 +86,21 @@ function checkRecordingRequest(
     );
 }
 
+async function lockLegacyRecipient(
+  tx: Prisma.TransactionClient,
+  userId: string,
+) {
+  const user = await tx.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+  const email =
+    user?.email ?? (z.email().safeParse(userId).success ? userId : null);
+  if (!email)
+    throw new HttpError(422, "INVALID_USER", "Agreement user not found");
+  await lockRosterEmail(tx, email);
+}
+
 /** Entry point for coordinator uploads and any verified signer adapter. */
 export async function recordAgreement(actor: Principal, raw: unknown) {
   assertCoordinator(actor);
@@ -113,6 +129,7 @@ export async function recordAgreement(actor: Principal, raw: unknown) {
     const agent = data.rosterAgentId
       ? await lockRosterAgent(tx, data.rosterAgentId)
       : null;
+    if (!agent) await lockLegacyRecipient(tx, data.userId);
     if (agent) {
       if (agent.business === "hto")
         throw new HttpError(
@@ -133,15 +150,6 @@ export async function recordAgreement(actor: Principal, raw: unknown) {
           "Enter the date the agreement was signed.",
         );
     }
-    if (
-      !z.email().safeParse(data.userId).success &&
-      !(await tx.user.findUnique({
-        where: { id: data.userId },
-        select: { id: true },
-      }))
-    )
-      throw new HttpError(422, "INVALID_USER", "Agreement user not found");
-
     const matchingAccount =
       agent?.normalizedEmail && data.status === "approved" && !agent.userId
         ? await tx.user.findFirst({
@@ -232,15 +240,34 @@ export function registerAgreementRoutes(r: Router) {
           "Attach the signed agreement evidence",
         );
       const id = String(req.params.id);
-      const existing = await prisma.agreement.findUnique({ where: { id } });
-      if (!existing)
-        throw new HttpError(404, "AGREEMENT_NOT_FOUND", "Agreement not found");
-      const supporting =
-        supportingDocumentIds ?? existing.supportingDocumentIds;
       res.json(
         await prisma.$transaction(async (tx) => {
+          const initial = await tx.agreement.findUnique({ where: { id } });
+          if (!initial)
+            throw new HttpError(
+              404,
+              "AGREEMENT_NOT_FOUND",
+              "Agreement not found",
+            );
+          if (!initial.rosterAgentId)
+            await lockLegacyRecipient(tx, initial.userId);
+          const roster = initial.rosterAgentId
+            ? await lockRosterAgent(tx, initial.rosterAgentId)
+            : null;
+          const existing = await tx.agreement.findUniqueOrThrow({
+            where: { id },
+          });
+          if (existing.revision !== expectedRevision)
+            throw new HttpError(
+              409,
+              "REVISION_CONFLICT",
+              "Agreement changed; refresh",
+            );
+          const supporting =
+            supportingDocumentIds ?? existing.supportingDocumentIds;
           if (existing.rosterAgentId) {
-            const agent = await lockRosterAgent(tx, existing.rosterAgentId);
+            const agent =
+              roster ?? (await lockRosterAgent(tx, existing.rosterAgentId));
             if (agent.business === "hto")
               throw new HttpError(
                 409,

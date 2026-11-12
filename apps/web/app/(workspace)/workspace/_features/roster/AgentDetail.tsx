@@ -220,7 +220,7 @@ function AgentProfile({
             onSaved={onRefresh}
           />
         )}
-        {agent.phase === "inquiry" && !agent.hasAccount && (
+        {agent.canArchive && (
           <button
             className={styles.quiet}
             type="button"

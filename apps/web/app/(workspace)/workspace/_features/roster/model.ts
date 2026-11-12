@@ -18,8 +18,12 @@ export type RosterEntry = {
   brokerage: string | null;
   business: "hto" | "weatherly";
   revision: number | null;
-  source: { kind: "user" | "inquiry" | "booking"; id: string } | null;
+  source: {
+    kind: "user" | "inquiry" | "booking" | "agreement" | "invitation";
+    id: string;
+  } | null;
   hasAccount: boolean;
+  canArchive: boolean;
   phase: AgentPhase;
   phaseOn: string;
   agreementSentOn: string | null;

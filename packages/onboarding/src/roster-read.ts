@@ -5,8 +5,12 @@ import {
   HttpError,
   type Principal,
 } from "@weatherly/platform";
+import { z } from "zod";
 
-type LegacySource = { kind: "user" | "inquiry" | "booking"; id: string };
+type LegacySource = {
+  kind: "user" | "inquiry" | "booking" | "agreement" | "invitation";
+  id: string;
+};
 type RosterPhase =
   | "inquiry"
   | "agreement_sent"
@@ -30,6 +34,8 @@ type Candidate = {
   source: LegacySource | null;
 };
 
+type StoredCandidate = Omit<Candidate, "source"> & { archivedAt: Date | null };
+
 const byNewest = [{ createdAt: "desc" }, { id: "desc" }] as const;
 const activeStages = new Set(["under_contract", "closing", "listing"]);
 
@@ -42,7 +48,10 @@ function civilDay(date: Date) {
   }).format(date);
 }
 
-async function loadRoster(db: Prisma.TransactionClient) {
+async function loadRoster(
+  db: Prisma.TransactionClient,
+  selected?: StoredCandidate,
+) {
   const [
     roster,
     users,
@@ -54,21 +63,23 @@ async function loadRoster(db: Prisma.TransactionClient) {
     revoked,
     overrides,
   ] = await Promise.all([
-    db.rosterAgent.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        brokerage: true,
-        business: true,
-        userId: true,
-        agreementSentOn: true,
-        revision: true,
-        archivedAt: true,
-        createdAt: true,
-      },
-    }),
+    selected
+      ? [selected]
+      : db.rosterAgent.findMany({
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            brokerage: true,
+            business: true,
+            userId: true,
+            agreementSentOn: true,
+            revision: true,
+            archivedAt: true,
+            createdAt: true,
+          },
+        }),
     db.user.findMany({
       where: { role: "agent" },
       select: {
@@ -133,21 +144,23 @@ async function loadRoster(db: Prisma.TransactionClient) {
       },
       orderBy: [...byNewest],
     }),
-    db.matter.findMany({
-      where: {
-        OR: [{ agentRosterId: { not: null } }, { agentId: { not: null } }],
-        stage: { notIn: ["pending_review", "archived"] },
-      },
-      select: {
-        id: true,
-        agentRosterId: true,
-        agentId: true,
-        propertyAddress: true,
-        stage: true,
-        business: true,
-      },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    }),
+    selected
+      ? []
+      : db.matter.findMany({
+          where: {
+            OR: [{ agentRosterId: { not: null } }, { agentId: { not: null } }],
+            stage: { notIn: ["pending_review", "archived"] },
+          },
+          select: {
+            id: true,
+            agentRosterId: true,
+            agentId: true,
+            propertyAddress: true,
+            stage: true,
+            business: true,
+          },
+          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        }),
     db.auditEvent.findMany({
       where: {
         entityType: "User",
@@ -199,22 +212,38 @@ async function loadRoster(db: Prisma.TransactionClient) {
       source: { kind, id: record.id },
     });
   }
-  for (const user of users) legacyCandidate(user, "user", user);
-  for (const inquiry of inquiries) {
-    const payload = inquiry.payload;
-    const fields =
-      payload && typeof payload === "object" && !Array.isArray(payload)
-        ? payload
-        : {};
-    if (!inquiry.rosterAgentId)
-      legacyCandidate(inquiry, "inquiry", {
-        phone: typeof fields.phone === "string" ? fields.phone : undefined,
-        brokerage:
-          typeof fields.brokerage === "string" ? fields.brokerage : undefined,
-      });
-  }
-  for (const booking of bookings) {
-    if (!booking.rosterAgentId) legacyCandidate(booking, "booking");
+  if (!selected) {
+    for (const user of users) legacyCandidate(user, "user", user);
+    for (const inquiry of inquiries) {
+      const payload = inquiry.payload;
+      const fields =
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? payload
+          : {};
+      if (!inquiry.rosterAgentId)
+        legacyCandidate(inquiry, "inquiry", {
+          phone: typeof fields.phone === "string" ? fields.phone : undefined,
+          brokerage:
+            typeof fields.brokerage === "string" ? fields.brokerage : undefined,
+        });
+    }
+    for (const booking of bookings) {
+      if (!booking.rosterAgentId) legacyCandidate(booking, "booking");
+    }
+    for (const agreement of agreements) {
+      if (
+        !agreement.rosterAgentId &&
+        z.email().safeParse(agreement.userId).success
+      )
+        legacyCandidate(
+          { ...agreement, email: agreement.userId, name: "" },
+          "agreement",
+        );
+    }
+    for (const invitation of invitations) {
+      if (!invitation.rosterAgentId && !invitation.acceptedAt)
+        legacyCandidate({ ...invitation, name: "" }, "invitation");
+    }
   }
 
   return candidates
@@ -295,6 +324,14 @@ async function loadRoster(db: Prisma.TransactionClient) {
         ...candidate,
         business: candidate.business ?? ("weatherly" as const),
         hasAccount: !!account,
+        canArchive:
+          phase === "inquiry" &&
+          !candidate.userId &&
+          !account &&
+          !invitation &&
+          !attachedAgreements.some((record) =>
+            ["received", "approved"].includes(record.status),
+          ),
         phase,
         phaseOn,
         agreementSentOn: sentOn,
@@ -317,6 +354,14 @@ async function loadRoster(db: Prisma.TransactionClient) {
         a.name.localeCompare(b.name, "en", { sensitivity: "base" }) ||
         a.id.localeCompare(b.id),
     );
+}
+
+export async function canArchiveRosterInquiry(
+  db: Prisma.TransactionClient,
+  row: StoredCandidate,
+) {
+  const [entry] = await loadRoster(db, row);
+  return entry?.canArchive === true;
 }
 
 export async function listRoster(actor: Principal) {

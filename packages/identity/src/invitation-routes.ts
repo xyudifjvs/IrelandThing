@@ -88,26 +88,43 @@ export function registerInvitationRoutes(
         const invitedUser = await tx.user.findUnique({
           where: { email: data.email },
         });
+        const prior = roster
+          ? await tx.invitation.findFirst({
+              where: {
+                rosterAgentId: roster.id,
+                role: "agent",
+                email: { equals: data.email, mode: "insensitive" },
+                acceptedAt: null,
+              },
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            })
+          : null;
         let approvedAgreementId: string | undefined;
+        let approvalOverrideReason = data.approvalOverrideReason;
         if (data.role === "agent" && roster?.business !== "hto") {
           const agreement = await tx.agreement.findFirst({
             where: {
               ...(data.agreementId ? { id: data.agreementId } : {}),
-              userId: {
-                in: [data.email, ...(invitedUser ? [invitedUser.id] : [])],
-              },
               status: "approved",
               documentId: { not: null },
-              ...(roster
-                ? {
-                    OR: [{ rosterAgentId: roster.id }, { rosterAgentId: null }],
-                  }
-                : {}),
+              AND: [
+                recipientMatches(data.email, invitedUser?.id),
+                ...(roster ? [unboundOrSameRoster(roster.id)] : []),
+              ],
             },
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           });
           if (agreement) approvedAgreementId = agreement.id;
-          else if (!data.approvalOverrideReason)
+          else if (
+            prior &&
+            !data.agreementId &&
+            (!data.matterId || data.matterId === prior.matterId)
+          ) {
+            const approval = await getInvitationApproval(tx, prior.id);
+            if (!approval?.approvedAgreementId)
+              approvalOverrideReason = approval?.approvalOverrideReason;
+          }
+          if (!approvedAgreementId && !approvalOverrideReason)
             throw new HttpError(
               422,
               "AGREEMENT_REQUIRED",
@@ -116,11 +133,14 @@ export function registerInvitationRoutes(
         }
 
         const now = new Date();
+        const matterId = data.matterId ?? prior?.matterId ?? undefined;
+        if (matterId && !data.matterId)
+          await requireMatter(actor, matterId, true, tx);
         if (roster) {
           await tx.invitation.updateMany({
             where: {
               rosterAgentId: roster.id,
-              email: data.email,
+              email: { equals: data.email, mode: "insensitive" },
               acceptedAt: null,
               expiresAt: { gt: now },
             },
@@ -132,7 +152,7 @@ export function registerInvitationRoutes(
             email: data.email,
             role: data.role,
             tokenHash: hash(token),
-            matterId: data.matterId,
+            matterId,
             rosterAgentId: roster?.id,
             expiresAt: new Date(now.getTime() + data.expiresInHours * 3600000),
             invitedById: actor.id,
@@ -155,7 +175,8 @@ export function registerInvitationRoutes(
             entityId: invitation.id,
             details: {
               approvedAgreementId: approvedAgreementId || null,
-              approvalOverrideReason: data.approvalOverrideReason || null,
+              approvalOverrideReason: approvalOverrideReason || null,
+              ...(prior ? { priorInvitationId: prior.id } : {}),
               delivery,
             },
           },
@@ -333,6 +354,24 @@ async function openInvitation(tx: Prisma.TransactionClient, token: string) {
 
 type Invitation = Prisma.InvitationGetPayload<object>;
 
+function recipientMatches(
+  email: string,
+  userId?: string,
+): Prisma.AgreementWhereInput {
+  return {
+    OR: [
+      { userId: { equals: normalizeRosterEmail(email), mode: "insensitive" } },
+      ...(userId ? [{ userId }] : []),
+    ],
+  };
+}
+
+function unboundOrSameRoster(
+  rosterAgentId: string,
+): Prisma.AgreementWhereInput {
+  return { OR: [{ rosterAgentId }, { rosterAgentId: null }] };
+}
+
 async function applyInvitationApproval(
   tx: Prisma.TransactionClient,
   invitation: Invitation,
@@ -377,32 +416,19 @@ async function applyWeatherlyApproval(
   invitation: Invitation,
   userId: string,
 ) {
-  const decision = await tx.auditEvent.findFirst({
-    where: {
-      entityType: "Invitation",
-      entityId: invitation.id,
-      action: "invitation.created",
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  const details = decision?.details as
-    | { approvedAgreementId?: string; approvalOverrideReason?: string }
-    | undefined;
+  const details = await getInvitationApproval(tx, invitation.id);
   if (details?.approvedAgreementId) {
     const agreement = await tx.agreement.findFirst({
       where: {
         id: details.approvedAgreementId,
-        userId: { in: [userId, invitation.email] },
         status: "approved",
         documentId: { not: null },
-        ...(invitation.rosterAgentId
-          ? {
-              OR: [
-                { rosterAgentId: invitation.rosterAgentId },
-                { rosterAgentId: null },
-              ],
-            }
-          : {}),
+        AND: [
+          recipientMatches(invitation.email, userId),
+          ...(invitation.rosterAgentId
+            ? [unboundOrSameRoster(invitation.rosterAgentId)]
+            : []),
+        ],
       },
     });
     if (!agreement)
@@ -442,4 +468,21 @@ async function applyWeatherlyApproval(
     "AGREEMENT_REQUIRED",
     "Approve signed agreement evidence before agent access",
   );
+}
+
+async function getInvitationApproval(
+  tx: Prisma.TransactionClient,
+  invitationId: string,
+) {
+  const decision = await tx.auditEvent.findFirst({
+    where: {
+      entityType: "Invitation",
+      entityId: invitationId,
+      action: "invitation.created",
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  });
+  return decision?.details as
+    | { approvedAgreementId?: string; approvalOverrideReason?: string }
+    | undefined;
 }

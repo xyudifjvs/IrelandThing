@@ -184,7 +184,7 @@ export function RosterWorkspace({
                         </small>
                       </button>
                       <div className={styles.actions}>
-                        {agent.phase === "inquiry" && !agent.hasAccount && (
+                        {agent.canArchive && (
                           <button
                             className={styles.quiet}
                             type="button"

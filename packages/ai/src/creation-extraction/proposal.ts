@@ -5,6 +5,7 @@ import {
   entityIdSchema,
 } from "@weatherly/platform/handoff-contracts";
 import type { CreationSources } from "./source-bundle";
+import { quoteSupportsCents, quoteSupportsCivilDate } from "./evidence";
 
 export const extractionDateKeySchema = z.enum([
   "preapproval_pof",
@@ -69,7 +70,7 @@ export const creationProposalSchema = z
           .object({
             key: extractionDateKeySchema,
             date: dateValueSchema.nullable(),
-        rule: extractedRuleSchema.nullable(),
+            rule: extractedRuleSchema.nullable(),
             evidence: evidenceSchema,
           })
           .strict(),
@@ -102,36 +103,56 @@ export function normalizeCreationProposal(
   const withEvidence = <T extends { evidence: z.infer<typeof evidenceSchema> }>(
     value: T | null,
   ) => (value && hasEvidence(value) ? value : null);
+  const verifiedMoney = (value: CreationProposal["purchasePriceCents"]) => {
+    const item = withEvidence(value);
+    return item && quoteSupportsCents(item.evidence.quote, item.value)
+      ? item
+      : null;
+  };
+  const acceptance = withEvidence(proposal.acceptance);
 
   return {
     propertyAddress: withEvidence(proposal.propertyAddress),
-    purchasePriceCents: withEvidence(proposal.purchasePriceCents),
-    acceptance: withEvidence(proposal.acceptance),
+    purchasePriceCents: verifiedMoney(proposal.purchasePriceCents),
+    acceptance:
+      acceptance &&
+      quoteSupportsCivilDate(acceptance.evidence.quote, acceptance.value.date)
+        ? acceptance
+        : null,
     buyers: proposal.buyers.filter(hasEvidence),
     sellers: proposal.sellers.filter(hasEvidence),
-    earnestMoneyCents: withEvidence(proposal.earnestMoneyCents),
+    earnestMoneyCents: verifiedMoney(proposal.earnestMoneyCents),
     earnestMoneyHolder: withEvidence(proposal.earnestMoneyHolder),
     homeWarrantyCompany: withEvidence(proposal.homeWarrantyCompany),
-    homeWarrantyCents: withEvidence(proposal.homeWarrantyCents),
+    homeWarrantyCents: verifiedMoney(proposal.homeWarrantyCents),
     titleCompany: withEvidence(proposal.titleCompany),
     // The checklist calculates relative dates from authoritative anchors.
-    dates: proposal.dates.filter(hasEvidence).map((item) => {
-      const { rule } = item;
-      if (rule?.kind === "relative") {
-        return {
-          ...item,
-          date: null,
-          rule: { kind: rule.kind, offset: rule.offset },
-        };
-      }
-      if (rule?.kind === "earliest") {
-        return {
-          ...item,
-          date: null,
-          rule: { kind: rule.kind, offsets: rule.offsets },
-        };
-      }
-      return item;
-    }),
+    dates: proposal.dates
+      .filter((item) => {
+        if (!hasEvidence(item)) return false;
+        if (item.rule && item.rule.kind !== "fixed") return true;
+        return (
+          !!item.date &&
+          quoteSupportsCivilDate(item.evidence.quote, item.date.date)
+        );
+      })
+      .map((item) => {
+        const { rule } = item;
+        if (rule?.kind === "relative") {
+          return {
+            ...item,
+            date: null,
+            rule: { kind: rule.kind, offset: rule.offset },
+          };
+        }
+        if (rule?.kind === "earliest") {
+          return {
+            ...item,
+            date: null,
+            rule: { kind: rule.kind, offsets: rule.offsets },
+          };
+        }
+        return item;
+      }),
   };
 }

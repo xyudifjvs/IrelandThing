@@ -173,7 +173,15 @@ export async function generateStructured<T>(
         "AI_PROVIDER_UNAVAILABLE",
         "The approved AI route is unavailable. No alternate route was used.",
       );
-    const result = (await response.json()) as {
+    const envelope: unknown = await response.json().catch(() => null);
+    if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+      throw new HttpError(
+        502,
+        "AI_INVALID_RESULT",
+        "AI returned an invalid structured result.",
+      );
+    }
+    const result = envelope as {
       choices?: { message?: { content?: string } }[];
       model?: string;
       provider?: string;
@@ -183,6 +191,16 @@ export async function generateStructured<T>(
         cost?: number;
       };
     };
+    if (
+      (result.model !== undefined && typeof result.model !== "string") ||
+      (result.provider !== undefined && typeof result.provider !== "string")
+    ) {
+      throw new HttpError(
+        502,
+        "AI_INVALID_RESULT",
+        "AI returned an invalid structured result.",
+      );
+    }
     const text = result.choices?.[0]?.message?.content;
     if (!text)
       throw new HttpError(

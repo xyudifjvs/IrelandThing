@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { HttpError } from "@weatherly/platform";
 import { assembleCreationSources } from "../src/creation-extraction/source-bundle";
 import { extractCreationProposal } from "../src/creation-extraction/extract";
+import { generateStructured } from "../src/gateway";
 
 const offer = { documentId: "offer", versionId: "offer-version" };
 const counter = { documentId: "counter", versionId: "counter-version" };
@@ -10,7 +11,10 @@ const packets = [
     ...offer,
     processingStatus: "complete",
     pages: [
-      { page: 1, text: "Closing November 18. Title commitment November 3." },
+      {
+        page: 1,
+        text: "Closing November 18, 2026. Title commitment November 3, 2026.",
+      },
       { page: 2, text: "Offer signed November 9." },
     ],
   },
@@ -20,7 +24,7 @@ const packets = [
     pages: [
       {
         page: 1,
-        text: "Signed counteroffer. Title commitment due November 12.",
+        text: "Signed counteroffer. Title commitment due November 12, 2026. Purchase price $325,000.00.",
       },
     ],
   },
@@ -28,7 +32,14 @@ const packets = [
 
 const proposal = {
   propertyAddress: null,
-  purchasePriceCents: null,
+  purchasePriceCents: {
+    value: 33000000,
+    evidence: {
+      versionId: counter.versionId,
+      page: 1,
+      quote: "Purchase price $325,000.00.",
+    },
+  },
   acceptance: null,
   buyers: [],
   sellers: [],
@@ -45,7 +56,7 @@ const proposal = {
       evidence: {
         versionId: counter.versionId,
         page: 1,
-        quote: "Title commitment due November 12.",
+        quote: "Title commitment due November 12, 2026.",
       },
     },
     {
@@ -55,13 +66,39 @@ const proposal = {
       evidence: {
         versionId: counter.versionId,
         page: 1,
-        quote: "fabricated possession clause",
+        quote: "Title commitment due November 12, 2026.",
       },
     },
   ],
 };
 
 describe("creation contract extraction", () => {
+  it("retries a malformed successful response envelope exactly once", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "synthetic-only");
+    vi.stubEnv("OPENROUTER_MODEL", "synthetic/model");
+    vi.stubEnv("OPENROUTER_APPROVED_PROVIDERS", "synthetic");
+    vi.stubEnv("OPENROUTER_ZDR_APPROVED", "true");
+    vi.stubEnv("OPENROUTER_ACCOUNT_PRIVACY_VERIFIED", "true");
+    const fetcher = vi.fn(
+      async () => new Response("invalid JSON", { status: 200 }),
+    );
+    try {
+      const result = await extractCreationProposal(
+        assembleCreationSources([offer, counter], packets),
+        {
+          generate: (input) => generateStructured(input, fetcher),
+        },
+      );
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        status: "unavailable",
+        reason: "invalid_response",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("sends every pinned page, keeps the signed proposal and discards invented evidence", async () => {
     const sources = assembleCreationSources([offer, counter], packets);
     expect(sources?.documents.flatMap(({ pages }) => pages)).toHaveLength(3);
@@ -80,8 +117,10 @@ describe("creation contract extraction", () => {
       },
     });
     expect(result.status).toBe("proposed");
-    if (result.status === "proposed")
+    if (result.status === "proposed") {
       expect(result.proposal.dates).toEqual([proposal.dates[0]]);
+      expect(result.proposal.purchasePriceCents).toBeNull();
+    }
   });
 
   it("refuses a partial or mismatched packet before invoking the provider", async () => {

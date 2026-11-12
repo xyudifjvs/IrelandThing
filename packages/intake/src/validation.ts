@@ -239,4 +239,3 @@ export function assertSubmissionReady(data: IntakePayload, business: Business = 
     );
   if (reference) assertReferenceComplete(reference, business);
 }
-

@@ -82,4 +82,3 @@ export async function listIntakeSubmissions(actor: Principal, raw: unknown = {})
     return { items: items.map(item => ({ ...item, agent: agents.find(a => a.id === item.userId) || null })), total, newCount, page: input.page };
   });
 }
-

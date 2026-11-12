@@ -61,7 +61,7 @@ export function createPrivateNotesRouter() {
   router.get(
     "/scratchpad",
     asyncHandler(async (req, res) => {
-      res.json(await readPrivateScratchpad(principal(req)));
+      res.json(await readPrivateScratchpad(principal(req), req.query));
     }),
   );
   router.patch(

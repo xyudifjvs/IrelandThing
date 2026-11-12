@@ -31,6 +31,10 @@ export function PrivateTodoPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const matters = useAllMatters(!matterId && !overview);
+  const activeMatters = matters.data.filter((matter) =>
+    ["under_contract", "closing", "listing"].includes(matter.stage ?? ""),
+  );
+  const activeMatterIds = new Set(activeMatters.map(({ id }) => id));
   const filters = new URLSearchParams({ limit: overview ? "5" : "50" });
   if (matterId) filters.set("matterId", matterId);
   if (cursor) filters.set("cursor", cursor);
@@ -71,12 +75,16 @@ export function PrivateTodoPanel({
             className={styles.form}
             onSubmit={(event) => {
               event.preventDefault();
+              if (busy || !draft.trim()) return;
+              const submittedText = draft;
               void change(async () => {
                 await mutate(endpoint, {
-                  body: draft,
+                  body: submittedText,
                   matterId: matterId || attachment || undefined,
                 });
-                setDraft("");
+                setDraft((current) =>
+                  current === submittedText ? "" : current,
+                );
                 setCursor(null);
               });
             }}
@@ -101,17 +109,11 @@ export function PrivateTodoPanel({
                   onChange={(event) => setAttachment(event.target.value)}
                 >
                   <option value="">Not attached to a file</option>
-                  {matters.data
-                    .filter((matter) =>
-                      ["under_contract", "closing", "listing"].includes(
-                        matter.stage ?? "",
-                      ),
-                    )
-                    .map((matter) => (
-                      <option key={matter.id} value={matter.id}>
-                        {address(matter)}
-                      </option>
-                    ))}
+                  {activeMatters.map((matter) => (
+                    <option key={matter.id} value={matter.id}>
+                      {address(matter)}
+                    </option>
+                  ))}
                 </select>
               </label>
             )}
@@ -161,7 +163,14 @@ export function PrivateTodoPanel({
               </label>
               {!matterId && (
                 <small className={styles.fileLabel}>
-                  {item.matter?.propertyAddress || "General"}
+                  {item.matterId && activeMatterIds.has(item.matterId) ? (
+                    <Link href={`/workspace/transactions/${item.matterId}`}>
+                      {item.matter?.propertyAddress || "Open transaction"}
+                    </Link>
+                  ) : (
+                    item.matter?.propertyAddress ||
+                    (item.matterId ? "Attached transaction" : "General")
+                  )}
                 </small>
               )}
               {!overview && (

@@ -148,9 +148,28 @@ export async function clearCompletedPrivateTodos(
 }
 
 const scratchpadSelection = { body: true, revision: true } as const;
+const scratchpadOwner = z.object({ expectedOwnerId: idSchema.optional() });
 
-export async function readPrivateScratchpad(actor: Principal) {
+function assertScratchpadOwner(
+  actor: Principal,
+  expectedOwnerId: string | undefined,
+) {
+  if (expectedOwnerId && expectedOwnerId !== actor.id) {
+    throw new HttpError(
+      409,
+      "SCRATCHPAD_OWNER_CHANGED",
+      "The signed-in account changed. Reopen My notes to continue.",
+    );
+  }
+}
+
+export async function readPrivateScratchpad(
+  actor: Principal,
+  input: unknown = {},
+) {
   assertCoordinator(actor);
+  const { expectedOwnerId } = scratchpadOwner.parse(input);
+  assertScratchpadOwner(actor, expectedOwnerId);
   return (
     (await prisma.privateScratchpad.findUnique({
       where: { ownerId: actor.id },
@@ -161,13 +180,14 @@ export async function readPrivateScratchpad(actor: Principal) {
 
 export async function savePrivateScratchpad(actor: Principal, input: unknown) {
   assertCoordinator(actor);
-  const { body, expectedRevision } = z
-    .object({
+  const { body, expectedRevision, expectedOwnerId } = scratchpadOwner
+    .extend({
       body: z.string().max(50000),
       expectedRevision: z.number().int().nonnegative(),
     })
     .strict()
     .parse(input);
+  assertScratchpadOwner(actor, expectedOwnerId);
   return prisma.$transaction(async (tx) => {
     const result =
       expectedRevision === 0

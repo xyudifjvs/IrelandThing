@@ -91,9 +91,20 @@ it("uses one owner-scoped item across notes and file views and clears only compl
 });
 
 it("keeps autosaved scratchpads private and rejects stale saves", async () => {
+  await expect(
+    savePrivateScratchpad(other, {
+      body: "Draft from a prior account",
+      expectedRevision: 0,
+      expectedOwnerId: owner.id,
+    }),
+  ).rejects.toMatchObject({ status: 409, code: "SCRATCHPAD_OWNER_CHANGED" });
+  await expect(
+    readPrivateScratchpad(other, { expectedOwnerId: owner.id }),
+  ).rejects.toMatchObject({ status: 409, code: "SCRATCHPAD_OWNER_CHANGED" });
   const first = await savePrivateScratchpad(owner, {
     body: "Private note",
     expectedRevision: 0,
+    expectedOwnerId: owner.id,
   });
   const race = await Promise.allSettled([
     savePrivateScratchpad(owner, {

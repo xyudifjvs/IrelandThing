@@ -5,6 +5,11 @@ import type {
   DateValue,
 } from "@weatherly/platform/handoff-contracts";
 import {
+  dateValueAtLocalTime,
+  localWallTime,
+  wallTimeInstants,
+} from "../../src/date-graph/calendar";
+import {
   applyChecklistDateEdit,
   previewChecklistDateEdit,
 } from "../../src/date-graph/preview";
@@ -372,5 +377,28 @@ describe("checklist date graph", () => {
         setDate(acceptance, date("2026-10-02", "2026-10-02T02:00:00Z")),
       ),
     ).toThrow(expect.objectContaining({ code: "INVALID_DATE" }));
+  });
+});
+
+describe("appointment wall clocks", () => {
+  const timeZone = "America/New_York";
+
+  it("rejects a local DST gap without changing the entered time", () => {
+    expect(wallTimeInstants("2027-03-14T02:30", timeZone)).toEqual([]);
+    expect(wallTimeInstants("2027-03-14T03:30", timeZone)).toEqual([
+      "2027-03-14T07:30:00.000Z",
+    ]);
+  });
+
+  it("lists both occurrences of a repeated appointment time and preserves precision", () => {
+    const wallTime = "2027-11-07T01:30:20.125";
+    const first = "2027-11-07T05:30:20.125Z";
+    const second = "2027-11-07T06:30:20.125Z";
+    expect(wallTimeInstants(wallTime, timeZone)).toEqual([first, second]);
+    expect(localWallTime(first, timeZone)).toBe(wallTime);
+    expect(localWallTime(second, timeZone)).toBe(wallTime);
+    expect(() => dateValueAtLocalTime("2027-11-07", "01:30", timeZone)).toThrow(
+      "Choose a time that occurs once",
+    );
   });
 });

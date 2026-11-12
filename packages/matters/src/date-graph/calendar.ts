@@ -53,10 +53,7 @@ function civilDateAt(instant: number, calendar: Intl.DateTimeFormat) {
   return localDateTime(instant, calendar)?.slice(0, 10) ?? null;
 }
 
-function instantForLocalTime(
-  localTime: string,
-  calendar: Intl.DateTimeFormat,
-): string | null {
+function matchingInstants(localTime: string, calendar: Intl.DateTimeFormat) {
   const wallClock = Date.parse(`${localTime}Z`);
   const candidates = new Set<number>();
   // Test the UTC offsets on both sides of the local day to detect a gap or fold.
@@ -71,18 +68,45 @@ function instantForLocalTime(
     if (localDateTime(candidate, calendar) === localTime)
       candidates.add(candidate);
   }
-  if (candidates.size !== 1) return null;
-  const [candidate] = candidates;
-  return new Date(candidate).toISOString();
+  return [...candidates]
+    .sort((a, b) => a - b)
+    .map((candidate) => new Date(candidate).toISOString());
+}
+
+function instantForLocalTime(
+  localTime: string,
+  calendar: Intl.DateTimeFormat,
+): string | null {
+  const matches = matchingInstants(localTime, calendar);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export function localWallTime(instant: string, timeZone: string) {
+  const calendar = deadlineCalendar(timeZone);
+  return calendar ? localDateTime(Date.parse(instant), calendar) : null;
+}
+
+/** Return every exact instant for a local clock, in chronological order. */
+export function wallTimeInstants(
+  wallTime: string,
+  timeZone: string | null,
+): string[] {
+  const match =
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(wallTime);
+  const calendar = deadlineCalendar(timeZone);
+  if (!match || !calendar) return [];
+  return matchingInstants(
+    `${match[1]}:${match[2] ?? "00"}.${(match[3] ?? "").padEnd(3, "0")}`,
+    calendar,
+  );
 }
 
 export function localDeadlineClock(
   instant: string | null | undefined,
   timeZone: string | null,
 ) {
-  const calendar = deadlineCalendar(timeZone);
-  return instant && calendar
-    ? (localDateTime(Date.parse(instant), calendar)?.slice(11) ?? "")
+  return instant && timeZone
+    ? (localWallTime(instant, timeZone)?.slice(11) ?? "")
     : "";
 }
 
@@ -94,25 +118,18 @@ export function dateValueAtLocalTime(
   if (!civilDateSchema.safeParse(date).success)
     throw new ChecklistDateError("INVALID_DATE", "Enter a valid date.");
   if (!time) return { date, instant: null };
-  const calendar = deadlineCalendar(timeZone);
-  if (!calendar)
+  if (!timeZone)
     throw new ChecklistDateError(
       "INVALID_DATE",
       "Set the file's deadline timezone before entering an exact time.",
     );
-  const clock = /^(\d{2}:\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(time);
-  const instant = clock
-    ? instantForLocalTime(
-        `${date}T${clock[1]}:${clock[2] ?? "00"}.${(clock[3] ?? "").padEnd(3, "0")}`,
-        calendar,
-      )
-    : null;
-  if (!instant)
+  const matches = wallTimeInstants(`${date}T${time}`, timeZone);
+  if (matches.length !== 1)
     throw new ChecklistDateError(
       "INVALID_DATE",
       "Choose a time that occurs once on this date in the file's timezone.",
     );
-  return { date, instant };
+  return { date, instant: matches[0] };
 }
 
 export function validateDateValue(

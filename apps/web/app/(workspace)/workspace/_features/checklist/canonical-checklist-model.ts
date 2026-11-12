@@ -1,8 +1,10 @@
-import type {
-  ChecklistDateEdit,
-  ChecklistDateRule,
-  DateValue,
+import {
+  dateValueSchema,
+  type ChecklistDateEdit,
+  type ChecklistDateRule,
+  type DateValue,
 } from "@weatherly/platform/handoff-contracts";
+import { remediesAnchorKey } from "../../../../../../../packages/matters/src/checklist/templates";
 import { date, type Matter, type Task } from "../../_components/data";
 
 export type DateChange = ChecklistDateEdit["change"];
@@ -64,6 +66,26 @@ export function dueDateValue(task: ChecklistTaskRecord): DateValue | null {
     : null;
 }
 
+export function editableRemediesDate(
+  matter: ChecklistMatter,
+): DateValue | null | undefined {
+  const anchors = matter.details?.checklistDateAnchors;
+  if (!Array.isArray(anchors)) return;
+  const remedies = anchors.find(
+    (anchor: unknown): anchor is { key: string; status: string; due: unknown } =>
+      !!anchor &&
+      typeof anchor === "object" &&
+      "key" in anchor &&
+      anchor.key === remediesAnchorKey &&
+      "status" in anchor &&
+      anchor.status === "open" &&
+      "due" in anchor,
+  );
+  if (!remedies) return;
+  const due = dateValueSchema.nullable().safeParse(remedies.due);
+  return due.success ? due.data : undefined;
+}
+
 export function actualDateValue(task: ChecklistTaskRecord): DateValue | null {
   return task.actualDate
     ? { date: task.actualDate, instant: task.actualAt }
@@ -90,7 +112,7 @@ export function targetLabel(
   if (target.kind === "acceptance") return "Acceptance date";
   const title =
     labels[target.key] ||
-    (target.key === "remedies" ? "Remedies request" : target.key);
+    (target.key === remediesAnchorKey ? "Remedies request" : target.key);
   return target.kind === "actual" ? `Actual date for ${title}` : title;
 }
 

@@ -12,3 +12,11 @@ The new checklist uses keyed Task rows as its displayed steps. The date graph st
 ## Builder verification
 
 The root typecheck and a local Next.js production build using Webpack passed. The default Turbopack build could not resolve the Next.js dependency through the isolated worktree's node_modules symlinks. The PostgreSQL acceptance runner applied 19 migrations and passed 156 tests across 22 files for matters, intake, AI, and communications. Coverage includes the 19 pure checklist tests and five integration tests for existing-file activation, extension concurrency, pinning, HOA delivery rollback, and step permissions. Browser workflow validation belongs to integrated acceptance. The test run used synthetic data and local PostgreSQL.
+
+## Independent review follow-up
+
+The coordinator can amend the Remedies request deadline from the Inspections row. The editor reads the saved calculation anchor and uses the same preview and apply commands as displayed dates. The buyer and seller templates still contain 16 and 13 rows respectively. Coordinator detail must retain the anchor for this control.
+
+The appointment editor uses the coordinator's browser timezone. It rejects a local time that falls in a daylight-saving gap and shows both UTC offsets when a local time repeats. A place-only edit preserves the existing appointment instant.
+
+The follow-up passed typecheck, a Webpack production build, 48 focused PostgreSQL tests, and Chromium with real checklist routes and disposable synthetic records. Chromium confirmed the Remedies preview and save, rejection of a nonexistent time, explicit selection of the second repeated hour, and preservation of that instant during a place edit.

@@ -25,6 +25,7 @@ export function CanonicalChecklistStep({
   readOnly,
   act,
   editDate,
+  editRemedies,
   moveUp,
   moveDown,
 }: {
@@ -36,6 +37,7 @@ export function CanonicalChecklistStep({
   readOnly: boolean;
   act: TransactionAction;
   editDate: (draft: DateEditorDraft) => void;
+  editRemedies?: () => void;
   moveUp?: () => Promise<unknown>;
   moveDown?: () => Promise<unknown>;
 }) {
@@ -121,6 +123,16 @@ export function CanonicalChecklistStep({
                 </button>
               )}
             </p>
+          )}
+          {editRemedies && (
+            <button
+              className={s.textButton}
+              type="button"
+              disabled={!mayEdit}
+              onClick={editRemedies}
+            >
+              Edit Remedies request deadline
+            </button>
           )}
           {!skipped && isHoaDelivery && actual && (
             <p className={s.subline}>

@@ -278,6 +278,41 @@ describe("canonical checklist persistence", () => {
     });
   });
 
+  it("amends the hidden Remedies deadline without moving inspections or adding a step", async () => {
+    const matter = await createMatter();
+    await seed(matter.id);
+    const edit: ChecklistDateEdit = {
+      expectedRevision: matter.revision,
+      change: {
+        kind: "set",
+        target: { kind: "step", key: "remedies" },
+        value: date("2026-10-15"),
+      },
+    };
+    const preview = await previewMatterChecklistDates(actor, matter.id, edit);
+    expect(preview.primary).toMatchObject({
+      before: date("2026-10-11"),
+      after: date("2026-10-15"),
+    });
+    expect(preview.dependents).toMatchObject([
+      { target: { kind: "step", key: "remedies_negotiated" }, after: date("2026-10-18") },
+    ]);
+    await applyMatterChecklistDates(actor, matter.id, {
+      ...edit,
+      previewDigest: preview.previewDigest,
+      mode: "update_all",
+    });
+    expect(await task(matter.id, "inspections")).toMatchObject({
+      dueDate: "2026-10-11",
+    });
+    expect(await task(matter.id, "remedies_negotiated")).toMatchObject({
+      dueDate: "2026-10-18",
+    });
+    expect(
+      await prisma.task.count({ where: { matterId: matter.id, stepKey: { not: null } } }),
+    ).toBe(16);
+  });
+
   it("records actual HOA delivery and completion atomically, with hook failure rolling both back", async () => {
     const matter = await createMatter();
     await seed(matter.id);

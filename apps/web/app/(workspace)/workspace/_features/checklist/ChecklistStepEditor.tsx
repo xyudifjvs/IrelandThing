@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { localAppointment } from "../../../../_lib/checklist-audiences";
+import {
+  localWallTime,
+  wallTimeInstants,
+} from "../../../../../../../packages/matters/src/date-graph/calendar";
 import { mutate } from "../../_components/data";
 import type { TransactionAction } from "../../_components/transaction-controls";
 import type { ChecklistTaskRecord } from "./canonical-checklist-model";
@@ -24,10 +27,33 @@ export function ChecklistStepEditor({
 }) {
   const [expectedRevision] = useState(task.revision);
   const stale = expectedRevision !== task.revision;
+  const [timeZone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
+  const savedAppointment = task.appointmentAt ?? task.details?.appointmentAt;
+  const [wallTime, setWallTime] = useState(() =>
+    kind === "appointment" && savedAppointment
+      ? localWallTime(savedAppointment, timeZone) ?? ""
+      : "",
+  );
+  const [occurrence, setOccurrence] = useState(() =>
+    savedAppointment && wallTime ? new Date(savedAppointment).toISOString() : "",
+  );
+  const choices = wallTime ? wallTimeInstants(wallTime, timeZone) : [];
+  const invalidWallTime = !!wallTime && !choices.length;
+  const repeatedWallTime = choices.length > 1;
+  const appointmentAt = repeatedWallTime
+    ? choices.find((instant) => instant === occurrence)
+    : choices[0];
+  const offsetName = (instant: string) =>
+    new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortOffset" })
+      .formatToParts(new Date(instant))
+      .find((part) => part.type === "timeZoneName")?.value;
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
-    const appointment = String(values.get("appointment") || "");
+    if (stale || (kind === "appointment" && wallTime && !appointmentAt)) return;
     const patch =
       kind === "title"
         ? { title: String(values.get("title") || "").trim() }
@@ -37,9 +63,7 @@ export function ChecklistStepEditor({
               showNoteToAgent: values.has("showNoteToAgent"),
             }
           : {
-              appointmentAt: appointment
-                ? new Date(appointment).toISOString()
-                : null,
+              appointmentAt: appointmentAt ?? null,
               appointmentPlace: String(values.get("place") || "").trim(),
             };
     void act(task.id, async () => {
@@ -92,11 +116,38 @@ export function ChecklistStepEditor({
             <input
               name="appointment"
               type="datetime-local"
-              defaultValue={localAppointment(
-                task.appointmentAt ?? task.details?.appointmentAt,
-              )}
+              step="0.001"
+              value={wallTime}
+              aria-invalid={invalidWallTime}
+              onChange={(event) => {
+                setWallTime(event.target.value);
+                setOccurrence("");
+              }}
             />
           </label>
+          {invalidWallTime && (
+            <p role="alert">
+              This time does not occur in {timeZone}. Choose another time.
+            </p>
+          )}
+          {repeatedWallTime && (
+            <label>
+              This local time occurs twice. Choose which occurrence.
+              <select
+                required
+                value={appointmentAt ?? ""}
+                onChange={(event) => setOccurrence(event.target.value)}
+              >
+                <option value="">Choose an occurrence</option>
+                {choices.map((instant, index) => (
+                  <option key={instant} value={instant}>
+                    {index === 0 ? "First occurrence" : "Second occurrence"}{" "}
+                    ({offsetName(instant)})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             Place
             <input

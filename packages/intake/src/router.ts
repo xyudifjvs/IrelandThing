@@ -1,3 +1,4 @@
+import { getAgentMembership } from "@weatherly/identity/membership";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma, type Prisma } from "@weatherly/db";
@@ -16,6 +17,13 @@ export function createIntakeRouter(beforeDelete?: BeforeIntakeDelete) {
         res.json(await deleteIntake(principal(req), String(req.params.id), req.body, beforeDelete)),
       ),
     );
+  r.get("/membership", asyncHandler(async (req, res) => {
+    const actor = principal(req);
+    permitted(actor);
+    res.set("Cache-Control", "private, no-store");
+    const { business } = await getAgentMembership(actor.id);
+    res.json({ business });
+  }));
   r.get("/submissions", asyncHandler(async (req, res) => res.json(await listIntakeSubmissions(principal(req), req.query))));
   r.get("/submissions/:id", asyncHandler(async (req, res) => res.json(await getIntakeSubmission(principal(req), String(req.params.id)))));
   r.post("/submissions/:id/create-transaction", asyncHandler(async (req, res) => res.json(await createTransactionFromIntake(principal(req), String(req.params.id)))));

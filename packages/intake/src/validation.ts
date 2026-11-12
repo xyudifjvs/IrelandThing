@@ -1,3 +1,4 @@
+import type { Business } from "@weatherly/platform/handoff-contracts";
 import { z } from "zod";
 import { HttpError } from "@weatherly/platform";
 import { referenceIntake, referenceDocumentIds, assertReferenceComplete } from "./reference";
@@ -193,7 +194,7 @@ export const intakePayload = z
   });
 export type IntakePayload = z.infer<typeof intakePayload>;
 /** Drafts remain partial. New reference submissions answer their active questions. */
-export function assertSubmissionReady(data: IntakePayload) {
+export function assertSubmissionReady(data: IntakePayload, business: Business = "weatherly") {
   if (data.packageCode === "full_listing")
     throw new HttpError(
       409,
@@ -205,10 +206,10 @@ export function assertSubmissionReady(data: IntakePayload) {
     ? Boolean(reference.uploads.contractDocs?.length)
     : data.contractSource === "upload" && Boolean(data.documentIds.length);
   if (hasContract) {
-    if (reference) assertReferenceComplete(reference);
+    if (reference) assertReferenceComplete(reference, business);
     return;
   }
-  if (data.packageCode === "essentials")
+  if (data.packageCode === "essentials" && business === "weatherly")
     throw new HttpError(
       422,
       "CONTRACT_UPLOAD_REQUIRED",
@@ -236,6 +237,6 @@ export function assertSubmissionReady(data: IntakePayload) {
       "CONTRACT_REQUIRED",
       "Upload the executed contract or identify the transaction loop where Ireland can find it by transaction name or property address.",
     );
-  if (reference) assertReferenceComplete(reference);
+  if (reference) assertReferenceComplete(reference, business);
 }
 

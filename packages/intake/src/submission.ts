@@ -1,3 +1,5 @@
+import { getAgentMembership } from "@weatherly/identity/membership";
+import { htoServiceCode } from "@weatherly/platform/handoff-contracts";
 import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
@@ -106,11 +108,14 @@ export async function submitIntake(
         };
       }
       const data = intakePayload.parse(draft.payload);
-      assertSubmissionReady(data);
-      const catalog = await tx.catalogItem.findUnique({
-        where: { code: data.packageCode },
-      });
-      if (!catalog?.approved)
+      const membership = await getAgentMembership(draft.userId, tx);
+      const { business, rosterAgentId } = membership;
+      const packageCode = business === "hto" ? htoServiceCode : data.packageCode;
+      assertSubmissionReady(data, business);
+      const catalog = business === "weatherly"
+        ? await tx.catalogItem.findUnique({ where: { code: data.packageCode } })
+        : null;
+      if (business === "weatherly" && !catalog?.approved)
         throw new HttpError(
           409,
           "CATALOG_UNAPPROVED",
@@ -118,16 +123,20 @@ export async function submitIntake(
         );
       const snapshot = {
         ...data,
+        packageCode,
+        business,
         fileReview: { status: "pending" },
-        serviceSnapshot: {
-          code: catalog.code,
-          name: catalog.name,
-          revision: catalog.revision,
-          priceCents: catalog.priceCents,
-          currency: catalog.currency,
-          dueAtClosing: true,
-          noFeeIfTerminatedBeforeClosing: true,
-        },
+        ...(catalog ? {
+          serviceSnapshot: {
+            code: catalog.code,
+            name: catalog.name,
+            revision: catalog.revision,
+            priceCents: catalog.priceCents,
+            currency: catalog.currency,
+            dueAtClosing: true,
+            noFeeIfTerminatedBeforeClosing: true,
+          },
+        } : {}),
       };
       if (data.replacesMatterId) {
         // A replacement is a separate submitted record. Lock and re-read the
@@ -232,9 +241,11 @@ export async function submitIntake(
           title: data.propertyAddress || "Untitled transaction",
           propertyAddress: data.propertyAddress,
           side: data.side,
-          packageCode: data.packageCode,
+          packageCode,
+          business,
           stage: "pending_review",
           agentId: draft.userId,
+          agentRosterId: rosterAgentId,
           details: snapshot as Prisma.InputJsonValue,
         },
       });
@@ -352,6 +363,7 @@ export async function submitIntake(
           idempotencyKey,
           userId: draft.userId,
           matterId: matter.id,
+          business,
           snapshot: snapshot as Prisma.InputJsonValue,
         },
       });

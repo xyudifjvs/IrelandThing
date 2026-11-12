@@ -10,6 +10,15 @@ import { rateLimit } from "express-rate-limit";
 import { requireMatter } from "@weatherly/matters";
 import { prisma } from "@weatherly/db";
 import {
+  getAgentMembership,
+  hasAgentAgreementAccess,
+} from "./agent-membership";
+export {
+  getAgentMembership,
+  hasAgentAgreementAccess,
+  type AgentMembership,
+} from "./agent-membership";
+import {
   HttpError,
   asyncHandler,
   principal,
@@ -121,21 +130,7 @@ export function sessionMiddleware(auth: WeatherlyAuth): RequestHandler {
           user.role === "agent" &&
           !["/session", "/profile"].includes(req.path)
         ) {
-          const agreement = await prisma.agreement.findFirst({
-            where: {
-              userId: user.id,
-              status: "approved",
-              documentId: { not: null },
-            },
-          });
-          const override = await prisma.auditEvent.findFirst({
-            where: {
-              entityType: "User",
-              entityId: user.id,
-              action: "agent.access_override",
-            },
-          });
-          if (!agreement && !override)
+          if (!(await hasAgentAgreementAccess(user.id)))
             throw new HttpError(
               403,
               "AGREEMENT_REQUIRED",
@@ -177,7 +172,10 @@ export function createIdentityRouter(auth: WeatherlyAuth) {
         select: { id: true, expiresAt: true },
       });
       res.json({
-        user,
+        user:
+          user.role === "agent"
+            ? { ...user, ...(await getAgentMembership(user.id)) }
+            : user,
         session,
         mfaRequired: false,
       });

@@ -40,6 +40,12 @@ export function DraftApproval({
 }) {
   return (
     <div style={{ marginTop: 20 }}>
+      {draft.details?.sendFailure && (
+        <p className={s.notice} role="status">
+          This email stopped before delivery. Review the saved draft before
+          approving it again.
+        </p>
+      )}
       {draft.details?.reviewNeeded && (
         <div className={s.notice}>
           <strong>The transaction changed. Review this draft again.</strong>
@@ -127,6 +133,7 @@ export function DraftApproval({
           dirty ||
           !confirmed ||
           !connected ||
+          draft.details?.templateNeedsRebind ||
           ["queued", "sending", "sent", "delivery_unknown"].includes(
             draft.status,
           )

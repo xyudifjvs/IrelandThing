@@ -534,7 +534,12 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
       const retained = await prisma.emailDraft.findUniqueOrThrow({
         where: { id: draft.id },
       });
-      expect(retained.status).toBe("queued");
+      expect(retained.status).toBe("draft");
+      expect(retained.sendKey).toBeNull();
+      expect(retained.details).toMatchObject({
+        sendFailure: code,
+        reviewNeeded: true,
+      });
       expect(retained.details).not.toHaveProperty("attemptStartedAt");
     }
   });

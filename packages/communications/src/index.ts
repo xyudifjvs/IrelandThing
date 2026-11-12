@@ -21,6 +21,7 @@ export * from "./merge-fields";
 export { listEmailWork } from "./email-work";
 export { invalidateFileEmailWork } from "./file-email-effects";
 export { queueAgentInvitation } from "./agent-invitation-email";
+export { seedPlaceholderEmailTemplates } from "./placeholder-templates";
 let shared: CommunicationsService | undefined;
 const current = () => shared || (shared = createCommunicationsService());
 export const listMessages = (

@@ -5,7 +5,13 @@ import { Mail, Save } from "lucide-react";
 import { useData, mutate, label, type Matter } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import MatterPicker from "../../_components/MatterPicker";
-import type { Draft } from "./email-model";
+import type { Draft, FileEmailMessage, Template } from "./email-model";
+import {
+  defaultEmailRecipients,
+  emailRoleFamily,
+  recipientGreeting,
+  type EmailRecipient,
+} from "./recipient-defaults";
 import { ComposerTemplateFields } from "./ComposerTemplateFields";
 import { DraftApproval } from "./DraftApproval";
 import { EmailWorkControls } from "./EmailWorkControls";
@@ -21,13 +27,15 @@ export function Composer({
   fixedMatterId,
   initialTemplateId,
   initialDraftId,
-  initialRecipient,
+  initialRecipients,
+  initialReply,
   onWorkChanged,
 }: {
   fixedMatterId?: string;
   initialTemplateId?: string;
   initialDraftId?: string;
-  initialRecipient?: { name: string; email: string };
+  initialRecipients?: EmailRecipient[];
+  initialReply?: FileEmailMessage;
   onWorkChanged?: () => Promise<void>;
 } = {}) {
   const users =
@@ -53,9 +61,16 @@ export function Composer({
     `/api/v1/communications/drafts${matter ? "?matterId=" + encodeURIComponent(matter) : ""}`,
   );
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [to, setTo] = useState(""),
+  const [replyToMessageId, setReplyToMessageId] = useState(initialReply?.id);
+  const [to, setTo] = useState(initialReply?.fromEmail ?? ""),
     [cc, setCc] = useState(""),
-    [subject, setSubject] = useState(""),
+    [subject, setSubject] = useState(
+      initialReply
+        ? /^re:/i.test(initialReply.subject)
+          ? initialReply.subject
+          : `Re: ${initialReply.subject}`
+        : "",
+    ),
     [body, setBody] = useState(""),
     [attachments, setAttachments] = useState<string[]>([]);
   const [busy, setBusyState] = useState(false),
@@ -64,7 +79,7 @@ export function Composer({
     [dirty, setDirty] = useState(true),
     [confirmed, setConfirmed] = useState(false),
     [template, setTemplate] = useState(initialTemplateId || ""),
-    [recipientName, setRecipientName] = useState(initialRecipient?.name || "");
+    [recipientName, setRecipientName] = useState("");
   const busyRef = useRef(false);
   function setBusy(value: boolean) {
     busyRef.current = value;
@@ -95,10 +110,7 @@ export function Composer({
   const suggestions = [...canonicalPeople, ...legacyPeople].filter(
     (person) =>
       person.email &&
-      (!throughAgent ||
-        !["client", "buyer", "seller"].includes(
-          person.role?.trim().toLowerCase() ?? "",
-        )),
+      (!throughAgent || emailRoleFamily(person.role ?? "") !== "client"),
   );
   const existingEmails = new Set(
     [
@@ -134,6 +146,7 @@ export function Composer({
         return;
       setMatter(value.matterId);
       setDraft(null);
+      setReplyToMessageId(undefined);
       setTemplate("");
       setBinding(null);
       setRecipientName("");
@@ -160,6 +173,7 @@ export function Composer({
   };
   function loadDraft(d: Draft) {
     setDraft(d);
+    setReplyToMessageId(undefined);
     setMatter(d.matterId);
     setTo(d.to.join(", "));
     setCc(d.cc.join(", "));
@@ -193,10 +207,21 @@ export function Composer({
     }
   }, [drafts.data, initialDraftId]);
 
-  const defaultRecipientName = initialRecipient?.name ?? "";
-  const defaultRecipientEmail = initialRecipient?.email ?? "";
+  const defaultsReady = initialRecipients !== undefined;
+  const defaultTemplateApplied = useRef(false);
+  const defaultRecipientName = recipientGreeting(initialRecipients ?? []);
+  const defaultRecipientEmail = (initialRecipients ?? [])
+    .map(({ email }) => email)
+    .join(", ");
   useEffect(() => {
-    if (!initialTemplateId || initialDraftId || !fixedMatterId) return;
+    if (
+      !initialTemplateId ||
+      initialDraftId ||
+      !fixedMatterId ||
+      !defaultsReady ||
+      defaultTemplateApplied.current
+    )
+      return;
     let current = true;
     busyRef.current = true;
     setBusyState(true);
@@ -214,9 +239,11 @@ export function Composer({
     })
       .then((rendered) => {
         if (!current) return;
+        defaultTemplateApplied.current = true;
         setSubject(rendered.subject);
         setBody(rendered.body);
         setTo(defaultRecipientEmail);
+        setRecipientName(defaultRecipientName);
         setBinding({
           id: rendered.templateId,
           revision: rendered.templateRevision,
@@ -240,14 +267,50 @@ export function Composer({
     initialTemplateId,
     initialDraftId,
     fixedMatterId,
+    defaultsReady,
     defaultRecipientName,
     defaultRecipientEmail,
   ]);
+  function chooseTemplate(next: Template | undefined) {
+    setTemplate(next?.id || "");
+    setBinding(null);
+    if (!next || draft || to) return;
+    const people = [
+      ...suggestions,
+      ...(servingAgent ? [{ ...servingAgent, role: "agent" }] : []),
+    ].filter((person): person is EmailRecipient =>
+      Boolean(person.email && person.name && person.role),
+    );
+    const recipients = defaultEmailRecipients(
+      people,
+      next.recipientRoles ?? [],
+      detail.data?.details?.directContact,
+    );
+    edit(setTo, recipients.map(({ email }) => email).join(", "));
+    setRecipientName(recipientGreeting(recipients));
+  }
   async function fillTemplate() {
     if (busyRef.current) return;
     setBusy(true);
     setError("");
     try {
+      if (draft) {
+        const rebound = await mutate<Draft>(
+          `/api/v1/communications/drafts/${draft.id}/reset-template`,
+          {
+            expectedRevision: draft.revision,
+            templateId: template,
+            values: recipientName ? { recipientName } : {},
+          },
+        );
+        loadDraft(rebound);
+        await drafts.refresh();
+        await onWorkChanged?.();
+        setMessage(
+          "Template updated. Review the saved wording before sending.",
+        );
+        return;
+      }
       const result = await mutate<{
         subject: string;
         body: string;
@@ -292,6 +355,7 @@ export function Composer({
         subject,
         body,
         attachmentIds: attachments,
+        ...(!draft && replyToMessageId ? { replyToMessageId } : {}),
         ...(!draft && binding
           ? {
               templateId: binding.id,
@@ -351,6 +415,7 @@ export function Composer({
                   setTemplate("");
                   setBinding(null);
                   setDraft(null);
+                  setReplyToMessageId(undefined);
                   setDirty(true);
                   setAttachments([]);
                   setConfirmed(false);
@@ -369,6 +434,7 @@ export function Composer({
                   if (selected) loadDraft(selected);
                   else {
                     setDraft(null);
+                    setReplyToMessageId(undefined);
                     setTemplate("");
                     setBinding(null);
                     setRecipientName("");
@@ -406,13 +472,16 @@ export function Composer({
               side={detail.data?.side}
               packageCode={detail.data?.packageCode}
               template={template}
-              chooseTemplate={(id) => {
-                setTemplate(id);
-                setBinding(null);
-              }}
+              chooseTemplate={chooseTemplate}
               recipientName={recipientName}
               setRecipientName={setRecipientName}
-              bound={!!draft}
+              disabled={
+                !!draft &&
+                (!draft.details?.templateId ||
+                  dirty ||
+                  draft.status !== "draft")
+              }
+              rebind={!!draft}
               fill={() => void fillTemplate()}
             />
           )}
@@ -469,6 +538,7 @@ export function Composer({
               change={(value) => edit(setTo, value)}
               addToDeal={editablePeople ? setNewPersonEmail : undefined}
               existingEmails={existingEmails}
+              searchDirectory={editablePeople}
             />
             <RecipientField
               title="CC"

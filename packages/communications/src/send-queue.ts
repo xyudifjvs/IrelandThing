@@ -12,6 +12,7 @@ import {
   assertReviewedMatter,
   textArray,
   recipientPolicy,
+  requireSameRecipients,
   requireResolved,
 } from "./policy";
 import type { CommunicationsService } from "./service";
@@ -31,161 +32,161 @@ export async function queueSend(
     .parse(input);
   const old = await prisma.emailDraft.findUnique({ where: { id } });
   if (!old) throw new HttpError(404, "DRAFT_NOT_FOUND", "Draft not found");
-  const currentMatter = await requireMatter(actor, old.matterId, true);
-  assertReviewedMatter(currentMatter);
   const sendKey = `gmail-draft:${id}:${expectedRevision}`;
   if (
     old.sendKey === sendKey &&
     ["queued", "sending", "sent", "delivery_unknown"].includes(old.status)
   )
     return old;
-  const details = asRecord(old.details);
-  const canonical = currentMatter.checklistVersion !== null;
-  if (
-    canonical &&
-    !["under_contract", "closing", "listing"].includes(currentMatter.stage)
-  )
+  if (old.revision !== expectedRevision || old.status !== "draft")
     throw new HttpError(
       409,
-      "EMAIL_FILE_READ_ONLY",
-      "Open an active file to send transaction email.",
+      "REVISION_CONFLICT",
+      "Draft changed; review before sending",
     );
-  if (canonical && typeof details.templateId === "string") {
-    const template = await prisma.communicationTemplate.findUnique({
-      where: { id: details.templateId },
-    });
-    if (!template?.active || template.revision !== details.templateRevision)
+  return prisma.$transaction(async (tx) => {
+    const matter = await requireMatter(actor, old.matterId, true, tx);
+    assertReviewedMatter(matter);
+    if (matter.checklistVersion !== null)
+      await requireEmailWorkFile(tx, actor, matter.id);
+    const details = asRecord(old.details);
+    if (details.templateNeedsRebind === true)
       throw new HttpError(
         409,
         "TEMPLATE_CHANGED",
-        "Open the current template and review a fresh draft.",
+        "Choose a current template and review the saved wording before sending.",
       );
-    if (template.isPlaceholder)
-      throw new HttpError(
-        422,
-        "TEMPLATE_PLACEHOLDER",
-        "Add the template's approved content before sending.",
-      );
-    const current = await this.renderInDb(actor, template.id, {
-      matterId: old.matterId,
-      values: asRecord(details.templateValues),
-    });
-    const preview = asRecord(details.templateSnapshot);
-    if (preview.subject !== current.subject || preview.body !== current.body)
-      throw new HttpError(
-        409,
-        "SOURCE_PREVIEW_CHANGED",
-        "Transaction fields changed. Refresh this draft and review it again.",
-      );
-    if (
-      (current.missingSubjectFields.length &&
-        old.subject === current.subject) ||
-      (current.missingBodyFields.length && old.body === current.body)
-    )
-      throw new HttpError(
-        422,
-        "MISSING_MERGE_FIELD",
-        "Fill or remove the blank fields in this email before sending.",
-      );
-  }
-  assertConfigured(this.config, true);
-  requireResolved(old.subject, old.body);
-  const recipients = await recipientPolicy(
-    actor,
-    old.matterId,
-    textArray(old.to),
-    textArray(old.cc),
-  );
-  if (
-    JSON.stringify(recipients.to) !== JSON.stringify(old.to) ||
-    JSON.stringify(recipients.cc) !== JSON.stringify(old.cc)
-  )
-    throw new HttpError(
-      409,
-      "RECIPIENT_PREVIEW_CHANGED",
-      "Contact policy changed; save and review the updated recipients",
-    );
-  await this.validateAttachments(
-    actor,
-    old.matterId,
-    textArray(old.attachmentIds),
-  );
-  const connection = await prisma.integrationConnection.findUnique({
-    where: { provider_ownerId: { provider: "gmail", ownerId: actor.id } },
-  });
-  if (connection?.status !== "connected")
-    throw new HttpError(
-      503,
-      "GMAIL_NOT_CONNECTED",
-      "Connect the Weatherly mailbox first",
-    );
-  const attachments = await prisma.documentVersion.findMany({
-    where: { documentId: { in: textArray(old.attachmentIds) } },
-    orderBy: { version: "desc" },
-  });
-  const selected = new Map<string, (typeof attachments)[number]>();
-  for (const a of attachments)
-    if (!selected.has(a.documentId)) selected.set(a.documentId, a);
-  const snapshot = {
-    to: recipients.to,
-    cc: recipients.cc,
-    directoryRecipients: recipients.directoryRecipients,
-    subject: old.subject,
-    body: old.body,
-    attachments: [...selected.values()].map((v) => ({
-      documentId: v.documentId,
-      versionId: v.id,
-      checksum: v.checksum,
-    })),
-    replyToMessageId: asRecord(old.details).replyToMessageId || null,
-    approvedById: actor.id,
-    approvedAt: new Date().toISOString(),
-    approvedRevision: expectedRevision,
-    sourceMatterRevision: currentMatter.revision,
-    ...(canonical && typeof details.templateId === "string"
-      ? {
-          templateId: details.templateId,
-          templateRevision: details.templateRevision as number,
-        }
-      : {}),
-    sourceTasks: asRecord(old.details).templateId
-      ? await prisma.task.findMany({
-          where: { matterId: old.matterId, dueDate: { not: null } },
-          select: { id: true, revision: true },
-        })
-      : [],
-    sourceDeadlines: asRecord(old.details).templateId
-      ? await prisma.deadline.findMany({
-          where: { matterId: old.matterId },
-          select: { id: true, revision: true },
-        })
-      : [],
-  };
-  return prisma.$transaction(async (tx) => {
-    if (canonical) {
-      const file = await requireEmailWorkFile(tx, actor, old.matterId);
-      if (file.revision !== currentMatter.revision)
+    if (typeof details.templateId === "string") {
+      const template = await tx.communicationTemplate.findUnique({
+        where: { id: details.templateId },
+      });
+      if (!template?.active || template.revision !== details.templateRevision)
         throw new HttpError(
           409,
-          "FILE_CHANGED",
-          "Review the current transaction before sending.",
+          "TEMPLATE_CHANGED",
+          "Open the current template and review the draft.",
         );
-      if (old.workItemId) {
-        const another = await tx.emailDraft.findFirst({
-          where: {
-            id: { not: old.id },
-            workItemId: old.workItemId,
-            status: { in: ["queued", "sending", "sent", "delivery_unknown"] },
-          },
-          select: { id: true },
-        });
-        if (another)
-          throw new HttpError(
-            409,
-            "EMAIL_ALREADY_APPROVED",
-            "This email already has an approved or sent draft.",
-          );
-      }
+      if (template.isPlaceholder)
+        throw new HttpError(
+          422,
+          "TEMPLATE_PLACEHOLDER",
+          "Add the template's approved content before sending.",
+        );
+      const current = await this.renderInDb(
+        actor,
+        template.id,
+        {
+          matterId: old.matterId,
+          values: asRecord(details.templateValues),
+        },
+        tx,
+        true,
+      );
+      const preview = asRecord(details.templateSnapshot);
+      if (preview.subject !== current.subject || preview.body !== current.body)
+        throw new HttpError(
+          409,
+          "SOURCE_PREVIEW_CHANGED",
+          "Transaction fields changed. Refresh this draft and review it again.",
+        );
+      if (
+        (current.missingSubjectFields.length &&
+          old.subject === current.subject) ||
+        (current.missingBodyFields.length && old.body === current.body)
+      )
+        throw new HttpError(
+          422,
+          "MISSING_MERGE_FIELD",
+          "Fill or remove the blank fields in this email before sending.",
+        );
+    }
+    assertConfigured(this.config, true);
+    requireResolved(old.subject, old.body);
+    const recipients = await recipientPolicy(
+      actor,
+      matter.id,
+      textArray(old.to),
+      textArray(old.cc),
+      tx,
+    );
+    requireSameRecipients(recipients, {
+      to: old.to,
+      cc: old.cc,
+      recipientEvidence: details.recipientEvidence,
+    });
+    const connection = await tx.integrationConnection.findUnique({
+      where: { provider_ownerId: { provider: "gmail", ownerId: actor.id } },
+    });
+    if (connection?.status !== "connected")
+      throw new HttpError(
+        503,
+        "GMAIL_NOT_CONNECTED",
+        "Connect the Weatherly mailbox first",
+      );
+    const attachments = await tx.documentVersion.findMany({
+      where: {
+        documentId: { in: textArray(old.attachmentIds) },
+        document: { matterId: matter.id },
+      },
+      orderBy: { version: "desc" },
+    });
+    const selected = new Map<string, (typeof attachments)[number]>();
+    for (const attachment of attachments)
+      if (!selected.has(attachment.documentId))
+        selected.set(attachment.documentId, attachment);
+    if (selected.size !== new Set(textArray(old.attachmentIds)).size)
+      throw new HttpError(
+        422,
+        "INVALID_ATTACHMENT",
+        "Each attachment must be a saved document on this matter",
+      );
+    const snapshot = {
+      to: recipients.to,
+      cc: recipients.cc,
+      recipientEvidence: recipients.recipientEvidence,
+      directoryRecipients: recipients.directoryRecipients,
+      subject: old.subject,
+      body: old.body,
+      attachments: [...selected.values()].map((v) => ({
+        documentId: v.documentId,
+        versionId: v.id,
+        checksum: v.checksum,
+      })),
+      replyToMessageId: details.replyToMessageId || null,
+      approvedById: actor.id,
+      approvedAt: new Date().toISOString(),
+      approvedRevision: expectedRevision,
+      sourceMatterRevision: matter.revision,
+      ...(typeof details.templateId === "string"
+        ? {
+            templateId: details.templateId,
+            templateRevision: details.templateRevision as number,
+            sourceTasks: await tx.task.findMany({
+              where: { matterId: matter.id, dueDate: { not: null } },
+              select: { id: true, revision: true },
+            }),
+            sourceDeadlines: await tx.deadline.findMany({
+              where: { matterId: matter.id },
+              select: { id: true, revision: true },
+            }),
+          }
+        : {}),
+    };
+    if (old.workItemId) {
+      const another = await tx.emailDraft.findFirst({
+        where: {
+          id: { not: old.id },
+          workItemId: old.workItemId,
+          status: { in: ["queued", "sending", "sent", "delivery_unknown"] },
+        },
+        select: { id: true },
+      });
+      if (another)
+        throw new HttpError(
+          409,
+          "EMAIL_ALREADY_APPROVED",
+          "This email already has an approved or sent draft.",
+        );
     }
     const changed = await tx.emailDraft.updateMany({
       where: { id, revision: expectedRevision, status: "draft" },
@@ -193,7 +194,7 @@ export async function queueSend(
         status: "queued",
         approvedAt: new Date(),
         sendKey,
-        details: { ...asRecord(old.details), approvedSnapshot: snapshot },
+        details: { ...details, sendFailure: null, approvedSnapshot: snapshot },
         revision: { increment: 1 },
       },
     });

@@ -1,8 +1,10 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { X } from "lucide-react";
-import { label, mutate } from "../../_components/data";
+import { label, mutate, useData } from "../../_components/data";
+import type { BusinessContact } from "../../_components/BusinessContactPicker";
+import { emailRoleFamily } from "./recipient-defaults";
 import type { FilePerson } from "../people/PeopleOnFilePanel";
 import s from "../../_components/workspace.module.css";
 import styles from "./file-email.module.css";
@@ -26,16 +28,42 @@ export function RecipientField({
   change,
   addToDeal,
   existingEmails,
+  searchDirectory = false,
 }: {
   title: string;
   value: string;
   change: (value: string) => void;
   addToDeal?: (email: string) => void;
   existingEmails: ReadonlySet<string>;
+  searchDirectory?: boolean;
 }) {
   const [entry, setEntry] = useState("");
   const [error, setError] = useState("");
+  const term = entry.trim();
+  const [lookup, setLookup] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setLookup(term), 200);
+    return () => clearTimeout(timer);
+  }, [term]);
+  const saved = useData<{ items: BusinessContact[] }>(
+    searchDirectory &&
+      term === lookup &&
+      term.length >= 2 &&
+      !term.includes(",")
+      ? `/api/v1/contacts?q=${encodeURIComponent(term)}&limit=8`
+      : null,
+  );
   const selected = addresses(value);
+  const options = (saved.data?.items ?? []).filter(
+    ({ email }) =>
+      validAddress.test(email) &&
+      !selected.includes(email.trim().toLowerCase()),
+  );
+  function select(next: string[]) {
+    change([...new Set([...selected, ...next])].join(", "));
+    setEntry("");
+    setError("");
+  }
   function add() {
     const next = addresses(entry);
     if (!next.length) return;
@@ -43,9 +71,7 @@ export function RecipientField({
       setError("Enter a valid email address.");
       return;
     }
-    change([...new Set([...selected, ...next])].join(", "));
-    setEntry("");
-    setError("");
+    select(next);
   }
   return (
     <fieldset className={styles.recipients}>
@@ -83,6 +109,7 @@ export function RecipientField({
           aria-label={`${title} email address`}
           inputMode="email"
           autoCapitalize="none"
+          autoComplete="off"
           value={entry}
           onChange={(event) => {
             setEntry(event.target.value);
@@ -103,6 +130,24 @@ export function RecipientField({
           Add {title}
         </button>
       </div>
+      {options.length > 0 && (
+        <div
+          className={styles.contactSuggestions}
+          role="group"
+          aria-label="Saved contacts"
+        >
+          {options.map((contact) => (
+            <button
+              key={contact.id}
+              type="button"
+              className={s.buttonSmall}
+              onClick={() => select(addresses(contact.email))}
+            >
+              {contact.name} · {contact.email}
+            </button>
+          ))}
+        </div>
+      )}
       {error && (
         <p className={s.error} role="alert">
           {error}
@@ -113,11 +158,6 @@ export function RecipientField({
 }
 
 const roles = ["Title rep", "Lender", "Co-op agent", "Other"];
-const roleKey = (role: string) =>
-  role
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_");
 
 export function AddEmailRecipientToDeal({
   matterId,
@@ -139,7 +179,7 @@ export function AddEmailRecipientToDeal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const replacements = people.filter(
-    (person) => roleKey(person.role) === roleKey(role),
+    (person) => emailRoleFamily(person.role) === emailRoleFamily(role),
   );
   async function save() {
     setSaving(true);

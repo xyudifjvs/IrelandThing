@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma, type Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
 import { requireMatter } from "@weatherly/matters";
+import { placeholderBody, placeholderSubject } from "./placeholder-templates";
 export const email = z.email().transform((v) => v.trim().toLowerCase());
 export const recipientArray = z.array(email).max(40);
 export const draftInput = z
@@ -43,20 +45,24 @@ export async function recipientPolicy(
   const matter = await requireMatter(actor, matterId, false, db);
   const details = asRecord(matter.details);
   const canonical = matter.checklistVersion !== null;
-  const contacts = canonical
-    ? await db.matterContact.findMany({
-        where: { matterId, retiredAt: null },
-        select: { role: true, email: true },
-      })
-    : Array.isArray(details.contacts)
-      ? details.contacts
-      : [];
+  const storedContacts = await db.matterContact.findMany({
+    where: { matterId },
+    select: { id: true, name: true, role: true, email: true, retiredAt: true },
+  });
+  const retired = new Set(
+    storedContacts
+      .filter(({ retiredAt }) => retiredAt)
+      .map(({ email }) => email.trim().toLowerCase()),
+  );
+  const contacts = storedContacts.filter(({ retiredAt }) => !retiredAt);
+  const legacyContacts =
+    !canonical && Array.isArray(details.contacts) ? details.contacts : [];
   const clients =
     !canonical && Array.isArray(details.clients) ? details.clients : [];
   const agent = matter.agentId
     ? await db.user.findUnique({
         where: { id: matter.agentId },
-        select: { email: true },
+        select: { id: true, email: true, name: true },
       })
     : null;
   const normalize = (a: unknown) => {
@@ -64,18 +70,44 @@ export async function recipientPolicy(
     return p.success ? p.data : null;
   };
   const clientEmails = new Set<string>();
-  const allowed = new Set<string>(agent ? [agent.email.toLowerCase()] : []);
-  for (const contact of [...clients, ...contacts]) {
-    const item = asRecord(contact),
-      address = normalize(item.email);
-    if (address) {
-      allowed.add(address);
-      if (
-        clients.includes(contact) ||
-        ["client", "buyer", "seller"].includes(String(item.role))
+  const associations = new Map<string, string[]>();
+  const addAssociation = (
+    address: string,
+    source: string,
+    item: Record<string, unknown>,
+  ) => {
+    const identity = JSON.stringify([
+      source,
+      item.id ?? null,
+      item.name ?? null,
+      item.role ?? null,
+    ]);
+    associations.set(address, [...(associations.get(address) ?? []), identity]);
+    if (
+      source === "client" ||
+      ["client", "buyer", "seller", "buyer_client", "seller_client"].includes(
+        String(item.role)
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_"),
       )
-        clientEmails.add(address);
-    }
+    )
+      clientEmails.add(address);
+  };
+  if (agent) addAssociation(agent.email.toLowerCase(), "agent", agent);
+  for (const contact of contacts) {
+    const address = normalize(contact.email);
+    if (address) addAssociation(address, "file", contact);
+  }
+  for (const contact of [...clients, ...legacyContacts]) {
+    const item = asRecord(contact);
+    const address = normalize(item.email);
+    if (address && !retired.has(address))
+      addAssociation(
+        address,
+        clients.includes(contact) ? "client" : "legacy",
+        item,
+      );
   }
   const normalizedTo = [...new Set(to.map((v) => email.parse(v)))];
   const normalizedCc = [...new Set(cc.map((v) => email.parse(v)))].filter(
@@ -88,7 +120,13 @@ export async function recipientPolicy(
         "PLACEHOLDER_EMAIL",
         "The preview address cannot receive external messages",
       );
-    if (!canonical && !allowed.has(address))
+    if (retired.has(address) && !associations.has(address))
+      throw new HttpError(
+        409,
+        "RECIPIENT_RETIRED",
+        "A file recipient was removed or replaced. Review the recipients and remove the old address.",
+      );
+    if (!canonical && !associations.has(address))
       throw new HttpError(
         422,
         "UNAPPROVED_RECIPIENT",
@@ -121,12 +159,41 @@ export async function recipientPolicy(
     matter,
     to: normalizedTo,
     cc: normalizedCc,
+    recipientEvidence: createHash("sha256")
+      .update(
+        JSON.stringify(
+          [...normalizedTo, ...normalizedCc].map((address) => [
+            address,
+            (associations.get(address) ?? []).sort(),
+          ]),
+        ),
+      )
+      .digest("hex"),
+    knownRecipients: [...normalizedTo, ...normalizedCc].filter((address) =>
+      associations.has(address),
+    ),
     directoryRecipients: canonical
       ? [...normalizedTo, ...normalizedCc].filter(
-          (address) => !allowed.has(address),
+          (address) => !associations.has(address),
         )
       : [],
   };
+}
+
+export function requireSameRecipients(
+  recipients: Awaited<ReturnType<typeof recipientPolicy>>,
+  previous: { to: unknown; cc: unknown; recipientEvidence?: unknown },
+) {
+  if (
+    JSON.stringify(recipients.to) !== JSON.stringify(previous.to) ||
+    JSON.stringify(recipients.cc) !== JSON.stringify(previous.cc) ||
+    recipients.recipientEvidence !== previous.recipientEvidence
+  )
+    throw new HttpError(
+      409,
+      "RECIPIENT_POLICY_CHANGED",
+      "Contact details changed. Review and save the current recipients before sending.",
+    );
 }
 export const templateKeys = new Set([
   "propertyAddress",
@@ -213,6 +280,16 @@ export function mergeText(template: string, values: Record<string, string>) {
   );
 }
 export function requireResolved(subject: string, body: string) {
+  if (
+    [placeholderSubject, placeholderBody].some(
+      (marker) => subject.includes(marker) || body.includes(marker),
+    )
+  )
+    throw new HttpError(
+      422,
+      "TEMPLATE_PLACEHOLDER",
+      "Add the template's approved content before sending.",
+    );
   if (/\{\{|\}\}/.test(subject + body))
     throw new HttpError(
       422,

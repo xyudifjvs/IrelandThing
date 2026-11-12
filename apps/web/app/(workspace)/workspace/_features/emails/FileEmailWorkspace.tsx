@@ -5,11 +5,25 @@ import { useLiveData } from "../../../../_components/useLiveData";
 import { date, useData } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import { Composer } from "./Composer";
-import type { Draft, EmailWork, Template } from "./email-model";
+import { FileEmailHistory } from "./FileEmailHistory";
+import type {
+  Draft,
+  EmailWork,
+  FileEmailMessage,
+  FileEmailThread,
+  Template,
+} from "./email-model";
+import {
+  defaultEmailRecipients,
+  type EmailRecipient,
+} from "./recipient-defaults";
 import styles from "./file-email.module.css";
 
-type Selection = { templateId?: string; draftId?: string };
-type Recipient = { name: string; email: string; role: string };
+type Selection = {
+  templateId?: string;
+  draftId?: string;
+  reply?: FileEmailMessage;
+};
 
 export function FileEmailWorkspace({
   matterId,
@@ -23,7 +37,7 @@ export function FileEmailWorkspace({
   matterId: string;
   side: string;
   packageCode: string;
-  contacts?: readonly Recipient[];
+  contacts?: readonly EmailRecipient[];
   directContact?: unknown;
   readOnly: boolean;
   initialTemplateId?: string;
@@ -45,6 +59,9 @@ export function FileEmailWorkspace({
   const drafts = useLiveData<Draft[]>(
     `/api/v1/communications/drafts?matterId=${encoded}`,
   );
+  const threads = useLiveData<FileEmailThread[]>(
+    `/api/v1/communications/threads?matterId=${encoded}`,
+  );
   const group = `${side}_${packageCode === "complete" ? "compliance" : "ctc"}`;
   const available = (templates.data || []).filter(
     (entry) =>
@@ -59,19 +76,17 @@ export function FileEmailWorkspace({
   const currentTemplate = available.find(
     (entry) => entry.id === selection?.templateId,
   );
-  const recipients = contacts.filter(
-    (person) =>
-      person.email &&
-      currentTemplate?.recipientRoles?.includes(person.role) &&
-      (directContact === "copy_agent" ||
-        !["client", "buyer", "seller"].includes(
-          person.role.trim().toLowerCase(),
-        )),
-  );
+  const recipients = currentTemplate
+    ? defaultEmailRecipients(
+        contacts,
+        currentTemplate.recipientRoles ?? [],
+        directContact,
+      )
+    : undefined;
   const sent = (drafts.data || []).filter((entry) => entry.status === "sent");
   const toSend = (work.data || []).filter((entry) => entry.toSend);
   async function refresh() {
-    await Promise.all([work.refresh(), drafts.refresh()]);
+    await Promise.all([work.refresh(), drafts.refresh(), threads.refresh()]);
   }
   function open(next: Selection) {
     setSelection(next);
@@ -99,7 +114,7 @@ export function FileEmailWorkspace({
           )}
         </div>
         <div className={s.sectionBody}>
-          {(templates.error || work.error || drafts.error) && (
+          {(templates.error || work.error || drafts.error || threads.error) && (
             <p role="alert" className={s.error}>
               Could not load file email.
             </p>
@@ -161,18 +176,11 @@ export function FileEmailWorkspace({
                 })}
               </div>
             ))}
-          <div className={styles.group}>
-            <h3>Sent emails</h3>
-            {!sent.length && <p className={s.muted}>No sent emails.</p>}
-            {sent.map((entry) => (
-              <details key={entry.id} className={styles.history}>
-                <summary>{entry.subject}</summary>
-                <p>To {entry.to.join(", ")}</p>
-                {entry.cc.length > 0 && <p>CC {entry.cc.join(", ")}</p>}
-                <p className={styles.message}>{entry.body}</p>
-              </details>
-            ))}
-          </div>
+          <FileEmailHistory
+            sent={sent}
+            threads={threads.data ?? []}
+            reply={readOnly ? undefined : (message) => open({ reply: message })}
+          />
         </div>
       </section>
       {!readOnly && selection && (
@@ -181,7 +189,8 @@ export function FileEmailWorkspace({
           fixedMatterId={matterId}
           initialTemplateId={selection.templateId}
           initialDraftId={selection.draftId}
-          initialRecipient={recipients.length === 1 ? recipients[0] : undefined}
+          initialRecipients={recipients}
+          initialReply={selection.reply}
           onWorkChanged={refresh}
         />
       )}

@@ -10,6 +10,7 @@ import { requireMatter, audit, revision } from "@weatherly/matters";
 import { stepKeySchema } from "@weatherly/platform/handoff-contracts";
 import { asRecord, assertReviewedMatter, validateMerge } from "./policy";
 import type { CommunicationsService } from "./service";
+import { ensureTemplateWork } from "./email-work";
 
 export async function listTemplates(actor: Principal, includeInactive = false) {
   assertCoordinator(actor);
@@ -270,7 +271,7 @@ export async function renderInDb(
   const template = await db.communicationTemplate.findUnique({
     where: { id },
   });
-  if (!template)
+  if (!template?.active)
     throw new HttpError(404, "TEMPLATE_NOT_FOUND", "Template not found");
   if (template.side !== "both" && template.side !== matter.side)
     throw new HttpError(
@@ -354,13 +355,40 @@ export async function refreshTemplateDrafts(
     if (typeof details.templateId !== "string") continue;
     const prior = asRecord(details.templateSnapshot);
     const values = asRecord(details.templateValues);
-    const generated = await this.renderInDb(
-      actor,
-      details.templateId,
-      { matterId, values },
-      tx,
-      true,
-    );
+    let generated;
+    try {
+      generated = await this.renderInDb(
+        actor,
+        details.templateId,
+        { matterId, values },
+        tx,
+        true,
+      );
+    } catch (error) {
+      if (
+        !(error instanceof HttpError) ||
+        ![
+          "TEMPLATE_SIDE_MISMATCH",
+          "TEMPLATE_GROUP_MISMATCH",
+          "TEMPLATE_NOT_FOUND",
+        ].includes(error.code)
+      )
+        throw error;
+      await tx.emailDraft.updateMany({
+        where: { id: draft.id, revision: draft.revision, status: "draft" },
+        data: {
+          revision: { increment: 1 },
+          details: {
+            ...details,
+            reviewNeeded: true,
+            templateNeedsRebind: true,
+            mergeError:
+              "Choose a current template for this file and review the saved wording.",
+          },
+        },
+      });
+      continue;
+    }
     const subjectOverride = prior.subject !== draft.subject;
     const bodyOverride = prior.body !== draft.body;
     const changed = await tx.emailDraft.updateMany({
@@ -415,10 +443,15 @@ export async function resetTemplate(
   input: unknown,
 ) {
   assertCoordinator(actor);
-  const { expectedRevision, values = {} } = z
+  const {
+    expectedRevision,
+    values = {},
+    templateId,
+  } = z
     .object({
       expectedRevision: revision,
       values: z.record(z.string(), z.string().max(2000)).optional(),
+      templateId: z.string().min(1).optional(),
     })
     .strict()
     .parse(input);
@@ -428,29 +461,42 @@ export async function resetTemplate(
   if (typeof details.templateId !== "string")
     throw new HttpError(422, "NO_TEMPLATE", "This draft has no saved template");
   return prisma.$transaction(async (tx) => {
+    const matter = await requireMatter(actor, draft.matterId, true, tx);
+    assertReviewedMatter(matter);
+    const preserveWording = templateId !== undefined;
     const generated = await this.renderInDb(
       actor,
-      String(details.templateId),
+      templateId ?? String(details.templateId),
       { matterId: draft.matterId, values },
       tx,
       true,
     );
+    const workItem =
+      matter.checklistVersion !== null && templateId
+        ? await ensureTemplateWork(tx, matter, templateId)
+        : null;
+    const subject = preserveWording ? draft.subject : generated.subject;
+    const body = preserveWording ? draft.body : generated.body;
     const changed = await tx.emailDraft.updateMany({
       where: { id, revision: expectedRevision, status: "draft" },
       data: {
-        subject: generated.subject,
-        body: generated.body,
+        subject,
+        body,
+        ...(workItem ? { workItemId: workItem.id } : {}),
         revision: { increment: 1 },
         details: {
           ...details,
+          templateId: generated.templateId,
+          templateRevision: generated.templateRevision,
+          templateNeedsRebind: false,
           templateValues: values,
           templateSnapshot: {
             subject: generated.subject,
             body: generated.body,
           },
-          subjectOverride: false,
-          bodyOverride: false,
-          reviewNeeded: !!generated.missingFields.length,
+          subjectOverride: subject !== generated.subject,
+          bodyOverride: body !== generated.body,
+          reviewNeeded: preserveWording || !!generated.missingFields.length,
           mergeError: generated.missingFields.length
             ? `Missing confirmed values: ${generated.missingFields.join(", ")}`
             : null,

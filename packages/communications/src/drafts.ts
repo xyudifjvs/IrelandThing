@@ -7,6 +7,7 @@ import {
 } from "@weatherly/platform";
 import { requireMatter, audit, revision } from "@weatherly/matters";
 import {
+  asRecord,
   textArray,
   draftInput,
   recipientArray,
@@ -53,19 +54,17 @@ export async function createDraft(
 ) {
   assertCoordinator(actor);
   const data = draftInput.parse(input);
-  const recipients = await recipientPolicy(
-    actor,
-    data.matterId,
-    data.to,
-    data.cc,
-  );
   await this.validateAttachments(actor, data.matterId, data.attachmentIds);
   if (data.replyToMessageId) {
     const message = await prisma.emailMessage.findUnique({
       where: { id: data.replyToMessageId },
       include: { thread: true },
     });
-    if (!message || message.thread.matterId !== data.matterId)
+    if (
+      !message ||
+      message.thread.matterId !== data.matterId ||
+      message.thread.ownerId !== actor.id
+    )
       throw new HttpError(
         422,
         "INVALID_REPLY",
@@ -90,15 +89,17 @@ export async function createDraft(
       })
     : null;
   return prisma.$transaction(async (tx) => {
+    const matter = await requireMatter(actor, data.matterId, true, tx);
+    const recipients = await recipientPolicy(
+      actor,
+      matter.id,
+      data.to,
+      data.cc,
+      tx,
+    );
     let workItemId: string | null = null;
     if (recipients.matter.checklistVersion !== null) {
-      const current = await requireEmailWorkFile(tx, actor, data.matterId);
-      if (current.revision !== recipients.matter.revision)
-        throw new HttpError(
-          409,
-          "FILE_CHANGED",
-          "Review the updated file before saving this draft.",
-        );
+      const current = await requireEmailWorkFile(tx, actor, matter.id);
       const work = data.templateId
         ? await ensureTemplateWork(tx, current, data.templateId)
         : await tx.emailWork.create({
@@ -119,6 +120,8 @@ export async function createDraft(
         attachmentIds: data.attachmentIds,
         status: "draft",
         details: {
+          recipientEvidence: recipients.recipientEvidence,
+          knownRecipients: recipients.knownRecipients,
           templateId: data.templateId || null,
           templateRevision: data.templateRevision || null,
           templateValues: data.templateValues || {},
@@ -169,33 +172,46 @@ export async function updateDraft(
   const old = await prisma.emailDraft.findUnique({ where: { id } });
   if (!old) throw new HttpError(404, "DRAFT_NOT_FOUND", "Draft not found");
   await requireMatter(actor, old.matterId, true);
-  const recipients = await recipientPolicy(
-    actor,
-    old.matterId,
-    patch.to || textArray(old.to),
-    patch.cc || textArray(old.cc),
-  );
   await this.validateAttachments(
     actor,
     old.matterId,
     patch.attachmentIds || textArray(old.attachmentIds),
   );
   return prisma.$transaction(async (tx) => {
-    if (recipients.matter.checklistVersion !== null) {
-      const file = await requireEmailWorkFile(tx, actor, old.matterId);
-      if (file.revision !== recipients.matter.revision)
-        throw new HttpError(
-          409,
-          "FILE_CHANGED",
-          "Review the current file before updating this draft.",
-        );
-    }
+    const file = await requireMatter(actor, old.matterId, true, tx);
+    if (file.checklistVersion !== null)
+      await requireEmailWorkFile(tx, actor, old.matterId);
+    const recipients = await recipientPolicy(
+      actor,
+      old.matterId,
+      patch.to || textArray(old.to),
+      patch.cc || textArray(old.cc),
+      tx,
+    );
+    const details = asRecord(old.details);
+    const removedRecipients = textArray(details.knownRecipients);
+    if (
+      recipients.directoryRecipients.some((address) =>
+        removedRecipients.includes(address),
+      )
+    )
+      throw new HttpError(
+        409,
+        "RECIPIENT_RETIRED",
+        "A file recipient was removed or replaced. Review the recipients and remove the old address.",
+      );
     const changed = await tx.emailDraft.updateMany({
       where: { id, revision: expectedRevision, status: "draft" },
       data: {
         ...patch,
         to: recipients.to,
         cc: recipients.cc,
+        details: {
+          ...details,
+          recipientEvidence: recipients.recipientEvidence,
+          knownRecipients: recipients.knownRecipients,
+          sendFailure: null,
+        },
         revision: { increment: 1 },
       },
     });

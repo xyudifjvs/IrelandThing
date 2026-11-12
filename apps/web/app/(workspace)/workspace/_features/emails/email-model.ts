@@ -24,6 +24,8 @@ export type Draft = {
   attachmentIds: string[];
   status: string;
   revision: number;
+  sentAt?: string | null;
+  providerMessageId?: string | null;
   workItemId?: string | null;
   details?: {
     templateId?: string;
@@ -31,7 +33,32 @@ export type Draft = {
     templateValues?: Record<string, string>;
     reviewNeeded?: boolean;
     mergeError?: string | null;
+    templateNeedsRebind?: boolean;
+    sendFailure?: string | null;
   };
+};
+
+export type FileEmailMessage = {
+  id: string;
+  providerMessageId: string;
+  direction: string;
+  fromEmail: string;
+  to: string[];
+  cc: string[];
+  subject: string;
+  text: string;
+  sentAt: string;
+  details?: {
+    approvedDraftId?: string;
+    internetMessageId?: string;
+    inReplyTo?: string;
+  };
+};
+
+export type FileEmailThread = {
+  id: string;
+  subject: string;
+  messages: FileEmailMessage[];
 };
 
 export type EmailWork = {

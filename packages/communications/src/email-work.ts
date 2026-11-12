@@ -46,8 +46,24 @@ const workInput = z.discriminatedUnion("action", [
 type WorkChange = z.infer<typeof workInput>;
 
 const workDetails = {
-  template: { select: { id: true, name: true, active: true } },
-  matter: { select: { id: true, propertyAddress: true, stage: true } },
+  template: {
+    select: {
+      id: true,
+      name: true,
+      active: true,
+      side: true,
+      serviceGroup: true,
+    },
+  },
+  matter: {
+    select: {
+      id: true,
+      propertyAddress: true,
+      stage: true,
+      side: true,
+      packageCode: true,
+    },
+  },
   drafts: {
     where: { status: "sent", sentAt: { not: null } },
     orderBy: [{ sentAt: "desc" as const }, { id: "desc" as const }],
@@ -61,16 +77,23 @@ function projectWork(
 ) {
   const { drafts, template, matter, ...fields } = work;
   const [delivered] = drafts;
+  const available =
+    !template ||
+    (template.active &&
+      [matter.side, "both"].includes(template.side) &&
+      (!template.serviceGroup ||
+        template.serviceGroup ===
+          `${matter.side}_${matter.packageCode === "complete" ? "compliance" : "ctc"}`));
   return {
     ...fields,
     title: template?.name ?? "Scratch email",
-    templateActive: template?.active ?? true,
+    templateActive: available,
     propertyAddress: matter.propertyAddress,
     sentAt: delivered?.sentAt ?? null,
     sentDraftId: delivered?.id ?? null,
     toSend:
       openStages.includes(matter.stage) &&
-      (template?.active ?? true) &&
+      available &&
       !delivered &&
       !work.manualCompletedAt &&
       Boolean(work.laterAt || work.remindOn),

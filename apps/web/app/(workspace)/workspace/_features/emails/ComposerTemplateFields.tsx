@@ -12,17 +12,19 @@ export function ComposerTemplateFields({
   chooseTemplate,
   recipientName,
   setRecipientName,
-  bound,
+  disabled,
+  rebind,
   fill,
 }: {
   matter: string;
   side?: string;
   packageCode?: string;
   template: string;
-  chooseTemplate: (id: string) => void;
+  chooseTemplate: (template: Template | undefined) => void;
   recipientName: string;
   setRecipientName: (value: string) => void;
-  bound: boolean;
+  disabled: boolean;
+  rebind: boolean;
   fill: () => void;
 }) {
   const templates = useData<Template[]>("/api/v1/communications/templates");
@@ -36,7 +38,9 @@ export function ComposerTemplateFields({
       {matter && (
         <details style={{ margin: "18px 0" }}>
           <summary className={s.fieldHint} style={{ cursor: "pointer" }}>
-            Start with an email template
+            {rebind
+              ? "Choose a current template"
+              : "Start with an email template"}
           </summary>
           <div className={s.formGrid} style={{ marginTop: 15 }}>
             <label className={s.field}>
@@ -44,8 +48,12 @@ export function ComposerTemplateFields({
               <select
                 className={s.select}
                 value={template}
-                disabled={bound}
-                onChange={(event) => chooseTemplate(event.target.value)}
+                disabled={disabled}
+                onChange={(event) =>
+                  chooseTemplate(
+                    templates.data?.find(({ id }) => id === event.target.value),
+                  )
+                }
               >
                 <option value="">Choose a template</option>
                 {templates.data
@@ -74,11 +82,13 @@ export function ComposerTemplateFields({
           </div>
           <button
             className={s.buttonSmall}
-            disabled={!template || bound}
+            disabled={!template || disabled}
             type="button"
             onClick={fill}
           >
-            Fill template with confirmed details
+            {rebind
+              ? "Apply template and keep saved wording"
+              : "Fill template with confirmed details"}
           </button>
         </details>
       )}

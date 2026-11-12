@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { accountFileSummary, listAccountObligations } from "./file-summary";
 import { asyncHandler, principal, HttpError } from "@weatherly/platform";
 import {
   createCheckout,
@@ -33,6 +34,18 @@ export function createBillingRouter() {
         key === "limit" && typeof value === "string" ? Number(value) : value,
       ]),
     );
+  router.get(
+    "/account/file-summary",
+    asyncHandler(async (req, res) =>
+      res.json(await accountFileSummary(principal(req), req.query)),
+    ),
+  );
+  router.get(
+    "/account/obligations",
+    asyncHandler(async (req, res) =>
+      res.json(await listAccountObligations(principal(req), req.query)),
+    ),
+  );
   router.get(
     "/account/transactions",
     asyncHandler(async (req, res) => {

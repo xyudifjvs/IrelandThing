@@ -6,6 +6,7 @@ import {
   lockPaymentMatter,
   lockPaymentOrder,
   paymentDetails,
+  savedPaidAt,
   savedCheckoutCancellation,
   serviceCheckoutCancellation,
   settledStatuses,
@@ -111,6 +112,19 @@ export async function applyStripeEvent(event: Stripe.Event) {
           !order.stripeSessionId &&
           Boolean(details.checkoutCreationStartedAt) &&
           ["pending", "paid", "expired", "failed"].includes(status));
+      const firstPaidAt =
+        session.payment_status === "paid" &&
+        [
+          "checkout.session.completed",
+          "checkout.session.async_payment_succeeded",
+        ].includes(event.type) &&
+        !event.id.startsWith("reconcile-") &&
+        !savedPaidAt(details) &&
+        Number.isSafeInteger(event.created) &&
+        event.created > 0 &&
+        event.created <= Date.now() / 1000
+          ? new Date(event.created * 1000).toISOString()
+          : null;
       const saved = await tx.paymentOrder.update({
         where: { id: order.id },
         data: {
@@ -124,6 +138,7 @@ export async function applyStripeEvent(event: Stripe.Event) {
             ...details,
             paymentEnvironment: event.livemode ? "live" : "test",
             lastStripeEvent: event.id,
+            ...(firstPaidAt ? { paidAt: firstPaidAt } : {}),
             ...(reconciliation ||
             (details.requiresReconciliation === true && resolvedCreation)
               ? { requiresReconciliation: reconciliation }

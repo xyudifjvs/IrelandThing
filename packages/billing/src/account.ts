@@ -6,6 +6,7 @@ import { billingConfigured, verifiedStripe } from "./service";
 import { paymentMode, savedPaymentEnvironment } from "./mode";
 import {
   assertServiceCheckoutAllowed,
+  savedPaidAt,
   savedCheckoutCancellation,
   serviceCheckoutCancellation,
   verifiedCheckoutUrl,
@@ -302,6 +303,7 @@ export async function listAccountPayments(
           amountCents: order.amountCents,
           currency: order.currency,
           status: order.status,
+          paidAt: savedPaidAt(order.details),
           environment,
           refundedCents: refundAmount(
             order.status,

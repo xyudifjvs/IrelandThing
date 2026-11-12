@@ -1,5 +1,6 @@
 import type { Prisma } from "@weatherly/db";
 import type Stripe from "stripe";
+import { z } from "zod";
 import { HttpError } from "@weatherly/platform";
 import {
   serviceFeeApplies,
@@ -26,6 +27,11 @@ export function paymentDetails(value: unknown): Prisma.InputJsonObject {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Prisma.InputJsonObject)
     : {};
+}
+
+export function savedPaidAt(details: unknown) {
+  const parsed = z.iso.datetime().safeParse(paymentDetails(details).paidAt);
+  return parsed.success ? parsed.data : null;
 }
 
 export function paymentOrderForRead<T extends { details: unknown }>(order: T) {

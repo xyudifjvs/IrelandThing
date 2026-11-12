@@ -2,7 +2,12 @@ import { z } from "zod";
 import { prisma, type Prisma } from "@weatherly/db";
 import { type Principal } from "@weatherly/platform";
 import { requireMatter, matterScope } from "@weatherly/matters";
-import { lockPaymentMatter, paymentOrderForRead } from "./checkout-policy";
+import {
+  lockPaymentMatter,
+  paymentDetails,
+  paymentOrderForRead,
+  savedPaidAt,
+} from "./checkout-policy";
 
 export async function listCatalog() {
   return prisma.catalogItem.findMany({
@@ -52,7 +57,32 @@ export async function listPayments(
     take: page.limit,
     ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
   });
-  return orders.map(paymentOrderForRead);
+  if (actor.role === "coordinator") return orders.map(paymentOrderForRead);
+  return orders.map(
+    ({
+      id,
+      matterId,
+      kind,
+      status,
+      amountCents,
+      currency,
+      createdAt,
+      updatedAt,
+      snapshot,
+      details,
+    }) => ({
+      id,
+      matterId,
+      kind,
+      status,
+      amountCents,
+      currency,
+      createdAt,
+      updatedAt,
+      snapshot: { name: paymentDetails(snapshot).name },
+      paidAt: savedPaidAt(details),
+    }),
+  );
 }
 
 export async function listGifts(
@@ -67,12 +97,28 @@ export async function listGifts(
     where: { ...matterScope(actor), ...(matterId ? { id: matterId } : {}) },
     select: { id: true },
   });
-  return prisma.giftOrder.findMany({
+  const gifts = await prisma.giftOrder.findMany({
     where: { matterId: { in: matters.map((m) => m.id) } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: page.limit,
     ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
   });
+  if (actor.role === "coordinator") return gifts;
+  return gifts.map(
+    ({ id, matterId, status, createdAt, updatedAt, selection }) => {
+      const { description, amountCents, currency } = paymentDetails(
+        paymentDetails(selection).approvedQuote,
+      );
+      return {
+        id,
+        matterId,
+        status,
+        createdAt,
+        updatedAt,
+        selection: { approvedQuote: { description, amountCents, currency } },
+      };
+    },
+  );
 }
 export async function recordIntakeGift(matterId: string, submissionId: string) {
   await prisma.$transaction(async (tx) => {

@@ -1,11 +1,14 @@
 import { Prisma, prisma } from "@weatherly/db";
-import { audit } from "@weatherly/matters";
+import { audit, requireMatter } from "@weatherly/matters";
 import {
   assertCoordinator,
   HttpError,
   type Principal,
 } from "@weatherly/platform";
-import type { ExtractionStatus } from "@weatherly/platform/handoff-contracts";
+import type {
+  ExtractionStatus,
+  SourceVersion,
+} from "@weatherly/platform/handoff-contracts";
 import {
   extractionActionSchema,
   reviewPayloadSchema,
@@ -14,7 +17,7 @@ import {
   startReviewSchema,
 } from "./inputs";
 import { defaultReviewPayload } from "./intake-defaults";
-import { intakeContractIds } from "../snapshot";
+import { intakeContractIds, originalIntakeDocumentIds } from "../snapshot";
 import { listReviewDocuments, verifySources } from "./sources";
 
 const includeIntake = { intake: true } as const;
@@ -111,6 +114,104 @@ export async function lockPendingIntake(
   return { intake, matter };
 }
 
+async function intakeSummary(
+  tx: Prisma.TransactionClient,
+  intake: NonNullable<StoredReview["intake"]>,
+) {
+  const agent = await tx.user.findUnique({
+    where: { id: intake.userId },
+    select: {
+      name: true,
+      email: true,
+      brokerage: true,
+      rosterAgent: { select: { phone: true } },
+    },
+  });
+  const documents = await tx.document.findMany({
+    where: {
+      creationReviewId: null,
+      OR: [
+        {
+          intakeSubmissionId: intake.id,
+          OR: [{ matterId: null }, { matterId: intake.matterId }],
+        },
+        {
+          matterId: intake.matterId,
+          intakeSubmissionId: null,
+          id: { in: originalIntakeDocumentIds(intake.snapshot) },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      versions: {
+        where: { createdAt: { lte: intake.createdAt } },
+        orderBy: { version: "desc" },
+        take: 1,
+        select: { originalName: true },
+      },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  return {
+    id: intake.id,
+    snapshot: intake.snapshot,
+    createdAt: intake.createdAt,
+    documents: documents.map(({ id, name, versions }) => ({
+      id,
+      name: versions[0]?.originalName || name,
+    })),
+    agent: agent
+      ? {
+          name: agent.name,
+          email: agent.email,
+          brokerage: agent.brokerage,
+          phone: agent.rosterAgent?.phone ?? null,
+        }
+      : null,
+  };
+}
+
+export async function readMatterIntake(actor: Principal, matterId: string) {
+  assertCoordinator(actor);
+  return prisma.$transaction(async (tx) => {
+    await requireMatter(actor, matterId, false, tx);
+    const intake = await tx.intakeSubmission.findFirst({
+      where: { matterId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+    return intake ? intakeSummary(tx, intake) : null;
+  });
+}
+
+async function recordExtraction(
+  tx: Prisma.TransactionClient,
+  reviewId: string,
+  generation: number,
+  sources: SourceVersion[],
+  action: "start" | "skip",
+) {
+  await tx.creationExtraction.create({
+    data: {
+      reviewId,
+      generation,
+      sourceRefs: sources,
+      promptVersion,
+      status: action === "start" ? "queued" : "skipped",
+      finishedAt: action === "skip" ? new Date() : null,
+    },
+  });
+  if (action === "start")
+    await tx.outboxJob.create({
+      data: {
+        topic: "creation.extract",
+        idempotencyKey: `creation-extract:${reviewId}:${generation}`,
+        payload: { reviewId, generation },
+      },
+    });
+}
+
 async function projectReview(
   tx: Prisma.TransactionClient,
   review: StoredReview,
@@ -143,13 +244,7 @@ async function projectReview(
     id: review.id,
     revision: review.revision,
     state: review.state,
-    intake: review.intake
-      ? {
-          id: review.intake.id,
-          snapshot: review.intake.snapshot,
-          createdAt: review.intake.createdAt,
-        }
-      : null,
+    intake: review.intake ? await intakeSummary(tx, review.intake) : null,
     ...reviewPayloadSchema.parse(review.payload),
     sources,
     documents: await listReviewDocuments(tx, review, sources),
@@ -199,7 +294,7 @@ export async function startCreationReview(actor: Principal, input: unknown) {
     if (existing) return projectReview(tx, existing);
 
     let payload: Prisma.InputJsonValue = { facts: {}, people: [], dates: [] };
-    let sources: Prisma.InputJsonValue = [];
+    let sources: SourceVersion[] = [];
     if (intakeId) {
       await lockIntakeReviewIdentity(tx, intakeId);
       const { intake, matter } = await lockPendingIntake(tx, intakeId);
@@ -254,6 +349,7 @@ export async function startCreationReview(actor: Principal, input: unknown) {
     }
 
     // A retry can cross another request's commit between the initial read and insert.
+    const generation = sources.length ? 1 : 0;
     const inserted = await tx.creationReview.createMany({
       data: [
         {
@@ -262,6 +358,7 @@ export async function startCreationReview(actor: Principal, input: unknown) {
           startRequestId: requestId,
           payload,
           sourceRefs: sources,
+          extractionGeneration: generation,
         },
       ],
       skipDuplicates: true,
@@ -273,7 +370,7 @@ export async function startCreationReview(actor: Principal, input: unknown) {
         "INTAKE_REVIEW_EXISTS",
         "This intake already has a creation review.",
       );
-    if (inserted.count)
+    if (inserted.count) {
       await audit(
         tx,
         actor,
@@ -282,6 +379,9 @@ export async function startCreationReview(actor: Principal, input: unknown) {
         review.id,
         null,
       );
+      if (generation)
+        await recordExtraction(tx, review.id, generation, sources, "start");
+    }
     return projectReview(tx, review);
   });
 }
@@ -300,6 +400,7 @@ export async function saveCreationReview(
     const payload = {
       ...current,
       ...edits,
+      ...(edits.people !== undefined ? { peopleEdited: true } : {}),
       facts: { ...current.facts, ...edits.facts },
     };
     const currentSources = sourcesSchema.parse(review.sourceRefs);
@@ -350,25 +451,13 @@ export async function changeCreationExtraction(
       },
       include: includeIntake,
     });
-    const generation = updated.extractionGeneration;
-    await tx.creationExtraction.create({
-      data: {
-        reviewId: id,
-        generation,
-        sourceRefs: sources,
-        promptVersion,
-        status: action === "start" ? "queued" : "skipped",
-        finishedAt: action === "skip" ? new Date() : null,
-      },
-    });
-    if (action === "start")
-      await tx.outboxJob.create({
-        data: {
-          topic: "creation.extract",
-          idempotencyKey: `creation-extract:${id}:${generation}`,
-          payload: { reviewId: id, generation },
-        },
-      });
+    await recordExtraction(
+      tx,
+      id,
+      updated.extractionGeneration,
+      sources,
+      action,
+    );
     return projectReview(tx, updated);
   });
 }

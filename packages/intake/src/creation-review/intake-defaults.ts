@@ -39,8 +39,6 @@ export function defaultReviewPayload(
       snapshot.purchaseType === "cash" || snapshot.purchaseType === "financed"
         ? snapshot.purchaseType
         : null,
-    purchasePriceCents: null,
-    acceptance: null,
   };
   const people: ReviewPayload["people"] = [];
   function add(role: string, raw: Prisma.JsonObject) {

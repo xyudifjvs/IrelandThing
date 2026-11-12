@@ -8,11 +8,12 @@ Mount `createCreationReviewRouter({ seedChecklist, seedPeople, afterConfirm })` 
 | --- | --- |
 | POST / | `{ requestId, intakeId? }` with a UUID request ID. |
 | GET /:id | Returns stored edits, a read-only intake snapshot, pinned sources, document metadata, review revision and extraction status. |
+| GET /matter/:matterId/intake | Returns the immutable intake snapshot and original attachments for the coordinator's file Intake panel. Returns null for manual files. |
 | PATCH /:id | `{ expectedRevision, facts?, people?, dates?, business?, sources? }`. A supplied facts object patches individual fields. A supplied array replaces that array. |
 | POST /:id/extraction | `{ expectedRevision, action: "start" | "skip" }`. |
 | POST /:id/confirm | Shared `CreationConfirm`. Returns `{ matterId }`. |
 
-- A manual start persists only the review and its audit event. A legacy start retains the pending Matter ID and leaves the receipt and intake snapshot alone. A new start for the same open intake resumes its existing review for the owner. The first request key remains the retry identity.
+- A manual start persists only the review and its audit event. A legacy start retains the pending Matter ID and leaves the receipt and intake snapshot alone. An intake with a pinned original contract queues extraction when its first review opens. A new start for the same open intake resumes its existing review for the owner. The first request key remains the retry identity.
 - A source change, extraction start or Skip advances both the review revision and extraction generation. Confirmation checks the revision and revalidates the pinned source documents and exact versions under lock. A newer version of the same document can be selected explicitly without replacing the original.
 - The extraction job is `creation.extract` with `{ reviewId, generation }` and prompt version `creation-signed-terms-v1`. A queued or running generation reads as unavailable after 60 seconds even with the worker down. Results remain separate from editable fields.
 - Confirmation atomically creates or opens the file, seeds checklist and private contacts, associates staged documents, marks the intake processed, records the idempotency receipt and runs the supplied hook. The old service snapshot survives a legacy confirmation using the same package. A new Weatherly package captures its approved catalog terms. HTO uses `hto_included`. A pending file with an existing service order requires resolution before a business or package change.
@@ -26,7 +27,9 @@ Mount `createCreationReviewRouter({ seedChecklist, seedPeople, afterConfirm })` 
 - C00 supplies C03's `seedMatterChecklist`, a C06 transaction-scoped initial people writer and the transactional after-confirm hook. The hook is where C00 composes C11 HTO synchronization and other confirmed-file internal effects. Tests supply deterministic transaction callbacks that write real database rows.
 - C06 owns staged upload/view and document audience handling. A staged upload must serialize with confirmation by locking its open review before association. Confirmation leaves document visibility and sharing fields intact.
 - C00 can enqueue the gift-only effect after intake confirmation. The existing `intake.submitted` job also invokes legacy extraction and is unsuitable for the canonical path.
-- The creation UI and route switch follow the domain milestone. Existing legacy entry points still use their original behavior for files without a canonical review.
+- C00 opens `/workspace/new` from the manual link and `/workspace/new?intakeId=…` from each intake. Both replace the URL with a durable review ID after the authorized start. The browser stores request IDs in session storage and uses explicit Save review for durable field edits.
+- C06 stages a new document through multipart `POST /api/v1/documents` with `creationReviewId`, `category=contract` and `uploadRequestId`. Review saves pin the returned version. Existing originals remain available through `GET /api/v1/documents/:id/view?versionId=…`.
+- C14 mounts the exported `TransactionIntake` component on the coordinator file Intake tab. Legacy direct setup links remain available for historical files.
 
 ## Intake Matter ID migration
 

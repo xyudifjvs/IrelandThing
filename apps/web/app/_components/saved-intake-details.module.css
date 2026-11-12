@@ -1,0 +1,62 @@
+.intake {
+  padding: 1.25rem;
+  border: 1px solid var(--weatherly-color-border, #d7e0e1);
+  border-radius: var(--weatherly-radius-panel, 12px);
+  background: var(--weatherly-color-surface, #fff);
+  overflow-wrap: anywhere;
+}
+
+.intake h2 {
+  margin: 0 0 0.65rem;
+  font: 600 1.35rem/1.2 var(--weatherly-font-heading, serif);
+}
+
+.intake summary {
+  cursor: pointer;
+  color: var(--weatherly-color-accent, #205560);
+  font-weight: 600;
+}
+
+.close,
+.intake details[open] .open {
+  display: none;
+}
+
+.intake details[open] .close {
+  display: inline;
+}
+
+.answers {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+}
+
+.answers > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr);
+  gap: 0.75rem;
+  padding-block: 0.35rem;
+  border-bottom: 1px solid var(--weatherly-color-border, #d7e0e1);
+}
+
+.answers dt {
+  font-weight: 600;
+}
+
+.answers dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.answers dd dl,
+.answers dd ul {
+  margin-block: 0;
+}
+
+@media (max-width: 38rem) {
+  .answers > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+}

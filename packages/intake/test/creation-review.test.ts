@@ -18,6 +18,7 @@ import {
 import {
   changeCreationExtraction,
   readCreationReview,
+  readMatterIntake,
   saveCreationReview,
   startCreationReview,
 } from "../src/creation-review/storage";
@@ -175,6 +176,7 @@ describe("creation review", () => {
       revision: saved.revision,
       facts: { title: "Partial title" },
       people: [person],
+      peopleEdited: true,
     });
   });
 
@@ -427,8 +429,9 @@ describe("creation review", () => {
       requestId: randomUUID(),
     });
     expect(open).toMatchObject({
-      intake: { snapshot },
+      intake: { snapshot, agent: { name: agent.name, email: agent.email } },
       sources: [pinned],
+      extraction: { status: "queued", generation: 1 },
       facts: { propertyAddress: "Legacy address" },
     });
     expect(
@@ -442,6 +445,17 @@ describe("creation review", () => {
     expect(
       await prisma.intakeSubmission.findUnique({ where: { id: intake.id } }),
     ).toMatchObject({ processedAt: null });
+    expect(
+      await prisma.outboxJob.count({
+        where: {
+          idempotencyKey: `creation-extract:${open.id}:1`,
+          topic: "creation.extract",
+        },
+      }),
+    ).toBe(1);
+    await expect(readMatterIntake(agent, legacy.id)).rejects.toMatchObject({
+      status: 403,
+    });
     expect(
       await prisma.matter.findUnique({ where: { id: legacy.id } }),
     ).toMatchObject({ stage: "pending_review", revision: 1 });
@@ -491,6 +505,11 @@ describe("creation review", () => {
     await expect(
       applyReviewedFacts(owner, legacy.id, { expectedRevision: 2 }),
     ).rejects.toMatchObject({ code: "CANONICAL_REVIEW_REQUIRED" });
+    expect(await readMatterIntake(owner, legacy.id)).toMatchObject({
+      id: intake.id,
+      snapshot,
+      agent: { name: agent.name, email: agent.email },
+    });
   });
   it("deletes an unprocessed intake separately and invalidates its open review", async () => {
     const pending = await prisma.matter.create({

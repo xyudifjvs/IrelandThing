@@ -7,6 +7,7 @@ import {
 import {
   changeCreationExtraction,
   readCreationReview,
+  readMatterIntake,
   saveCreationReview,
   startCreationReview,
 } from "./storage";
@@ -23,6 +24,14 @@ export function createCreationReviewRouter(
     "/",
     asyncHandler(async (req, res) =>
       res.json(await startCreationReview(principal(req), req.body)),
+    ),
+  );
+  router.get(
+    "/matter/:matterId/intake",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await readMatterIntake(principal(req), String(req.params.matterId)),
+      ),
     ),
   );
   router.get(

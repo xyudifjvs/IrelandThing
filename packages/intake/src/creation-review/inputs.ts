@@ -23,13 +23,18 @@ export const sourcesSchema = z
 export const reviewPayloadSchema = z
   .object({
     business: transactionBusinessSchema.optional(),
-    facts: transactionFactsSchema.partial(),
+    facts: transactionFactsSchema.partial().extend({
+      title: z.string().trim().max(200).optional(),
+      propertyAddress: z.string().trim().max(500).optional(),
+    }),
     people: creationConfirmSchema.shape.people,
+    peopleEdited: z.boolean().optional(),
     dates: creationConfirmSchema.shape.dates,
   })
   .strict();
 
 export const saveReviewSchema = reviewPayloadSchema
+  .omit({ peopleEdited: true })
   .partial()
   .extend({
     expectedRevision: revisionSchema,

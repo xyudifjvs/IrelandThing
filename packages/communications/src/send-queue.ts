@@ -16,6 +16,7 @@ import {
 } from "./policy";
 import type { CommunicationsService } from "./service";
 import { finishSentWork, requireEmailWorkFile } from "./email-work";
+import { recordSentDirectoryContacts } from "./directory-history";
 
 export async function queueSend(
   this: CommunicationsService,
@@ -128,6 +129,7 @@ export async function queueSend(
   const snapshot = {
     to: recipients.to,
     cc: recipients.cc,
+    directoryRecipients: recipients.directoryRecipients,
     subject: old.subject,
     body: old.body,
     attachments: [...selected.values()].map((v) => ({
@@ -286,6 +288,7 @@ export async function reconcileSend(
       "Sent-message evidence did not match the approved delivery identifier",
     );
   return prisma.$transaction(async (tx) => {
+    const sentAt = new Date();
     const changed = await tx.emailDraft.updateMany({
       where: {
         id,
@@ -295,7 +298,7 @@ export async function reconcileSend(
       data: {
         status: "sent",
         providerMessageId: candidate.id,
-        sentAt: new Date(),
+        sentAt,
         revision: { increment: 1 },
         details: {
           ...asRecord(draft.details),
@@ -311,6 +314,12 @@ export async function reconcileSend(
         "Delivery record changed; refresh",
       );
     await finishSentWork(tx, draft.workItemId);
+    await recordSentDirectoryContacts(
+      tx,
+      actor.id,
+      asRecord(asRecord(draft.details).approvedSnapshot),
+      sentAt,
+    );
     await audit(
       tx,
       actor,

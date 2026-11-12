@@ -18,6 +18,7 @@ import {
 } from "@weatherly/documents";
 import { CommunicationsService } from "./service";
 import { finishSentWork } from "./email-work";
+import { recordSentDirectoryContacts } from "./directory-history";
 import {
   agentInvitationEmailTopic,
   sendQueuedAgentInvitation,
@@ -895,16 +896,18 @@ export function createCommunicationJobHandlers(
         },
       );
       await prisma.$transaction(async (tx) => {
+        const sentAt = new Date();
         await tx.emailDraft.update({
           where: { id: draftId },
           data: {
             status: "sent",
             providerMessageId: sent.id,
-            sentAt: new Date(),
+            sentAt,
             revision: { increment: 1 },
           },
         });
         await finishSentWork(tx, draft!.workItemId);
+        await recordSentDirectoryContacts(tx, ownerId, snapshot, sentAt);
         const replyThread = replyLocalThreadId
           ? await tx.emailThread.findUnique({
               where: { id: replyLocalThreadId },

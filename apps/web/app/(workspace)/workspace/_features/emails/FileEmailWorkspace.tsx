@@ -16,6 +16,7 @@ export function FileEmailWorkspace({
   side,
   packageCode,
   contacts = [],
+  directContact,
   readOnly,
   initialTemplateId,
 }: {
@@ -23,6 +24,7 @@ export function FileEmailWorkspace({
   side: string;
   packageCode: string;
   contacts?: readonly Recipient[];
+  directContact?: unknown;
   readOnly: boolean;
   initialTemplateId?: string;
 }) {
@@ -59,7 +61,12 @@ export function FileEmailWorkspace({
   );
   const recipients = contacts.filter(
     (person) =>
-      person.email && currentTemplate?.recipientRoles?.includes(person.role),
+      person.email &&
+      currentTemplate?.recipientRoles?.includes(person.role) &&
+      (directContact === "copy_agent" ||
+        !["client", "buyer", "seller"].includes(
+          person.role.trim().toLowerCase(),
+        )),
   );
   const sent = (drafts.data || []).filter((entry) => entry.status === "sent");
   const toSend = (work.data || []).filter((entry) => entry.toSend);

@@ -41,6 +41,53 @@
   white-space: pre-wrap;
 }
 
+.recipients {
+  min-width: 0;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border, #dfd4c4);
+  border-radius: 7px;
+}
+
+.chips,
+.addressEntry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.chips {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.addressEntry input {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--border, #dfd4c4);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.chip button {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.78rem;
+}
+
 @media (max-width: 920px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);

@@ -117,7 +117,16 @@ export async function recipientPolicy(
     )
       normalizedCc.push(agent.email.toLowerCase());
   }
-  return { matter, to: normalizedTo, cc: normalizedCc };
+  return {
+    matter,
+    to: normalizedTo,
+    cc: normalizedCc,
+    directoryRecipients: canonical
+      ? [...normalizedTo, ...normalizedCc].filter(
+          (address) => !allowed.has(address),
+        )
+      : [],
+  };
 }
 export const templateKeys = new Set([
   "propertyAddress",

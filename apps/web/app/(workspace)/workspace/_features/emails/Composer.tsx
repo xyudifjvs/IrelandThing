@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { Mail, Send, Save } from "lucide-react";
-import {
-  api,
-  useData,
-  mutate,
-  label,
-  type Matter,
-} from "../../_components/data";
+import { Mail, Save } from "lucide-react";
+import { useData, mutate, label, type Matter } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import MatterPicker from "../../_components/MatterPicker";
-import type { Template, Draft } from "./email-model";
+import type { Draft } from "./email-model";
+import { ComposerTemplateFields } from "./ComposerTemplateFields";
+import { DraftApproval } from "./DraftApproval";
 import { EmailWorkControls } from "./EmailWorkControls";
+import {
+  addresses,
+  AddEmailRecipientToDeal,
+  RecipientField,
+} from "./EmailRecipients";
+import { EmailAttachmentUpload } from "./EmailAttachmentUpload";
+import type { FilePerson } from "../people/PeopleOnFilePanel";
 
 export function Composer({
   fixedMatterId,
@@ -31,7 +34,6 @@ export function Composer({
     useData<{ id: string; name: string; email: string; role: string }[]>(
       "/api/v1/users",
     );
-  const templates = useData<Template[]>("/api/v1/communications/templates");
   const integrations = useData<{ provider: string; status: string }[]>(
     "/api/v1/integrations",
   );
@@ -41,14 +43,12 @@ export function Composer({
     recipientName: string;
   } | null>(null);
   const [matter, setMatter] = useState(fixedMatterId || "");
-  const detail = useData<Matter>(matter ? `/api/v1/matters/${matter}` : null);
-  const mergeFields = useData<
-    { key: string; label: string; value: string | null; status: string }[]
-  >(
-    matter
-      ? `/api/v1/communications/merge-fields?matterId=${encodeURIComponent(matter)}`
-      : null,
-  );
+  const detail = useData<
+    Matter & { contacts?: FilePerson[]; checklistVersion?: number | null }
+  >(matter ? `/api/v1/matters/${encodeURIComponent(matter)}` : null);
+  const currentMatter = useRef(matter);
+  currentMatter.current = matter;
+  const [newPersonEmail, setNewPersonEmail] = useState("");
   const drafts = useData<Draft[]>(
     `/api/v1/communications/drafts${matter ? "?matterId=" + encodeURIComponent(matter) : ""}`,
   );
@@ -73,6 +73,45 @@ export function Composer({
   const connected = integrations.data?.some(
     (i) => i.provider === "gmail" && i.status === "connected",
   );
+  const servingAgent = users.data?.find(
+    (user) => user.id === detail.data?.agentId,
+  );
+  const throughAgent = detail.data?.details?.directContact !== "copy_agent";
+  const canonicalPeople = detail.data?.contacts ?? [];
+  const legacyPeople =
+    detail.data?.checklistVersion == null && canonicalPeople.length === 0
+      ? ([
+          ...(Array.isArray(detail.data?.details?.contacts)
+            ? detail.data.details.contacts
+            : []),
+          ...(Array.isArray(detail.data?.details?.clients)
+            ? detail.data.details.clients.map((contact) => ({
+                ...contact,
+                role: "client",
+              }))
+            : []),
+        ] as { name?: string; email?: string; role?: string }[])
+      : [];
+  const suggestions = [...canonicalPeople, ...legacyPeople].filter(
+    (person) =>
+      person.email &&
+      (!throughAgent ||
+        !["client", "buyer", "seller"].includes(
+          person.role?.trim().toLowerCase() ?? "",
+        )),
+  );
+  const existingEmails = new Set(
+    [
+      ...canonicalPeople.map((person) => person.email),
+      ...legacyPeople.map((person) => person.email),
+      servingAgent?.email,
+    ]
+      .filter((email): email is string => !!email)
+      .map((email) => email.toLowerCase()),
+  );
+  const editablePeople =
+    !!detail.data &&
+    ["under_contract", "closing", "listing"].includes(detail.data.stage ?? "");
   useEffect(() => {
     if (fixedMatterId) return;
     const value = new URLSearchParams(window.location.search).get("matterId");
@@ -98,6 +137,7 @@ export function Composer({
       setTemplate("");
       setBinding(null);
       setRecipientName("");
+      setNewPersonEmail("");
       setTo("");
       setCc("");
       setSubject(value.subject);
@@ -123,6 +163,7 @@ export function Composer({
     setMatter(d.matterId);
     setTo(d.to.join(", "));
     setCc(d.cc.join(", "));
+    setNewPersonEmail("");
     setSubject(d.subject);
     setBody(d.body);
     setAttachments(d.attachmentIds || []);
@@ -202,6 +243,42 @@ export function Composer({
     defaultRecipientName,
     defaultRecipientEmail,
   ]);
+  async function fillTemplate() {
+    if (busyRef.current) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await mutate<{
+        subject: string;
+        body: string;
+        templateId: string;
+        templateRevision: number;
+        missingFields: string[];
+      }>(`/api/v1/communications/templates/${template}/render`, {
+        matterId: matter,
+        values: recipientName ? { recipientName } : {},
+      });
+      setSubject(result.subject);
+      setBody(result.body);
+      setBinding({
+        id: result.templateId,
+        revision: result.templateRevision,
+        recipientName,
+      });
+      setMessage(
+        result.missingFields?.length
+          ? "Fill in or remove the blank fields before sending."
+          : "",
+      );
+      setDirty(true);
+      setConfirmed(false);
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function save() {
     if (busyRef.current) return;
     setBusy(true);
@@ -210,14 +287,8 @@ export function Composer({
     try {
       const values = {
         ...(draft ? {} : { matterId: matter }),
-        to: to
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean),
-        cc: cc
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean),
+        to: addresses(to),
+        cc: addresses(cc),
         subject,
         body,
         attachmentIds: attachments,
@@ -276,6 +347,7 @@ export function Composer({
                   setSubject("");
                   setBody("");
                   setRecipientName("");
+                  setNewPersonEmail("");
                   setTemplate("");
                   setBinding(null);
                   setDraft(null);
@@ -329,120 +401,25 @@ export function Composer({
             />
           )}
           {matter && (
-            <details style={{ margin: "18px 0" }}>
-              <summary className={s.fieldHint} style={{ cursor: "pointer" }}>
-                Start with an email template
-              </summary>
-              <div className={s.formGrid} style={{ marginTop: 15 }}>
-                <label className={s.field}>
-                  Template
-                  <select
-                    className={s.select}
-                    value={template}
-                    disabled={!!draft}
-                    onChange={(e) => {
-                      setTemplate(e.target.value);
-                      setBinding(null);
-                    }}
-                  >
-                    <option value="">Choose a template</option>
-                    {templates.data
-                      ?.filter(
-                        (t) =>
-                          (t.side === "both" || t.side === detail.data?.side) &&
-                          (!t.serviceGroup ||
-                            t.serviceGroup ===
-                              `${detail.data?.side}_${detail.data?.packageCode === "complete" ? "compliance" : "ctc"}`),
-                      )
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <label className={s.field}>
-                  Recipient name for the greeting
-                  <input
-                    className={s.input}
-                    value={recipientName}
-                    onChange={(e) => setRecipientName(e.target.value)}
-                  />
-                </label>
-              </div>
-              <button
-                className={s.buttonSmall}
-                disabled={!template || busy || !!draft}
-                onClick={async () => {
-                  setBusy(true);
-                  setError("");
-                  try {
-                    const result = await mutate<{
-                      subject: string;
-                      body: string;
-                      templateId: string;
-                      templateRevision: number;
-                    }>(`/api/v1/communications/templates/${template}/render`, {
-                      matterId: matter,
-                      values: recipientName ? { recipientName } : {},
-                    });
-                    setSubject(result.subject);
-                    setBody(result.body);
-                    setBinding({
-                      id: result.templateId,
-                      revision: result.templateRevision,
-                      recipientName,
-                    });
-                    setDirty(true);
-                    setConfirmed(false);
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Fill template with confirmed details
-              </button>
-            </details>
-          )}
-          {matter && (
-            <details style={{ margin: "15px 0" }}>
-              <summary className={s.fieldHint} style={{ cursor: "pointer" }}>
-                Available confirmed merge fields
-              </summary>
-              {mergeFields.error && (
-                <p className={s.error}>{mergeFields.error}</p>
-              )}
-              <div className={s.tableWrap}>
-                <table className={s.table}>
-                  <thead>
-                    <tr>
-                      <th>Field</th>
-                      <th>Value</th>
-                      <th>Review</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mergeFields.data?.map((f) => (
-                      <tr key={f.key}>
-                        <td>
-                          <code>{"{{" + f.key + "}}"}</code>
-                          <small>{f.label}</small>
-                        </td>
-                        <td>{f.value || "Not confirmed"}</td>
-                        <td>{label(f.status)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
+            <ComposerTemplateFields
+              matter={matter}
+              side={detail.data?.side}
+              packageCode={detail.data?.packageCode}
+              template={template}
+              chooseTemplate={(id) => {
+                setTemplate(id);
+                setBinding(null);
+              }}
+              recipientName={recipientName}
+              setRecipientName={setRecipientName}
+              bound={!!draft}
+              fill={() => void fillTemplate()}
+            />
           )}
           {detail.data && (
             <p className={s.notice}>
               Client contact:{" "}
-              {detail.data.details?.directContact === "through_agent"
+              {throughAgent
                 ? "Only through the agent. Direct client sending is restricted."
                 : "Copy the agent on direct client communication."}
             </p>
@@ -451,110 +428,89 @@ export function Composer({
             <div style={{ margin: "18px 0" }}>
               <p className={s.fieldHint}>People saved on this deal</p>
               <div className={s.formRow} style={{ flexWrap: "wrap" }}>
-                {users.data
-                  ?.filter((u) => u.id === detail.data?.agentId)
-                  .map((u) => (
-                    <button
-                      className={s.buttonSmall}
-                      key={u.id}
-                      onClick={() => {
-                        if (
-                          detail.data?.details?.directContact ===
-                          "through_agent"
-                        )
-                          setTo(u.email);
-                        else
-                          setCc((v) =>
-                            Array.from(
-                              new Set([
-                                ...v
-                                  .split(",")
-                                  .map((x) => x.trim())
-                                  .filter(Boolean),
-                                u.email,
-                              ]),
-                            ).join(", "),
-                          );
-                        setDirty(true);
-                        setConfirmed(false);
-                      }}
-                    >
-                      {detail.data?.details?.directContact === "through_agent"
-                        ? "To agent: "
-                        : "CC agent: "}
-                      {u.name}
-                    </button>
-                  ))}
-                {[
-                  ...(Array.isArray(detail.data.details?.contacts)
-                    ? detail.data.details.contacts
-                    : []),
-                  ...(detail.data.details?.directContact === "through_agent"
-                    ? []
-                    : Array.isArray(detail.data.details?.clients)
-                      ? detail.data.details.clients
-                      : []),
-                ].map((raw, i) => {
-                  const contact = raw as {
-                    name?: string;
-                    email?: string;
-                    role?: string;
-                  };
-                  if (!contact.email) return null;
-                  return (
-                    <button
-                      key={i}
-                      className={s.buttonSmall}
-                      onClick={() => {
-                        setTo((v) =>
-                          Array.from(
-                            new Set([
-                              ...v
-                                .split(",")
-                                .map((x) => x.trim())
-                                .filter(Boolean),
-                              contact.email!,
-                            ]),
-                          ).join(", "),
-                        );
-                        setDirty(true);
-                        setConfirmed(false);
-                      }}
-                    >
-                      {contact.name || contact.email}
-                      {contact.role ? " · " + label(contact.role) : ""}
-                    </button>
-                  );
-                })}
+                {servingAgent && (
+                  <button
+                    type="button"
+                    className={s.buttonSmall}
+                    onClick={() => {
+                      const previous = throughAgent ? to : cc;
+                      edit(
+                        throughAgent ? setTo : setCc,
+                        addresses(previous + "," + servingAgent.email).join(
+                          ", ",
+                        ),
+                      );
+                    }}
+                  >
+                    {throughAgent ? "To agent · " : "CC agent · "}
+                    {servingAgent.name}
+                  </button>
+                )}
+                {suggestions.map((person, index) => (
+                  <button
+                    type="button"
+                    className={s.buttonSmall}
+                    key={person.email + ":" + index}
+                    onClick={() =>
+                      edit(setTo, addresses(to + "," + person.email).join(", "))
+                    }
+                  >
+                    {person.name || person.email}
+                    {person.role ? " · " + label(person.role) : ""}
+                  </button>
+                ))}
               </div>
             </div>
           )}
+          <div className={s.formGrid} key={`recipients:${matter}`}>
+            <RecipientField
+              title="To"
+              value={to}
+              change={(value) => edit(setTo, value)}
+              addToDeal={editablePeople ? setNewPersonEmail : undefined}
+              existingEmails={existingEmails}
+            />
+            <RecipientField
+              title="CC"
+              value={cc}
+              change={(value) => edit(setCc, value)}
+              addToDeal={editablePeople ? setNewPersonEmail : undefined}
+              existingEmails={existingEmails}
+            />
+          </div>
+          {newPersonEmail && editablePeople && (
+            <AddEmailRecipientToDeal
+              key={matter + ":" + newPersonEmail}
+              matterId={matter}
+              email={newPersonEmail}
+              people={canonicalPeople}
+              close={() => setNewPersonEmail("")}
+              saved={() => {
+                setNewPersonEmail("");
+                setConfirmed(false);
+                void detail.refresh();
+              }}
+            />
+          )}
+          {editablePeople && (
+            <EmailAttachmentUpload
+              key={`attachments:${matter}`}
+              matterId={matter}
+              refresh={detail.refresh}
+              attach={(id) => {
+                if (currentMatter.current !== matter) return;
+                setAttachments((previous) => [...new Set([...previous, id])]);
+                setDirty(true);
+                setConfirmed(false);
+              }}
+            />
+          )}
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
+            onSubmit={(event) => {
+              event.preventDefault();
               void save();
             }}
           >
-            <div className={s.formGrid} style={{ marginTop: 20 }}>
-              <label className={s.field}>
-                To (comma-separated emails)
-                <input
-                  className={s.input}
-                  value={to}
-                  onChange={(e) => edit(setTo, e.target.value)}
-                  required
-                  placeholder="Name@example.com"
-                />
-              </label>
-              <label className={s.field}>
-                CC (comma-separated emails)
-                <input
-                  className={s.input}
-                  value={cc}
-                  onChange={(e) => edit(setCc, e.target.value)}
-                />
-              </label>
-            </div>
             <label className={s.field} style={{ marginTop: 18 }}>
               Subject
               <input
@@ -621,6 +577,7 @@ export function Composer({
               disabled={
                 busy ||
                 !matter ||
+                addresses(to).length === 0 ||
                 (!draft &&
                   !!template &&
                   (!binding || binding.recipientName !== recipientName)) ||
@@ -632,125 +589,23 @@ export function Composer({
             </button>
           </form>
           {draft && (
-            <div style={{ marginTop: 20 }}>
-              {draft.details?.reviewNeeded && (
-                <div className={s.notice}>
-                  <strong>
-                    The transaction changed. Review this draft again.
-                  </strong>
-                  <p>
-                    Confirmed dates may have refreshed. Hand-edited text was
-                    preserved and may need a correction before sending.
-                  </p>
-                  {draft.details.mergeError && (
-                    <p>{draft.details.mergeError}</p>
-                  )}
-                </div>
-              )}
-              <div className={s.formRow} style={{ flexWrap: "wrap" }}>
-                <button
-                  className={s.buttonSmall}
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    setError("");
-                    try {
-                      const saved = await api<Draft[]>(
-                        `/api/v1/communications/drafts?matterId=${encodeURIComponent(matter)}`,
-                      );
-                      const latest = saved.find((d) => d.id === draft.id);
-                      if (!latest)
-                        throw new Error("This draft is no longer available.");
-                      loadDraft(latest);
-                      await drafts.refresh();
-                    } catch (e) {
-                      setError((e as Error).message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Reload saved draft (replace unsaved changes)
-                </button>
-                {draft.details?.templateId && draft.status === "draft" && (
-                  <button
-                    className={s.buttonSmall}
-                    disabled={busy}
-                    onClick={async () => {
-                      setBusy(true);
-                      setError("");
-                      try {
-                        const reset = await mutate<Draft>(
-                          `/api/v1/communications/drafts/${draft.id}/reset-template`,
-                          {
-                            expectedRevision: draft.revision,
-                            values: recipientName ? { recipientName } : {},
-                          },
-                        );
-                        loadDraft(reset);
-                        await drafts.refresh();
-                        setMessage(
-                          "The message was replaced with current template text. Review before sending.",
-                        );
-                      } catch (e) {
-                        setError((e as Error).message);
-                      } finally {
-                        setBusy(false);
-                      }
-                    }}
-                  >
-                    Replace message with current template
-                  </button>
-                )}
-              </div>
-              <p className={s.fieldHint}>
-                Saved draft: {label(draft.status)}
-                {dirty ? " · Unsaved changes" : ""}
-              </p>
-              <label className={s.todo}>
-                <input
-                  type="checkbox"
-                  checked={confirmed}
-                  disabled={dirty || busy}
-                  onChange={(e) => setConfirmed(e.target.checked)}
-                />
-                I reviewed the recipients, contact permissions, content and
-                attachments, and authorize sending this saved draft.
-              </label>
-              <button
-                className={s.button}
-                disabled={
-                  busy ||
-                  dirty ||
-                  !confirmed ||
-                  !connected ||
-                  ["queued", "sent"].includes(draft.status)
-                }
-                onClick={async () => {
-                  setBusy(true);
-                  setError("");
-                  try {
-                    const sent = await mutate<Draft>(
-                      `/api/v1/communications/drafts/${draft.id}/send`,
-                      { revision: draft.revision, confirmed: true },
-                    );
-                    setDraft(sent);
-                    setMessage(
-                      `Sending request saved with status: ${label(sent.status)}. Check this draft for sending updates before trying again.`,
-                    );
-                    await drafts.refresh();
-                    await onWorkChanged?.();
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                <Send />
-                Send approved draft
-              </button>
-            </div>
+            <DraftApproval
+              draft={draft}
+              matter={matter}
+              dirty={dirty}
+              confirmed={confirmed}
+              connected={!!connected}
+              busy={busy}
+              recipientName={recipientName}
+              setBusy={setBusy}
+              setError={setError}
+              setMessage={setMessage}
+              setConfirmed={setConfirmed}
+              setDraft={setDraft}
+              loadDraft={loadDraft}
+              refresh={drafts.refresh}
+              onWorkChanged={onWorkChanged}
+            />
           )}
           {!connected && (
             <div className={s.notice}>

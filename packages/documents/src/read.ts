@@ -1,0 +1,72 @@
+import { createHash } from "node:crypto";
+import { prisma } from "@weatherly/db";
+import { HttpError, type Principal } from "@weatherly/platform";
+import { authorizedDocument } from "./access";
+import { createObjectStore } from "./storage";
+
+export async function getDocument(actor: Principal, id: string) {
+  const doc = await authorizedDocument(actor, id);
+  const versions = await prisma.documentVersion.findMany({
+    where: { documentId: id },
+    orderBy: { version: "desc" },
+    ...(actor.role === "coordinator" || doc.shareWithAgent === null
+      ? {}
+      : { take: 1 }),
+  });
+  return {
+    ...doc,
+    versions: versions.map(
+      ({
+        objectKey: _,
+        uploadRequestId: _request,
+        uploadContextHash: _context,
+        ...version
+      }) => version,
+    ),
+  };
+}
+/** Authorized byte access for trusted server adapters; storage keys never cross the API boundary. */
+export async function readDocumentVersion(
+  actor: Principal,
+  documentId: string,
+  versionId: string,
+  store = createObjectStore(),
+) {
+  return readDocumentContent(actor, documentId, versionId, store);
+}
+
+export async function readDocumentContent(
+  actor: Principal,
+  documentId: string,
+  versionId: string | undefined,
+  store: ReturnType<typeof createObjectStore>,
+) {
+  const doc = await authorizedDocument(actor, documentId);
+  const version = await prisma.documentVersion.findFirst({
+    where: {
+      documentId,
+      ...((actor.role === "coordinator" || doc.shareWithAgent === null) &&
+      versionId
+        ? { id: versionId }
+        : {}),
+    },
+    orderBy: { version: "desc" },
+  });
+  if (!version || (versionId && version.id !== versionId))
+    throw new HttpError(404, "VERSION_NOT_FOUND", "Version not found");
+  const bytes = await store.get(version.objectKey);
+  if (createHash("sha256").update(bytes).digest("hex") !== version.checksum)
+    throw new HttpError(
+      500,
+      "CHECKSUM_MISMATCH",
+      "Stored evidence failed integrity validation",
+    );
+  await authorizedDocument(actor, documentId);
+  return {
+    name: doc.name,
+    originalName: version.originalName || doc.name,
+    mimeType: doc.mimeType,
+    checksum: version.checksum,
+    bytes,
+  };
+}

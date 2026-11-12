@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import express from "express";
 import request from "supertest";
 import { ZodError } from "zod";
+import JSZip from "jszip";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -490,6 +491,129 @@ describe("independent batch upload backend checks", () => {
     ).toBe(404);
   });
 
+  it("stages coordinator contract uploads privately against an open creation review", async () => {
+    const review = await prisma.creationReview.create({
+      data: { ownerId: coordinator.id, startRequestId: randomUUID() },
+    });
+    try {
+      const server = app();
+      const bytes = pdf("Synthetic staged contract");
+      const destination = {
+        creationReviewId: review.id,
+        uploadRequestId: randomUUID(),
+      };
+      expect(
+        (await upload(server, agent, "staged.pdf", bytes, destination)).status,
+      ).toBe(403);
+      const first = await upload(
+        server,
+        coordinator,
+        "staged.pdf",
+        bytes,
+        destination,
+      );
+      expect(first.status, first.text).toBe(201);
+      expect(first.body).toMatchObject({
+        matterId: null,
+        creationReviewId: review.id,
+        shareWithAgent: false,
+        shareWithClient: false,
+      });
+      const replay = await upload(
+        server,
+        coordinator,
+        "staged.pdf",
+        bytes,
+        destination,
+      );
+      expect(replay.body.id).toBe(first.body.id);
+      const view = await request(server)
+        .get(
+          `/documents/${first.body.id}/view?versionId=${first.body.versions[0].id}`,
+        )
+        .set("x-review-actor", coordinator.id);
+      expect(view.status).toBe(200);
+      expect(view.body).toEqual(bytes);
+      expect(view.headers["content-disposition"]).toContain("inline");
+      expect(
+        (
+          await request(server)
+            .get(`/documents/${first.body.id}`)
+            .set("x-review-actor", agent.id)
+        ).status,
+      ).toBe(404);
+      await prisma.creationReview.update({
+        where: { id: review.id },
+        data: { state: "confirmed" },
+      });
+      expect(
+        (
+          await upload(server, coordinator, "staged-late.pdf", bytes, {
+            creationReviewId: review.id,
+          })
+        ).status,
+      ).toBe(409);
+    } finally {
+      await prisma.creationReview.delete({ where: { id: review.id } });
+    }
+  });
+
+  it("archives each latest visible document once with safe names on closed files", async () => {
+    const server = app();
+    const one = pdf("First visible");
+    const two = pdf("Second visible");
+    const first = await upload(server, coordinator, "duplicate.pdf", one, {
+      matterId,
+      visibility: "agent",
+    });
+    const second = await upload(server, coordinator, "duplicate.pdf", two, {
+      matterId,
+      visibility: "agent",
+    });
+    const hidden = await upload(
+      server,
+      coordinator,
+      "private-archive.pdf",
+      pdf("Private"),
+      { matterId, visibility: "coordinator" },
+    );
+    expect([first.status, second.status, hidden.status]).toEqual([
+      201, 201, 201,
+    ]);
+    const archive = () =>
+      request(server)
+        .get(`/documents/archive/${matterId}`)
+        .set("x-review-actor", agent.id);
+    expect((await archive()).status).toBe(409);
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { stage: "closed" },
+    });
+    try {
+      const response = await archive()
+        .buffer(true)
+        .parse((incoming, done) => {
+          const chunks: Buffer[] = [];
+          incoming.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+          incoming.on("error", done);
+          incoming.on("end", () => done(null, Buffer.concat(chunks)));
+        });
+      expect(response.status, response.text).toBe(200);
+      expect(response.headers["cache-control"]).toContain("no-store");
+      const zip = await JSZip.loadAsync(response.body);
+      expect(await zip.file("duplicate.pdf")?.async("nodebuffer")).toEqual(one);
+      expect(await zip.file("duplicate (2).pdf")?.async("nodebuffer")).toEqual(
+        two,
+      );
+      expect(zip.file("private-archive.pdf")).toBeNull();
+    } finally {
+      await prisma.matter.update({
+        where: { id: matterId },
+        data: { stage: "under_contract" },
+      });
+    }
+  });
+
   it("bounds each request and rejects invalid or extra files with actionable errors", async () => {
     const server = app();
     const bytes = pdf("Validation review");
@@ -638,7 +762,7 @@ describe("independent batch upload backend checks", () => {
     ).toBe(2);
   });
 
-  it("keeps ongoing agent documents read-only before object storage while preserving coordinator writes and unassigned intake versions", async () => {
+  it("allows an agent to add a private-to-clients document without replacing existing versions", async () => {
     let writes = 0;
     const counted: ObjectStore = {
       ...store,
@@ -667,14 +791,19 @@ describe("independent batch upload backend checks", () => {
       data: { matterId },
     });
     writes = 0;
-    const deniedCreate = await upload(
+    const agentCreate = await upload(
       server,
       agent,
-      "no-ongoing-create.pdf",
+      "new-agent-document.pdf",
       bytes,
       { matterId },
     );
-    expect(deniedCreate.status).toBe(403);
+    expect(agentCreate.status).toBe(201);
+    expect(agentCreate.body).toMatchObject({
+      shareWithAgent: true,
+      shareWithClient: false,
+    });
+    expect(writes).toBe(1);
     const deniedVersion = await upload(
       server,
       agent,
@@ -685,7 +814,7 @@ describe("independent batch upload backend checks", () => {
     );
     expect(deniedVersion.status).toBe(403);
     expect(deniedVersion.body.error.code).toBe("TRANSACTION_READ_ONLY");
-    expect(writes).toBe(0);
+    expect(writes).toBe(1);
     const allowedCreate = await upload(
       server,
       coordinator,
@@ -855,6 +984,16 @@ describe("independent batch upload backend checks", () => {
             .set("x-review-actor", agent.id)
         ).status,
       ).toBe(404);
+      const edit = await upload(
+        server,
+        coordinator,
+        "attempted-replacement.pdf",
+        pdf("Unexpected replacement"),
+        {},
+        `/documents/${doc.body.id}/versions`,
+      );
+      expect(edit.status, edit.text).toBe(409);
+      expect(edit.body.error.code).toBe("AGREEMENT_IMMUTABLE");
     }
     const unsafe = await upload(
       server,
@@ -863,16 +1002,26 @@ describe("independent batch upload backend checks", () => {
       pdf("Unsafe shared evidence"),
       { ...fields, visibility: "client", matterId },
     );
-    expect(unsafe.status, unsafe.text).toBe(201);
+    expect(unsafe.status, unsafe.text).toBe(403);
+    const unsafeLegacy = await prisma.document.create({
+      data: {
+        name: "Unsafe legacy evidence",
+        mimeType: "application/pdf",
+        category: "service_agreement",
+        visibility: "client",
+        createdById: coordinator.id,
+        matterId,
+      },
+    });
     const unsafeLink = await request(server)
       .post("/onboarding/agreements")
       .set("x-review-actor", coordinator.id)
-      .send({ ...input, documentId: unsafe.body.id });
+      .send({ ...input, documentId: unsafeLegacy.id });
     expect(unsafeLink.status, unsafeLink.text).toBe(422);
     const unsafeSupport = await request(server)
       .post("/onboarding/agreements")
       .set("x-review-actor", coordinator.id)
-      .send({ ...input, supportingDocumentIds: [unsafe.body.id] });
+      .send({ ...input, supportingDocumentIds: [unsafeLegacy.id] });
     expect(unsafeSupport.status, unsafeSupport.text).toBe(422);
     const projections = await queryStoredRecords(coordinator, {
       kind: "agreements",

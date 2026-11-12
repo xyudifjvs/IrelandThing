@@ -7,6 +7,7 @@ import s from "./checklist.module.css";
 type PreviewTask = { id: string; title: string; visibility?: string };
 type ShareState = {
   active: boolean;
+  canCopy?: boolean;
   expiresAt?: string;
   createdAt?: string;
   id?: string;
@@ -28,7 +29,9 @@ export default function ChecklistShare({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const clientTasks = tasks.filter((task) => ["client", "client_only"].includes(task.visibility || ""));
+  const clientTasks = tasks.filter((task) =>
+    ["client", "client_only"].includes(task.visibility || ""),
+  );
   const currentLink =
     q.data?.active &&
     generated &&
@@ -60,9 +63,7 @@ export default function ChecklistShare({
           id: result.id,
           createdAt: result.createdAt,
         });
-        setNotice(
-          "Link ready. Copy it below; the complete link is shown only in this session.",
-        );
+        setNotice("Client link ready to copy.");
       } else
         setNotice(
           "Client link revoked. Anyone with the previous link will lose access.",
@@ -81,8 +82,8 @@ export default function ChecklistShare({
       <p className={s.eyebrow}>Client checklist link</p>
       <h2>Share the live checklist</h2>
       <p>
-        Anyone with this read-only link can see client-visible steps and
-        confirmed dates. Changes appear automatically.
+        Anyone with this read-only link can see the client timeline, shared
+        documents, and shared contacts.
       </p>
       <details className={s.preview}>
         <summary>
@@ -102,8 +103,8 @@ export default function ChecklistShare({
           </p>
         )}
         <p>
-          Private steps, agent-only steps, internal notes, documents and contacts are
-          excluded. Short notes and appointment times on shared steps are visible.
+          The client timeline includes appointments for Closing and Final
+          Walkthrough when they are scheduled.
         </p>
       </details>
       {q.data?.active && (
@@ -122,10 +123,10 @@ export default function ChecklistShare({
           <button onClick={() => void q.refresh()}>Try again</button>
         </p>
       )}
-      {q.data?.active && !currentLink && (
+      {q.data?.active && !q.data.canCopy && !currentLink && (
         <p className={s.hint}>
-          For privacy, an existing link cannot be retrieved. Replace it to get a
-          new link; the old link stops working immediately.
+          Replace this older link to make it copyable. The previous link will
+          stop working.
         </p>
       )}
       <div className={s.actions}>
@@ -150,6 +151,9 @@ export default function ChecklistShare({
           </button>
         )}
       </div>
+      {q.data?.active && q.data.canCopy && !currentLink && (
+        <CopyClientLink matterId={matterId} />
+      )}
       {currentLink && (
         <div className={s.linkField}>
           <label htmlFor={`checklist-link-${matterId}`}>
@@ -191,5 +195,65 @@ export default function ChecklistShare({
         </p>
       )}
     </section>
+  );
+}
+
+export function CopyClientLink({ matterId }: { matterId: string }) {
+  const [manualUrl, setManualUrl] = useState("");
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  async function copy() {
+    setPending(true);
+    setManualUrl("");
+    setNotice("");
+    setError("");
+    try {
+      const link = await api<{ url: string }>(
+        `/api/v1/matters/${matterId}/checklist-share/copy`,
+        {
+          method: "POST",
+          cache: "no-store",
+        },
+      );
+      try {
+        await navigator.clipboard.writeText(link.url);
+        setNotice("Client link copied.");
+      } catch {
+        setManualUrl(link.url);
+      }
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not copy the client link.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className={s.linkField}>
+      <button
+        className={s.secondary}
+        type="button"
+        disabled={pending}
+        onClick={() => void copy()}
+      >
+        {pending ? "Copying…" : "Copy client link"}
+      </button>
+      {manualUrl && (
+        <input
+          aria-label="Client link to copy"
+          readOnly
+          value={manualUrl}
+          onFocus={(event) => event.target.select()}
+        />
+      )}
+      {notice && <p role="status">{notice}</p>}
+      {error && <p role="alert">{error}</p>}
+    </div>
   );
 }

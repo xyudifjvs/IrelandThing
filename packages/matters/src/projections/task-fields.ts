@@ -27,6 +27,7 @@ export function agentMatterDetails(value: Prisma.JsonValue): Prisma.JsonValue {
     workflow: _workflow,
     sourceConflicts: _conflicts,
     confirmedFacts: _facts,
+    checklistDateAnchors: _anchors,
     fileReview,
     ...details
   } = value;

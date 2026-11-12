@@ -581,12 +581,16 @@ it.each(["import", "website inquiry"])(
     rows.fileIds.push(original.id, other.id);
     const approvalOverrideReason =
       "Synthetic approval previously recorded by the coordinator";
-    const first = await invite({
-      email: recipient,
-      role: "agent",
-      approvalOverrideReason,
-      matterId: original.id,
-    }).expect(201);
+    const legacyInvite = (matterId: string) =>
+      invite({
+        email: recipient,
+        role: "agent",
+        approvalOverrideReason,
+        matterId,
+      }).expect(201);
+    const separateFile = await legacyInvite(other.id);
+    const sameFile = await legacyInvite(original.id);
+    const first = await legacyInvite(original.id);
     const client = await invite({
       email: recipient,
       role: "client",
@@ -626,6 +630,12 @@ it.each(["import", "website inquiry"])(
             .send(entry.source)
             .expect(200)
         ).body.id;
+    const separateBefore = await prisma.invitation.findUniqueOrThrow({
+      where: { id: separateFile.body.id },
+    });
+    expect(separateBefore.rosterAgentId).toBe(
+      fromInquiry ? null : rosterAgentId,
+    );
     const otherRoster = await prisma.rosterAgent.create({
       data: {
         name: "Different roster recipient",
@@ -667,6 +677,14 @@ it.each(["import", "website inquiry"])(
     });
     expect(old.rosterAgentId).toBe(fromInquiry ? null : rosterAgentId);
     expect(old.expiresAt.getTime()).toBeLessThanOrEqual(Date.now());
+    const duplicate = await prisma.invitation.findUniqueOrThrow({
+      where: { id: sameFile.body.id },
+    });
+    expect(duplicate.expiresAt.getTime()).toBeLessThanOrEqual(Date.now());
+    const separateAfter = await prisma.invitation.findUniqueOrThrow({
+      where: { id: separateFile.body.id },
+    });
+    expect(separateAfter.expiresAt).toEqual(separateBefore.expiresAt);
     const unrelatedActive = await prisma.invitation.count({
       where: {
         id: { in: [client.body.id, ...misdirectedInvites.map(({ id }) => id)] },
@@ -694,19 +712,38 @@ it.each(["import", "website inquiry"])(
       request(authenticated)
         .post("/api/v1/invitations/register")
         .send({ token, name: "Synthetic Invite Recipient", password });
-    if (fromInquiry) {
-      await register(first.body.acceptanceToken).expect(400);
-      await register(second.body.acceptanceToken).expect(201);
-      const user = await prisma.user.findUniqueOrThrow({
-        where: { email: recipient },
-      });
-      expect(await getAgentMembership(user.id)).toMatchObject({
-        rosterAgentId,
-      });
-      const files = await prisma.matterParticipant.findMany({
+    await register(first.body.acceptanceToken).expect(400);
+    await register(second.body.acceptanceToken).expect(201);
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: recipient },
+    });
+    expect(await getAgentMembership(user.id)).toMatchObject({ rosterAgentId });
+    const files = () =>
+      prisma.matterParticipant.findMany({
         where: { userId: user.id },
+        orderBy: { matterId: "asc" },
+        select: { matterId: true },
       });
-      expect(files.map(({ matterId }) => matterId)).toEqual([original.id]);
+    expect(await files()).toEqual([{ matterId: original.id }]);
+    if (!fromInquiry) {
+      const recipientSession = await request(authenticated)
+        .post("/api/auth/sign-in/email")
+        .send({ email: recipient, password })
+        .expect(200);
+      const recipientCookie = recipientSession.headers["set-cookie"];
+      await request(authenticated)
+        .post("/api/v1/invitations")
+        .set("Cookie", recipientCookie)
+        .send(resend)
+        .expect(403);
+      await request(authenticated)
+        .post("/api/v1/invitations/accept")
+        .set("Cookie", recipientCookie)
+        .send({ token: separateFile.body.acceptanceToken })
+        .expect(200);
+      expect((await files()).map(({ matterId }) => matterId)).toEqual(
+        [original.id, other.id].sort(),
+      );
     }
   },
 );

@@ -160,16 +160,11 @@ export function registerInvitationRoutes(
         const matterId = prior?.matterId ?? data.matterId;
         if (matterId && !data.matterId)
           await requireMatter(actor, matterId, true, tx);
-        if (roster && prior) {
-          // Legacy invitations for other files still carry their own authorization.
-          const replaced = priorInvitations.filter(
-            (invitation) =>
-              invitation.rosterAgentId === roster.id ||
-              invitation.matterId === prior.matterId,
-          );
+        if (prior) {
           await tx.invitation.updateMany({
             where: {
-              id: { in: replaced.map(({ id }) => id) },
+              id: { in: priorInvitations.map(({ id }) => id) },
+              matterId: prior.matterId,
               acceptedAt: null,
               expiresAt: { gt: now },
             },

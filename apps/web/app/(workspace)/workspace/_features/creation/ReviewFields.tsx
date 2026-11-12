@@ -4,7 +4,7 @@ import type {
   ChecklistDateInput,
   TransactionBusiness,
 } from "@weatherly/platform/handoff-contracts";
-import UserPicker from "../../_components/UserPicker";
+import { ReviewAgentPicker } from "./ReviewAgentPicker";
 import { previewDates, reviewDates, type ReviewFacts } from "./review-model";
 import s from "./creation.module.css";
 
@@ -126,14 +126,10 @@ export function ReviewFields({
               onChange={(event) => onPrice(event.target.value)}
             />
           </label>
-          <UserPicker
-            label="Assigned agent (optional)"
-            role="agent"
-            required={false}
-            value={facts.agentId ?? ""}
-            onChange={(agentId) =>
-              onFacts({ agentId: agentId || null, agentRosterId: null })
-            }
+          <ReviewAgentPicker
+            agentId={facts.agentId}
+            agentRosterId={facts.agentRosterId}
+            onChange={onFacts}
           />
         </div>
       </section>

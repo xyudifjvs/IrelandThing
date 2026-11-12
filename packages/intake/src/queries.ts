@@ -3,6 +3,7 @@ import { prisma, type Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
 import { requireMatter } from "@weatherly/matters";
 import { originalIntakeDocumentIds } from "./snapshot";
+import { projectSubmitter } from "./submitter";
 
 export async function getIntakeSubmission(actor: Principal, id: string) {
   if (actor.role === "client")
@@ -73,11 +74,8 @@ export async function getIntakeSubmission(actor: Principal, id: string) {
       },
     },
   });
-  const agent = await prisma.user.findUnique({
-    where: { id: submission.userId },
-    select: { id: true, name: true, email: true, brokerage: true },
-  });
-  return { ...submission, agent, documents };
+  const { agent, agentSource } = await projectSubmitter(prisma, submission);
+  return { ...submission, agent: agent ? { id: submission.userId, ...agent } : null, agentSource, documents };
 }
 
 export async function listIntakeSubmissions(actor: Principal, raw: unknown = {}) {

@@ -173,3 +173,14 @@
     min-height: 2.75rem;
   }
 }
+
+.agentPicker {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.agentPicker details summary {
+  margin-block: 0.5rem;
+  cursor: pointer;
+  color: var(--weatherly-color-accent, #205560);
+}

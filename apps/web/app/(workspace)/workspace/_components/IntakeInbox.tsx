@@ -10,7 +10,8 @@ export type IntakeReceipt = {
   processedAt: string | null;
   createdAt: string;
   snapshot: Record<string, unknown>;
-  agent: { name: string; email: string; brokerage?: string } | null;
+  agent: { name: string; email: string; brokerage?: string | null; phone?: string | null } | null;
+  agentSource?: "submitted" | "current_profile" | null;
   documents?: {
     id: string;
     name: string;

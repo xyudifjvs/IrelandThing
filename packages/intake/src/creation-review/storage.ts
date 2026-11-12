@@ -17,6 +17,7 @@ import {
   startReviewSchema,
 } from "./inputs";
 import { defaultReviewPayload } from "./intake-defaults";
+import { projectSubmitter } from "../submitter";
 import { intakeContractIds, originalIntakeDocumentIds } from "../snapshot";
 import { listReviewDocuments, verifySources } from "./sources";
 
@@ -118,15 +119,6 @@ async function intakeSummary(
   tx: Prisma.TransactionClient,
   intake: NonNullable<StoredReview["intake"]>,
 ) {
-  const agent = await tx.user.findUnique({
-    where: { id: intake.userId },
-    select: {
-      name: true,
-      email: true,
-      brokerage: true,
-      rosterAgent: { select: { phone: true } },
-    },
-  });
   const documents = await tx.document.findMany({
     where: {
       creationReviewId: null,
@@ -162,14 +154,7 @@ async function intakeSummary(
       id,
       name: versions[0]?.originalName || name,
     })),
-    agent: agent
-      ? {
-          name: agent.name,
-          email: agent.email,
-          brokerage: agent.brokerage,
-          phone: agent.rosterAgent?.phone ?? null,
-        }
-      : null,
+    ...(await projectSubmitter(tx, intake)),
   };
 }
 
@@ -311,10 +296,7 @@ export async function startCreationReview(actor: Principal, input: unknown) {
           );
         return projectReview(tx, active);
       }
-      const agent = await tx.user.findUnique({
-        where: { id: intake.userId },
-        select: { name: true, email: true },
-      });
+      const { agent } = await projectSubmitter(tx, intake);
       payload = reviewPayloadSchema.parse(
         defaultReviewPayload(intake, matter, agent),
       );

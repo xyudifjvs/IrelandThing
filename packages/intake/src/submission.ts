@@ -6,6 +6,7 @@ import { HttpError, type Principal } from "@weatherly/platform";
 import { audit, revision, requireMatter } from "@weatherly/matters";
 import { referenceDocumentIds, referenceFollowups } from "./reference";
 import { intakePayload, assertSubmissionReady } from "./validation";
+import { currentSubmitter } from "./submitter";
 
 export async function draftFor(
   actor: Principal,
@@ -121,7 +122,7 @@ export async function submitIntake(
           "CATALOG_UNAPPROVED",
           "The selected service is not available for a new submission.",
         );
-      const snapshot = {
+      const intakeDetails = {
         ...data,
         packageCode,
         business,
@@ -137,6 +138,10 @@ export async function submitIntake(
             noFeeIfTerminatedBeforeClosing: true,
           },
         } : {}),
+      };
+      const snapshot = {
+        ...intakeDetails,
+        submitter: await currentSubmitter(tx, draft.userId),
       };
       if (data.replacesMatterId) {
         // A replacement is a separate submitted record. Lock and re-read the
@@ -246,7 +251,7 @@ export async function submitIntake(
           stage: "pending_review",
           agentId: draft.userId,
           agentRosterId: rosterAgentId,
-          details: snapshot as Prisma.InputJsonValue,
+          details: intakeDetails as Prisma.InputJsonValue,
         },
       });
       for (const doc of docs) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   creationConfirmSchema,
+  creationPersonSchema,
   entityIdSchema,
   revisionSchema,
   sourceVersionSchema,
@@ -20,6 +21,11 @@ export const sourcesSchema = z
     "Pin at most one version of each document.",
   );
 
+export const draftPersonSchema = creationPersonSchema.extend({
+  name: z.string().trim().max(200),
+  email: z.string().trim().max(254),
+});
+
 export const reviewPayloadSchema = z
   .object({
     business: transactionBusinessSchema.optional(),
@@ -27,7 +33,7 @@ export const reviewPayloadSchema = z
       title: z.string().trim().max(200).optional(),
       propertyAddress: z.string().trim().max(500).optional(),
     }),
-    people: creationConfirmSchema.shape.people,
+    people: z.array(draftPersonSchema).max(100),
     peopleEdited: z.boolean().optional(),
     dates: creationConfirmSchema.shape.dates,
   })

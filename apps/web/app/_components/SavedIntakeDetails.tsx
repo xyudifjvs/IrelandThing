@@ -112,10 +112,12 @@ function ReferenceAnswers({ value }: { value: ReferenceIntake }) {
 export default function SavedIntakeDetails({
   value,
   agent,
+  agentSource,
   documents,
 }: {
   value: unknown;
   agent?: Submitter | null;
+  agentSource?: "submitted" | "current_profile" | null;
   documents?: { id: string; name: string }[];
 }) {
   const snapshot = asRecord(value);
@@ -126,13 +128,23 @@ export default function SavedIntakeDetails({
     ? []
     : Object.entries(snapshot).filter(
         ([key]) =>
-          !["fileReview", "serviceSnapshot"].includes(key) &&
+          !["fileReview", "serviceSnapshot", "submitter"].includes(key) &&
           (!reference || key !== "referenceIntake") &&
           (!(reference || documents) || key !== "documentIds"),
       );
   const namedDocuments = documents?.filter(
     ({ id }) =>
       !reference || !Object.values(reference.uploads).flat().includes(id),
+  );
+  const submitter = agent && (
+    <Answers
+      entries={[
+        ["agent", agent.name],
+        ["brokerage", agent.brokerage],
+        ["email", agent.email],
+        ["phone", agent.phone],
+      ]}
+    />
   );
   return (
     <section className={s.intake}>
@@ -142,16 +154,7 @@ export default function SavedIntakeDetails({
           <span className={s.open}>Show all details</span>
           <span className={s.close}>Hide details</span>
         </summary>
-        {agent && (
-          <Answers
-            entries={[
-              ["agent", agent.name],
-              ["brokerage", agent.brokerage],
-              ["email", agent.email],
-              ["phone", agent.phone],
-            ]}
-          />
-        )}
+        {agentSource === "submitted" && submitter}
         {entries.length > 0 && <Answers entries={entries} />}
         {namedDocuments && namedDocuments.length > 0 && (
           <Answers
@@ -161,6 +164,12 @@ export default function SavedIntakeDetails({
           />
         )}
         {reference && <ReferenceAnswers value={reference} />}
+        {submitter && agentSource !== "submitted" && (
+          <aside aria-label="Current agent profile for this historical intake">
+            <h3>Current agent profile for this historical intake</h3>
+            {submitter}
+          </aside>
+        )}
       </details>
     </section>
   );

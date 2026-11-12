@@ -29,7 +29,9 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             {String(intake.snapshot.propertyAddress || "Address not provided")}
           </h1>
           <p>
-            Submitted by {intake.agent?.name} ({intake.agent?.email}) ·{" "}
+            {intake.agent && intake.agentSource === "submitted"
+              ? `Submitted by ${intake.agent.name} · `
+              : "Received · "}
             {date(intake.createdAt)}
           </p>
         </div>
@@ -84,12 +86,13 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       </section>
       <SavedIntakeDetails
         value={intake.snapshot}
+        agentSource={intake.agentSource}
         agent={
           intake.agent
             ? {
                 ...intake.agent,
                 brokerage: intake.agent.brokerage || null,
-                phone: null,
+                phone: intake.agent.phone ?? null,
               }
             : null
         }

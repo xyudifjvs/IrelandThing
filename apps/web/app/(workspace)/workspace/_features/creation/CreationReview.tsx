@@ -190,6 +190,8 @@ export function CreationReview({
     const address = facts.propertyAddress?.trim();
     if (!business || !address)
       throw Error("Choose a business and enter the property address.");
+    if (people.some(({ name }) => !name.trim()))
+      throw Error("Enter a name for each person or remove the incomplete row.");
     const key = `confirm.${review.id}`;
     const body: CreationConfirm = {
       expectedRevision: review.revision,
@@ -246,6 +248,7 @@ export function CreationReview({
         <SavedIntakeDetails
           value={review.intake.snapshot}
           agent={review.intake.agent}
+          agentSource={review.intake.agentSource}
           documents={review.intake.documents}
         />
       )}

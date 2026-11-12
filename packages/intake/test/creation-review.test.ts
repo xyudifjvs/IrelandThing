@@ -379,6 +379,97 @@ describe("creation review", () => {
     });
   });
 
+  it("keeps a partially named intake contact editable and requires a name at confirmation", async () => {
+    const pending = await prisma.matter.create({
+      data: {
+        title: "Partial contact test",
+        propertyAddress: "Partial contact test",
+        side: "buyer",
+        packageCode: "complete",
+        stage: "pending_review",
+        agentId: agent.id,
+      },
+    });
+    const partialClient = {
+      role: "client",
+      name: "",
+      email: "partial@example.test",
+      phone: "555-0150",
+    };
+    const intake = await prisma.intakeSubmission.create({
+      data: {
+        matterId: pending.id,
+        userId: agent.id,
+        draftId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        snapshot: { clients: [partialClient] },
+      },
+    });
+    const opened = await startCreationReview(owner, {
+      intakeId: intake.id,
+      requestId: randomUUID(),
+    });
+    expect(opened.people).toContainEqual(partialClient);
+    expect(opened.intake).toMatchObject({ agentSource: "current_profile" });
+    const saved = await saveCreationReview(owner, opened.id, {
+      expectedRevision: opened.revision,
+      people: opened.people,
+    });
+    expect((await readCreationReview(owner, opened.id)).people).toContainEqual(
+      partialClient,
+    );
+    const request = { ...confirmation(saved.revision), people: saved.people };
+    await expect(
+      confirmCreationReview(owner, opened.id, request, hooks),
+    ).rejects.toMatchObject({
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: expect.arrayContaining(["people", "name"]),
+        }),
+      ]),
+    });
+    expect(
+      await prisma.intakeSubmission.findUnique({ where: { id: intake.id } }),
+    ).toMatchObject({ processedAt: null });
+    const people = saved.people.map((person) =>
+      person.email === partialClient.email
+        ? { ...person, name: "Verified Client" }
+        : person,
+    );
+    await expect(
+      confirmCreationReview(owner, opened.id, { ...request, people }, hooks),
+    ).resolves.toEqual({ matterId: pending.id });
+    expect(
+      await prisma.matterContact.findFirst({
+        where: { matterId: pending.id, email: partialClient.email },
+      }),
+    ).toMatchObject({ name: "Verified Client", phone: partialClient.phone });
+  });
+
+  it("confirms a name-only HTO roster entry without linking any login", async () => {
+    const roster = await prisma.rosterAgent.create({
+      data: { name: "Synthetic name-only agent", business: "hto" },
+    });
+    const open = await startCreationReview(owner, { requestId: randomUUID() });
+    const request = confirmation(open.revision);
+    const { matterId } = await confirmCreationReview(
+      owner,
+      open.id,
+      {
+        ...request,
+        facts: { ...request.facts, agentRosterId: roster.id, agentId: null },
+      },
+      hooks,
+    );
+    expect(
+      await prisma.matter.findUnique({ where: { id: matterId } }),
+    ).toMatchObject({
+      agentRosterId: roster.id,
+      agentId: null,
+      business: "hto",
+    });
+  });
+
   it("keeps the legacy intake pending until confirmation and preserves the original receipt and history", async () => {
     const oldTerms = {
       code: "complete",

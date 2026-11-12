@@ -72,3 +72,25 @@ it("keeps intake client details ahead of names in the extraction proposal", () =
     { role: "client", name: "Name in contract", email: "", phone: "" },
   ]);
 });
+
+it("fills a single unmatched same-side name without dropping the partial intake details", () => {
+  const partial = {
+    role: "client",
+    name: "",
+    email: "original@example.test",
+    phone: "555-0105",
+  };
+  expect(suggestPeople([partial], "seller", proposal())).toEqual([
+    { ...partial, name: "Name in contract" },
+  ]);
+  const another = { ...partial, email: "different@example.test" };
+  expect(suggestPeople([partial, another], "seller", proposal())).toEqual([
+    partial,
+    another,
+  ]);
+  const known = { ...partial, name: "Different named seller" };
+  expect(suggestPeople([known, another], "seller", proposal())).toEqual([
+    known,
+    another,
+  ]);
+});

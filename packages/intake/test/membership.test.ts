@@ -2,8 +2,13 @@ import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { prisma } from "@weatherly/db";
 import type { Principal } from "@weatherly/platform";
-import { submitIntake } from "../src";
-import { startCreationReview } from "../src/creation-review/storage";
+import { getIntakeSubmission, submitIntake } from "../src";
+import { seedMatterChecklist } from "../../matters/src/checklist/persistence";
+import { confirmCreationReview } from "../src/creation-review/confirm";
+import {
+  readMatterIntake,
+  startCreationReview,
+} from "../src/creation-review/storage";
 import { completedReference } from "./reference-fixture";
 
 async function actor(role: Principal["role"]): Promise<Principal> {
@@ -16,8 +21,23 @@ async function actor(role: Principal["role"]): Promise<Principal> {
 it("resolves HTO intake from the submitting agent and preserves the receipt and gift", async () => {
   const agent = await actor("agent");
   const coordinator = await actor("coordinator");
+  const original = {
+    name: agent.name,
+    email: agent.email,
+    brokerage: "Original Brokerage",
+    phone: "555-0115",
+  };
+  await prisma.user.update({
+    where: { id: agent.id },
+    data: { brokerage: original.brokerage },
+  });
   const roster = await prisma.rosterAgent.create({
-    data: { name: agent.name, userId: agent.id, business: "hto" },
+    data: {
+      name: agent.name,
+      userId: agent.id,
+      business: "hto",
+      phone: original.phone,
+    },
   });
   const reference = completedReference("buyer");
   const { service, ...fields } = reference.fields;
@@ -63,9 +83,27 @@ it("resolves HTO intake from the submitting agent and preserves the receipt and 
     processedAt: null,
     business: "hto",
     matterId: result.matter.id,
-    snapshot: { business: "hto", packageCode: "hto_included", gift },
+    snapshot: {
+      business: "hto",
+      packageCode: "hto_included",
+      gift,
+      submitter: original,
+    },
   });
   expect(result.submission.snapshot).not.toHaveProperty("serviceSnapshot");
+  expect(result.matter.details).not.toHaveProperty("submitter");
+  await prisma.user.update({
+    where: { id: agent.id },
+    data: {
+      name: "Edited Agent",
+      email: "edited-snapshot@example.test",
+      brokerage: "Edited Brokerage",
+    },
+  });
+  await prisma.rosterAgent.update({
+    where: { id: roster.id },
+    data: { phone: "555-0199" },
+  });
   const review = await startCreationReview(coordinator, {
     intakeId: result.submission.id,
     requestId: randomUUID(),
@@ -73,6 +111,51 @@ it("resolves HTO intake from the submitting agent and preserves the receipt and 
   expect(review).toMatchObject({
     business: { business: "hto", packageCode: "hto_included" },
     facts: { agentId: agent.id, agentRosterId: roster.id },
+  });
+  expect(review.intake).toMatchObject({
+    agent: original,
+    agentSource: "submitted",
+  });
+  const published = await confirmCreationReview(
+    coordinator,
+    review.id,
+    {
+      expectedRevision: review.revision,
+      requestId: randomUUID(),
+      business: { business: "hto", packageCode: "hto_included" },
+      facts: {
+        title: "100 Synthetic Road",
+        propertyAddress: "100 Synthetic Road",
+        side: "buyer",
+        agentId: agent.id,
+        agentRosterId: roster.id,
+        purchaseType: "cash",
+        purchasePriceCents: null,
+        acceptance: null,
+      },
+      dates: [],
+      people: review.people,
+    },
+    {
+      seedChecklist: seedMatterChecklist,
+      async seedPeople(tx, _actor, matterId, people) {
+        await tx.matterContact.createMany({
+          data: people.map((person) => ({ ...person, matterId })),
+        });
+      },
+      async afterConfirm() {},
+    },
+  );
+  expect(await readMatterIntake(coordinator, published.matterId)).toMatchObject(
+    {
+      agent: original,
+      agentSource: "submitted",
+      snapshot: { submitter: original },
+    },
+  );
+  expect(await getIntakeSubmission(agent, result.submission.id)).toMatchObject({
+    agent: original,
+    agentSource: "submitted",
   });
   await prisma.rosterAgent.update({
     where: { id: roster.id },

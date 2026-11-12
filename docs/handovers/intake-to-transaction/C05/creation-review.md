@@ -22,6 +22,9 @@ Mount `createCreationReviewRouter({ seedChecklist, seedPeople, afterConfirm })` 
 
 ## Wiring
 
+- The coordinator selects an active saved entry from C08's `GET /api/v1/onboarding/roster`. A name-only entry supplies `agentRosterId` with a null login. Existing unlinked agent accounts can be selected separately.
+- Editable People can retain incomplete names and contact details in a saved review. Confirmation requires a valid name for every retained row. An extracted name can fill an unnamed intake row only when one same-side row and one contract name remain and every named intake client already matches.
+- New receipts freeze the submitter's name, email, brokerage and roster phone in the intake snapshot. Both submitted-details views use those captured values. Older receipts can display a separately labeled current profile without treating it as a submitted answer.
 - Confirmation uses the selected file business independently of roster affiliation. The selected roster entry must still be active and consistent with the assigned login.
 - Agent receipt documents use explicit intake ownership or the original upload IDs in the immutable snapshot, with the effective agent audience. Version metadata is limited to versions present at submission. The coordinator keeps the existing file document view. After C06 integrates, replace the equivalent agent audience predicate in `queries.ts` with `documentAudienceWhere("agent")`.
 - C00 supplies C03's `seedMatterChecklist`, a C06 transaction-scoped initial people writer and the transactional after-confirm hook. The hook is where C00 composes C11 HTO synchronization and other confirmed-file internal effects. Tests supply deterministic transaction callbacks that write real database rows.

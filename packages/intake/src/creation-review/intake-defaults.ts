@@ -1,11 +1,8 @@
 import { jsonObject } from "../snapshot";
 import type { Prisma } from "@weatherly/db";
-import {
-  creationPersonSchema,
-  transactionBusinessSchema,
-} from "@weatherly/platform/handoff-contracts";
+import { transactionBusinessSchema } from "@weatherly/platform/handoff-contracts";
 import { transactionContactSources } from "../../../contacts/src/transaction-sources";
-import type { ReviewPayload } from "./inputs";
+import { draftPersonSchema, type ReviewPayload } from "./inputs";
 
 export function defaultReviewPayload(
   intake: {
@@ -20,7 +17,12 @@ export function defaultReviewPayload(
     agentId: string | null;
     agentRosterId: string | null;
   },
-  agent: { name: string; email: string } | null,
+  agent: {
+    name: string;
+    email: string;
+    brokerage: string | null;
+    phone: string | null;
+  } | null,
 ): ReviewPayload {
   const snapshot = jsonObject(intake.snapshot);
   const facts: ReviewPayload["facts"] = {
@@ -42,16 +44,22 @@ export function defaultReviewPayload(
   };
   const people: ReviewPayload["people"] = [];
   function add(role: string, raw: Prisma.JsonObject) {
-    const entry = creationPersonSchema.safeParse({
+    const name = draftPersonSchema.shape.name.safeParse(raw.name);
+    const email = draftPersonSchema.shape.email.safeParse(raw.email);
+    const phone = draftPersonSchema.shape.phone.safeParse(raw.phone);
+    const company = draftPersonSchema.shape.company.safeParse(raw.company);
+    const person = {
       role,
-      name: raw.name || raw.company,
-      email: raw.email || "",
-      phone: raw.phone || "",
-      company: raw.company || undefined,
-    });
-    if (entry.success) people.push(entry.data);
+      name: name.data || (role === "client" ? "" : company.data || ""),
+      email: email.data || "",
+      phone: phone.data || "",
+      ...(company.data ? { company: company.data } : {}),
+    };
+    if (person.name || person.email || person.phone || person.company)
+      people.push(person);
   }
-  if (agent && matter.agentId === intake.userId) add("my_agent", agent);
+  if (agent && matter.agentId === intake.userId)
+    add("my_agent", { ...agent, company: agent.brokerage });
   if (Array.isArray(snapshot.clients))
     for (const client of snapshot.clients) add("client", jsonObject(client));
   const fields = jsonObject(jsonObject(snapshot.referenceIntake).fields);

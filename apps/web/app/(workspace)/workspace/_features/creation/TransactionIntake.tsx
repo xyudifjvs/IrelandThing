@@ -25,6 +25,7 @@ export function TransactionIntake({ matterId }: { matterId: string }) {
     <SavedIntakeDetails
       value={receipt.data.snapshot}
       agent={receipt.data.agent}
+      agentSource={receipt.data.agentSource}
       documents={receipt.data.documents}
     />
   );

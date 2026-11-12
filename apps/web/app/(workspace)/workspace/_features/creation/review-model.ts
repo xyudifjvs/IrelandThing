@@ -24,6 +24,7 @@ export type Review = {
     snapshot: Record<string, unknown>;
     createdAt: string;
     documents?: { id: string; name: string }[];
+    agentSource?: "submitted" | "current_profile" | null;
     agent: {
       name: string;
       email: string;
@@ -107,13 +108,40 @@ export function suggestPeople(
 ) {
   if (!proposal) return people;
   const next = [...people];
-  if (
-    !people.some(({ role }) => ["client", "buyer", "seller"].includes(role))
-  ) {
-    for (const { value } of side === "seller"
-      ? proposal.sellers
-      : proposal.buyers)
-      next.push({ role: "client", name: value, email: "", phone: "" });
+  const clientRoles = new Set([
+    "client",
+    side === "seller" ? "seller" : "buyer",
+  ]);
+  const clients = next.flatMap((person, index) =>
+    clientRoles.has(person.role) ? [{ person, index }] : [],
+  );
+  const names = side === "seller" ? proposal.sellers : proposal.buyers;
+  const normalized = (name: string) =>
+    name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+  const proposed = new Map(
+    names.map(({ value }) => [normalized(value), value]),
+  );
+  const existingNames = clients
+    .map(({ person }) => normalized(person.name))
+    .filter(Boolean);
+  if (!next.some(({ role }) => ["client", "buyer", "seller"].includes(role))) {
+    for (const name of proposed.values())
+      next.push({ role: "client", name, email: "", phone: "" });
+  } else {
+    const unnamed = clients.filter(({ person }) => !normalized(person.name));
+    const unmatched = [...proposed].filter(
+      ([key]) => !existingNames.includes(key),
+    );
+    // A single remaining same-side name can fill a single unnamed row once
+    // every named intake client also matches the contract.
+    if (
+      unnamed.length === 1 &&
+      unmatched.length === 1 &&
+      existingNames.every((name) => proposed.has(name))
+    ) {
+      const { person, index } = unnamed[0];
+      next[index] = { ...person, name: unmatched[0][1] };
+    }
   }
   const company = proposal.titleCompany?.value;
   if (company) {

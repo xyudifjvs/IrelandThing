@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
-import { assertCurrentDocumentActor, authorizedDocument } from "./access";
+import {
+  assertCurrentDocumentActor,
+  authorizedDocument,
+  canReadDocumentHistory,
+} from "./access";
 import { createObjectStore } from "./storage";
 
 export async function getDocument(actor: Principal, id: string) {
@@ -9,9 +13,7 @@ export async function getDocument(actor: Principal, id: string) {
   const versions = await prisma.documentVersion.findMany({
     where: { documentId: id },
     orderBy: { version: "desc" },
-    ...(actor.role === "coordinator" || doc.shareWithAgent === null
-      ? {}
-      : { take: 1 }),
+    ...(canReadDocumentHistory(actor, doc) ? {} : { take: 1 }),
   });
   return {
     ...doc,
@@ -46,8 +48,7 @@ export async function readDocumentContent(
   const version = await prisma.documentVersion.findFirst({
     where: {
       documentId,
-      ...((actor.role === "coordinator" || doc.shareWithAgent === null) &&
-      versionId
+      ...(canReadDocumentHistory(actor, doc) && versionId
         ? { id: versionId }
         : {}),
     },
@@ -63,7 +64,16 @@ export async function readDocumentContent(
       "Stored evidence failed integrity validation",
     );
   await assertCurrentDocumentActor(actor);
-  await authorizedDocument(actor, documentId);
+  const current = await authorizedDocument(actor, documentId);
+  if (!canReadDocumentHistory(actor, current)) {
+    const latest = await prisma.documentVersion.findFirst({
+      where: { documentId },
+      orderBy: { version: "desc" },
+      select: { id: true },
+    });
+    if (latest?.id !== version.id)
+      throw new HttpError(404, "VERSION_NOT_FOUND", "Version not found");
+  }
   return {
     name: doc.name,
     originalName: version.originalName || doc.name,

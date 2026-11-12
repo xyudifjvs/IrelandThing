@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma, type Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
 import { requireMatter } from "@weatherly/matters";
+import { documentAudienceWhere } from "../../matters/src/projections/document-audience";
 import { originalIntakeDocumentIds } from "./snapshot";
 import { projectSubmitter } from "./submitter";
 
@@ -38,16 +39,7 @@ export async function getIntakeSubmission(actor: Principal, id: string) {
           },
         ],
       },
-      {
-        OR: [
-          { shareWithAgent: true },
-          {
-            shareWithAgent: null,
-            shareWithClient: null,
-            visibility: { in: ["agent", "client"] },
-          },
-        ],
-      },
+      documentAudienceWhere("agent"),
     ],
   };
   const documents = await prisma.document.findMany({

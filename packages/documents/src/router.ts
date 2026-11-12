@@ -3,7 +3,12 @@ import multer from "multer";
 import { z } from "zod";
 import { prisma } from "@weatherly/db";
 import { HttpError, asyncHandler, principal } from "@weatherly/platform";
-import { audit, revision } from "@weatherly/matters";
+import {
+  audit,
+  fileReviewPending,
+  requireMatter,
+  revision,
+} from "@weatherly/matters";
 import {
   listDocuments,
   authorizedDocument,
@@ -225,19 +230,36 @@ export function createDocumentsRouter(store = createObjectStore()) {
         );
       res.json(
         await prisma.$transaction(async (tx) => {
-          if (current.matterId)
-            await requireUploadMatter(actor, current.matterId, tx);
-          const independent =
-            current.shareWithAgent !== null || current.shareWithClient !== null;
+          if (current.matterId) {
+            if (category !== undefined)
+              await requireUploadMatter(actor, current.matterId, tx);
+            else {
+              const matter = await requireMatter(
+                actor,
+                current.matterId,
+                true,
+                tx,
+              );
+              if (fileReviewPending(matter))
+                throw new HttpError(
+                  409,
+                  "FILE_REVIEW_REQUIRED",
+                  "Confirm the file before changing document sharing.",
+                );
+            }
+          }
           const agent =
             shareWithAgent ??
-            (legacyVisibility && independent
-              ? legacyVisibility !== "coordinator"
+            (legacyVisibility === "coordinator" &&
+            current.shareWithAgent === true
+              ? false
               : current.shareWithAgent);
           const client =
             shareWithClient ??
-            (legacyVisibility && independent
-              ? legacyVisibility === "client"
+            (legacyVisibility &&
+            legacyVisibility !== "client" &&
+            current.shareWithClient === true
+              ? false
               : current.shareWithClient);
           const data = {
             ...(category !== undefined ? { category } : {}),

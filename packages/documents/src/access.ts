@@ -65,6 +65,21 @@ export async function assertCurrentDocumentActor(actor: Principal) {
     throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
 }
 
+export function canReadDocumentHistory(
+  actor: Principal,
+  document: {
+    shareWithAgent: boolean | null;
+    shareWithClient: boolean | null;
+  },
+) {
+  if (actor.role === "coordinator") return true;
+  return (
+    (actor.role === "agent"
+      ? document.shareWithAgent
+      : document.shareWithClient) === null
+  );
+}
+
 export async function listDocuments(
   actor: Principal,
   matterId?: string,
@@ -110,10 +125,9 @@ export async function listDocuments(
     ? documents
     : documents.map((document) => ({
         ...document,
-        versions:
-          document.shareWithAgent === null
-            ? document.versions
-            : document.versions.slice(0, 1),
+        versions: canReadDocumentHistory(actor, document)
+          ? document.versions
+          : document.versions.slice(0, 1),
       }));
 }
 export async function authorizedDocument(

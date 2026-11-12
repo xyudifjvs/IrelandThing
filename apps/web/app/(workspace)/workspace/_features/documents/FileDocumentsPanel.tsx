@@ -35,7 +35,7 @@ export function FileDocumentsPanel({
   const registerRefresh = uploads?.registerRefresh;
   useEffect(() => registerRefresh?.(refresh), [refresh, registerRefresh]);
   const active = ["under_contract", "closing", "listing"].includes(stage);
-  const showSwitches = role === "coordinator" && active;
+  const showSwitches = role === "coordinator";
 
   async function share(
     document: FileDocument,

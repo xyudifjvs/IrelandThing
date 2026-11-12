@@ -583,12 +583,35 @@ describe("canonical client checklist sharing", () => {
       .set("Authorization", `Bearer ${share}`);
     expect(download.status).toBe(200);
     expect(download.body).toEqual(bytes);
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: { checklistVersion: 1 },
+    });
+    await prisma.task.update({
+      where: { matterId_stepKey: { matterId: matter.id, stepKey: "closing" } },
+      data: { visibility: "client", status: "not_applicable" },
+    });
+    expect((await getPublicChecklist(share)).matter.closedOn).toBe(
+      "2026-11-11T15:00:00.000Z",
+    );
+    expect(await getMatter(actors.client, matter.id)).toMatchObject({
+      closedOn: "2026-11-11T15:00:00.000Z",
+    });
   });
 
   it("preserves the other legacy document grant without publishing it from an agent-only toggle", async () => {
     const matter = await fixture();
     const doc = await prisma.document.findFirstOrThrow({
       where: { matterId: matter.id },
+    });
+    await prisma.documentVersion.createMany({
+      data: [1, 2].map((version) => ({
+        documentId: doc.id,
+        objectKey: "synthetic/" + randomUUID(),
+        checksum: "synthetic",
+        version,
+        size: 9,
+      })),
     });
     const token = tokenFrom(
       await createChecklistShare(actors.owner, matter.id),
@@ -610,20 +633,54 @@ describe("canonical client checklist sharing", () => {
       shareWithClient: null,
     });
     expect((await getPublicChecklist(token)).documents).toEqual([]);
+    const readClient = () =>
+      request(server)
+        .get(`/documents/${doc.id}`)
+        .set("x-synthetic-actor", "client");
+    const legacy = await readClient();
+    expect(legacy.status).toBe(200);
     expect(
-      (
-        await request(server)
-          .get(`/documents/${doc.id}`)
-          .set("x-synthetic-actor", "client")
-      ).status,
-    ).toBe(200);
+      legacy.body.versions.map(({ version }: { version: number }) => version),
+    ).toEqual([2, 1]);
+    const generic = await request(server)
+      .patch(`/documents/${doc.id}`)
+      .send({ expectedRevision: change.body.revision, visibility: "client" });
+    expect(generic.status).toBe(200);
+    expect(generic.body.shareWithClient).toBeNull();
+    expect((await getPublicChecklist(token)).documents).toEqual([]);
     const publish = await request(server)
       .patch(`/documents/${doc.id}`)
-      .send({ expectedRevision: change.body.revision, shareWithClient: true });
+      .send({ expectedRevision: generic.body.revision, shareWithClient: true });
     expect(publish.status).toBe(200);
     expect((await getPublicChecklist(token)).documents).toEqual([
       expect.objectContaining({ id: doc.id }),
     ]);
+    expect(
+      (await readClient()).body.versions.map(
+        ({ version }: { version: number }) => version,
+      ),
+    ).toEqual([2]);
+    for (const stage of ["closed", "terminated"]) {
+      await prisma.matter.update({ where: { id: matter.id }, data: { stage } });
+      const current = await prisma.document.findUniqueOrThrow({
+        where: { id: doc.id },
+      });
+      const withdraw = await request(server)
+        .patch(`/documents/${doc.id}`)
+        .send({ expectedRevision: current.revision, shareWithClient: false });
+      expect(withdraw.status, withdraw.text).toBe(200);
+      expect((await getPublicChecklist(token)).documents).toEqual([]);
+      const publishAgain = await request(server)
+        .patch(`/documents/${doc.id}`)
+        .send({
+          expectedRevision: withdraw.body.revision,
+          shareWithClient: true,
+        });
+      expect(publishAgain.status, publishAgain.text).toBe(200);
+      expect((await getPublicChecklist(token)).documents).toEqual([
+        expect.objectContaining({ id: doc.id }),
+      ]);
+    }
   });
 
   it("uses the original receipt for its submitting agent rather than later coordinator edits", async () => {

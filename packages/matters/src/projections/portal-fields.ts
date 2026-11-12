@@ -23,13 +23,16 @@ export function portalClosedDate(
     actualDate: string | null;
     dueDate: string | null;
     visibility: string;
+    status: string;
   }[],
   audience: "client" | "agent",
 ) {
   if (matter.stage !== "closed") return null;
   const closing = tasks.find(
-    ({ stepKey, visibility }) =>
-      stepKey === "closing" && audienceAllows(visibility, audience),
+    ({ stepKey, visibility, status }) =>
+      stepKey === "closing" &&
+      audienceAllows(visibility, audience) &&
+      (audience !== "client" || status !== "not_applicable"),
   );
   for (const value of [closing?.actualDate, closing?.dueDate]) {
     const parsed = dateOnly.safeParse(value);

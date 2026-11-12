@@ -21,6 +21,10 @@ import {
 } from "./account";
 export function createBillingRouter() {
   const router = Router();
+  router.use((_req, res, next) => {
+    res.set("Cache-Control", "private, no-store");
+    next();
+  });
   const historyQuery = (query: Record<string, unknown>) =>
     Object.fromEntries(
       Object.entries(query).map(([key, value]) => [

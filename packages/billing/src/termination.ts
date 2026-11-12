@@ -6,36 +6,164 @@ import {
   HttpError,
   type Principal,
 } from "@weatherly/platform";
-import { audit, requireMatter } from "@weatherly/matters";
-import { verifiedStripe } from "./service";
+import { requireMatter } from "@weatherly/matters";
+import { verifiedStripe } from "./provider";
 import { paymentMode, savedPaymentEnvironment } from "./mode";
 
-const object = (value: unknown): Record<string, Prisma.InputJsonValue> =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, Prisma.InputJsonValue>)
-    : {};
-const protectedStatuses = new Set([
-  "paid",
-  "refunded",
-  "partially_refunded",
-  "disputed",
-]);
+import {
+  type CheckoutCancellation,
+  isPreClosingTermination,
+  lockPaymentMatter,
+  lockPaymentOrder,
+  paymentDetails as object,
+  savedCheckoutCancellation,
+  settledStatuses,
+} from "./checkout-policy";
+
+export { isPreClosingTermination } from "./checkout-policy";
+
 const payloadInput = z
   .object({ paymentOrderId: z.string().min(1).max(200) })
   .strict();
 const jobKey = (id: string, session: string) =>
   `billing-expire-checkout:${id}:${session}`;
-export function isPreClosingTermination(matter: {
+
+function fileCancellation(matter: {
+  business: "hto" | "weatherly" | null;
   stage: string;
   details: unknown;
-}) {
-  return (
-    ["terminated", "archived"].includes(matter.stage) &&
-    object(object(matter.details).termination).beforeClosing === true
-  );
+  checklistVersion: number | null;
+}): CheckoutCancellation | null {
+  if (matter.business === "hto") return "hto_exempt";
+  if (
+    isPreClosingTermination(matter) ||
+    (matter.checklistVersion !== null && matter.stage === "terminated")
+  )
+    return "termination";
+  return null;
 }
 
-/** Compose with the existing matter-change hook. No external call occurs in this transaction. */
+/** Call with the Matter and payment order locks held. */
+export async function queuePaymentCancellation(
+  tx: Prisma.TransactionClient,
+  actorId: string,
+  order: Prisma.PaymentOrderGetPayload<object>,
+  trigger: CheckoutCancellation,
+) {
+  if (
+    settledStatuses.includes(order.status) ||
+    ["expired", "failed", "requires_reconciliation"].includes(order.status)
+  )
+    return { queued: 0, cancelledLocally: 0 };
+
+  const details = object(order.details);
+  const previous = object(details.terminationVoid);
+  if (!order.stripeSessionId) {
+    if (order.status === "cancelled") return { queued: 0, cancelledLocally: 0 };
+    await tx.paymentOrder.update({
+      where: { id: order.id },
+      data: {
+        status: "cancelled",
+        details: {
+          ...details,
+          terminationVoid: {
+            ...previous,
+            trigger,
+            state: "no_session_saved",
+            requestedById: actorId,
+            requestedAt: new Date().toISOString(),
+            ...(details.checkoutCreationStartedAt
+              ? { creationOutcomeUncertain: true }
+              : {}),
+          },
+        },
+      },
+    });
+    await tx.auditEvent.create({
+      data: {
+        actorId,
+        action: "payment.termination_cancelled_locally",
+        entityType: "PaymentOrder",
+        entityId: order.id,
+        matterId: order.matterId,
+        details: { providerSessionSaved: false, trigger },
+      },
+    });
+    return { queued: 0, cancelledLocally: 1 };
+  }
+
+  if (previous.state === "expired") return { queued: 0, cancelledLocally: 0 };
+  if (
+    order.status !== "void_pending" ||
+    savedCheckoutCancellation(details) === null
+  ) {
+    await tx.paymentOrder.update({
+      where: { id: order.id },
+      data: {
+        status: "void_pending",
+        details: {
+          ...details,
+          terminationVoid: {
+            ...previous,
+            trigger,
+            state: "pending",
+            creationOutcomeUncertain: false,
+            requestedById: actorId,
+            requestedAt: new Date().toISOString(),
+            stripeSessionId: order.stripeSessionId,
+          },
+        },
+      },
+    });
+    await tx.auditEvent.create({
+      data: {
+        actorId,
+        action: "payment.termination_expiration_queued",
+        entityType: "PaymentOrder",
+        entityId: order.id,
+        matterId: order.matterId,
+        details: { trigger },
+      },
+    });
+  }
+  const idempotencyKey = jobKey(order.id, order.stripeSessionId);
+  await tx.outboxJob.upsert({
+    where: { idempotencyKey },
+    create: {
+      topic: "billing.expire_checkout",
+      idempotencyKey,
+      payload: { paymentOrderId: order.id },
+    },
+    update: {},
+  });
+  return { queued: 1, cancelledLocally: 0 };
+}
+
+async function queueFileCheckouts(
+  tx: Prisma.TransactionClient,
+  actor: Principal,
+  matterId: string,
+  trigger: CheckoutCancellation,
+) {
+  const orders = await tx.paymentOrder.findMany({
+    where: {
+      matterId,
+      ...(trigger === "file_deleted" ? {} : { kind: "service" }),
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  const totals = { queued: 0, cancelledLocally: 0 };
+  for (const { id } of orders) {
+    const order = await lockPaymentOrder(tx, id);
+    const result = await queuePaymentCancellation(tx, actor.id, order, trigger);
+    totals.queued += result.queued;
+    totals.cancelledLocally += result.cancelledLocally;
+  }
+  return totals;
+}
+
+/** Compose with legacy matter changes and explicit file transitions. */
 export async function queueTerminatedServiceCheckouts(
   tx: Prisma.TransactionClient,
   actor: Principal,
@@ -43,116 +171,49 @@ export async function queueTerminatedServiceCheckouts(
 ) {
   assertCoordinator(actor);
   const matter = await requireMatter(actor, matterId, true, tx);
-  if (!isPreClosingTermination(matter))
-    return { queued: 0, cancelledLocally: 0 };
-  const orders = await tx.paymentOrder.findMany({
-    where: { matterId, kind: "service" },
-    select: { id: true },
-  });
-  let queued = 0,
-    cancelledLocally = 0;
-  for (const { id } of orders) {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`;
-    const order = await tx.paymentOrder.findUniqueOrThrow({ where: { id } });
-    if (
-      protectedStatuses.has(order.status) ||
-      ["expired", "failed", "requires_reconciliation"].includes(order.status)
-    )
-      continue;
-    const details = object(order.details);
-    const previous = object(details.terminationVoid);
-    if (!order.stripeSessionId) {
-      if (order.status === "cancelled") continue;
-      await tx.paymentOrder.update({
-        where: { id },
-        data: {
-          status: "cancelled",
-          details: {
-            ...details,
-            terminationVoid: {
-              ...previous,
-              state: "no_session_saved",
-              requestedById: actor.id,
-              requestedAt: new Date().toISOString(),
-              ...(details.checkoutCreationStartedAt
-                ? { creationOutcomeUncertain: true }
-                : {}),
-            },
-          },
-        },
-      });
-      await audit(
-        tx,
-        actor,
-        "payment.termination_cancelled_locally",
-        "PaymentOrder",
-        id,
-        matterId,
-        { providerSessionSaved: false },
-      );
-      cancelledLocally++;
-      continue;
-    }
-    if (previous.state === "expired") continue;
-    if (order.status !== "void_pending") {
-      await tx.paymentOrder.update({
-        where: { id },
-        data: {
-          status: "void_pending",
-          details: {
-            ...details,
-            terminationVoid: {
-              ...previous,
-              state: "pending",
-              creationOutcomeUncertain: false,
-              requestedById: actor.id,
-              requestedAt: new Date().toISOString(),
-              stripeSessionId: order.stripeSessionId,
-            },
-          },
-        },
-      });
-      await audit(
-        tx,
-        actor,
-        "payment.termination_expiration_queued",
-        "PaymentOrder",
-        id,
-        matterId,
-        {},
-      );
-    }
-    await tx.outboxJob.upsert({
-      where: { idempotencyKey: jobKey(id, order.stripeSessionId) },
-      create: {
-        topic: "billing.expire_checkout",
-        idempotencyKey: jobKey(id, order.stripeSessionId),
-        payload: { paymentOrderId: id },
-      },
-      update: {},
-    });
-    queued++;
-  }
-  return { queued, cancelledLocally };
+  const trigger = fileCancellation(matter);
+  return trigger
+    ? queueFileCheckouts(tx, actor, matterId, trigger)
+    : { queued: 0, cancelledLocally: 0 };
+}
+
+/** Call before deleting a file. Retained orders and outbox jobs outlive its Matter. */
+export async function queueDeletedFileCheckouts(
+  tx: Prisma.TransactionClient,
+  actor: Principal,
+  matterId: string,
+) {
+  assertCoordinator(actor);
+  await requireMatter(actor, matterId, true, tx);
+  return queueFileCheckouts(tx, actor, matterId, "file_deleted");
 }
 
 async function lockedOrder(id: string) {
   return prisma.$transaction(async (tx) => {
     const initial = await tx.paymentOrder.findUnique({ where: { id } });
-    if (!initial || initial.kind !== "service")
+    if (
+      !initial ||
+      (initial.kind !== "service" &&
+        savedCheckoutCancellation(initial.details) !== "file_deleted")
+    )
       throw new HttpError(
         404,
         "SERVICE_ORDER_NOT_FOUND",
-        "Service payment request not found.",
+        "Payment request not found.",
       );
-    await tx.$queryRaw`SELECT id FROM "Matter" WHERE id=${initial.matterId} FOR UPDATE`;
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`;
-    const order = await tx.paymentOrder.findUniqueOrThrow({ where: { id } });
-    const matter = await tx.matter.findUniqueOrThrow({
-      where: { id: order.matterId },
-    });
+    const matter = await lockPaymentMatter(tx, initial.matterId);
+    const order = await lockPaymentOrder(tx, id);
     return { order, matter };
   });
+}
+function canExpire(
+  order: Prisma.PaymentOrderGetPayload<object>,
+  matter: Awaited<ReturnType<typeof lockPaymentMatter>>,
+) {
+  return (
+    savedCheckoutCancellation(order.details) !== null ||
+    (matter !== null && fileCancellation(matter) !== null)
+  );
 }
 async function outcome(
   id: string,
@@ -162,16 +223,15 @@ async function outcome(
 ) {
   return prisma.$transaction(async (tx) => {
     const initial = await tx.paymentOrder.findUniqueOrThrow({ where: { id } });
-    await tx.$queryRaw`SELECT id FROM "Matter" WHERE id=${initial.matterId} FOR UPDATE`;
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`;
-    const current = await tx.paymentOrder.findUniqueOrThrow({ where: { id } });
+    await lockPaymentMatter(tx, initial.matterId);
+    const current = await lockPaymentOrder(tx, id);
     if (current.stripeSessionId !== sessionId)
       throw new HttpError(
         409,
         "CHECKOUT_CHANGED",
         "The saved checkout changed during termination reconciliation.",
       );
-    const paid = protectedStatuses.has(current.status);
+    const paid = settledStatuses.includes(current.status);
     const details = object(current.details);
     const reconcile = paid || state === "requires_reconciliation";
     await tx.paymentOrder.update({
@@ -224,11 +284,11 @@ export async function expireTerminatedServiceCheckout(
 ) {
   const { paymentOrderId } = payloadInput.parse(payload);
   let { order, matter } = await lockedOrder(paymentOrderId);
-  if (!isPreClosingTermination(matter))
+  if (!canExpire(order, matter))
     return { skipped: "TERMINATION_NOT_CONFIRMED" };
   if (!order.stripeSessionId) return { skipped: "NO_SAVED_CHECKOUT" };
   const sessionId = order.stripeSessionId;
-  if (protectedStatuses.has(order.status))
+  if (settledStatuses.includes(order.status))
     return outcome(
       order.id,
       sessionId,
@@ -276,14 +336,14 @@ export async function expireTerminatedServiceCheckout(
     );
   // A payment webhook or coordinator correction may have arrived during retrieval.
   ({ order, matter } = await lockedOrder(paymentOrderId));
-  if (!isPreClosingTermination(matter))
+  if (!canExpire(order, matter))
     return outcome(
       order.id,
       sessionId,
       "requires_reconciliation",
       "termination_changed_before_expiration",
     );
-  if (protectedStatuses.has(order.status))
+  if (settledStatuses.includes(order.status))
     return outcome(
       order.id,
       sessionId,

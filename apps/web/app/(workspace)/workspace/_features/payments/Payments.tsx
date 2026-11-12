@@ -57,7 +57,7 @@ export function Payments() {
                   {c.code === "essentials"
                     ? "Contract-to-close coordination, communication and deadlines."
                     : c.code === "complete"
-                      ? "Contract-to-close support with compliance and broker file coordination."
+                      ? "Contract-to-close support with compliance."
                       : "Pre-listing paperwork and coordination through the final closing."}
                 </p>
               </section>

@@ -418,7 +418,6 @@ export async function reconcilePayment(
       "NOT_FOUND",
       "A Stripe checkout is required before reconciliation.",
     );
-  await requireMatter(actor, order.matterId);
   // Reconciliation only reads Stripe and may establish missing legacy provenance;
   // a known conflicting environment is never queried with the current credentials.
   assertSavedPaymentEnvironment(order.details, paymentMode());

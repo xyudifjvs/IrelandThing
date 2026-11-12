@@ -14,6 +14,18 @@ export default function PaymentLink() {
     [url, setUrl] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [checkoutKey, setCheckoutKey] = useState(() => crypto.randomUUID());
+  const file = useData<{
+    id: string;
+    business: "hto" | "weatherly" | null;
+    stage: string;
+  }>(matter ? `/api/v1/matters/${encodeURIComponent(matter)}` : null);
+  const selected = file.data?.id === matter ? file.data : null;
+  const eligible =
+    selected?.business !== "hto" &&
+    Boolean(
+      selected &&
+      ["under_contract", "closing", "closed"].includes(selected.stage),
+    );
   const ready = integrations.data?.some(
     (i) =>
       i.provider === "stripe" && ["configured", "connected"].includes(i.status),
@@ -34,6 +46,7 @@ export default function PaymentLink() {
         className={s.sectionBody}
         onSubmit={async (e) => {
           e.preventDefault();
+          if (!ready || !eligible || !confirmed || busy) return;
           setBusy(true);
           setError("");
           setUrl("");
@@ -46,6 +59,7 @@ export default function PaymentLink() {
               matterId: matter,
               kind: "service",
               idempotencyKey: checkoutKey,
+              closingPaymentConfirmed: true,
             });
             if (!result.url)
               throw new Error(
@@ -62,23 +76,36 @@ export default function PaymentLink() {
         <MatterPicker
           value={matter}
           required
+          disabled={busy}
           onChange={(value) => {
             setMatter(value);
             setCheckoutKey(crypto.randomUUID());
             setConfirmed(false);
+            setError("");
             setUrl("");
           }}
         />
-        <label className={s.todo}>
-          <input
-            type="checkbox"
-            checked={confirmed}
-            onChange={(e) => setConfirmed(e.target.checked)}
-          />
-          I have confirmed with the agent that the service fee is due for this
-          transaction.
-        </label>
-        {!ready && (
+        {file.error && (
+          <p className={s.error} role="alert">
+            {file.error}
+          </p>
+        )}
+        {selected?.business === "hto" && (
+          <p className={s.muted}>Home Team Ohio files have no service fee.</p>
+        )}
+        {eligible && (
+          <label className={s.todo}>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              disabled={busy}
+              onChange={(e) => setConfirmed(e.target.checked)}
+            />
+            I confirm that the service fee is due at closing for this
+            transaction.
+          </label>
+        )}
+        {selected?.business !== "hto" && !ready && (
           <div className={s.notice}>
             Connect Ireland’s own Stripe account before preparing payment links.
           </div>
@@ -88,13 +115,12 @@ export default function PaymentLink() {
             {error}
           </div>
         )}
-        <button
-          className={s.button}
-          disabled={!ready || !matter || !confirmed || busy}
-        >
-          {busy ? "Preparing secure checkout…" : "Create payment link"}
-        </button>
-        {url && (
+        {eligible && (
+          <button className={s.button} disabled={!ready || !confirmed || busy}>
+            {busy ? "Preparing secure checkout…" : "Create payment link"}
+          </button>
+        )}
+        {eligible && url && (
           <div className={s.notice} role="status">
             <strong>Payment link prepared.</strong>
             <p>

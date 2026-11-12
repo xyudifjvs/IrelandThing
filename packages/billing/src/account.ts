@@ -4,7 +4,12 @@ import { HttpError, type Principal } from "@weatherly/platform";
 import { matterScope, requireMatter } from "@weatherly/matters";
 import { billingConfigured, verifiedStripe } from "./service";
 import { paymentMode, savedPaymentEnvironment } from "./mode";
-import { isPreClosingTermination } from "./termination";
+import {
+  assertServiceCheckoutAllowed,
+  savedCheckoutCancellation,
+  serviceCheckoutCancellation,
+  verifiedCheckoutUrl,
+} from "./checkout-policy";
 
 const pagination = {
   cursor: z.string().min(1).max(200).optional(),
@@ -69,6 +74,7 @@ const transactionSelect = {
   side: true,
   stage: true,
   packageCode: true,
+  business: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.MatterSelect;
@@ -229,6 +235,7 @@ export async function listAccountPayments(
           title: true,
           propertyAddress: true,
           stage: true,
+          business: true,
           details: true,
         },
       });
@@ -236,7 +243,25 @@ export async function listAccountPayments(
       // PaymentOrder predates the Matter relation. Read only scoped IDs and a narrow
       // financial projection; full retained rows are needed for correct JSON refund/mode summaries.
       const orders = await tx.paymentOrder.findMany({
-        where: { matterId: { in: matters.map((matter) => matter.id) } },
+        where:
+          actor.role === "coordinator"
+            ? {}
+            : {
+                OR: [
+                  {
+                    matterId: { in: matters.map((matter) => matter.id) },
+                    kind: { not: "service" },
+                  },
+                  {
+                    matterId: {
+                      in: matters
+                        .filter((matter) => matter.business !== "hto")
+                        .map((matter) => matter.id),
+                    },
+                    kind: "service",
+                  },
+                ],
+              },
         select: {
           id: true,
           matterId: true,
@@ -253,14 +278,14 @@ export async function listAccountPayments(
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       });
       const rows = orders.map((order) => {
-        const matter = byMatter.get(order.matterId)!;
+        const matter = byMatter.get(order.matterId);
         const name = object(order.snapshot).name;
         const environment = savedPaymentEnvironment(order.details);
         return {
           id: order.id,
-          matterId: matter.id,
-          matterTitle: matter.title,
-          propertyAddress: matter.propertyAddress,
+          matterId: order.matterId,
+          matterTitle: matter?.title ?? "Deleted transaction",
+          propertyAddress: matter?.propertyAddress ?? "",
           kind: order.kind,
           dueAtClosing:
             order.kind === "service" &&
@@ -293,9 +318,12 @@ export async function listAccountPayments(
             provider.configured &&
             environment === provider.environment &&
             order.status === "pending" &&
+            Boolean(matter) &&
+            !savedCheckoutCancellation(order.details) &&
             !(
+              matter &&
               order.kind === "service" &&
-              (matter.stage === "terminated" || isPreClosingTermination(matter))
+              serviceCheckoutCancellation(matter)
             ) &&
             Boolean(order.stripeSessionId),
         };
@@ -391,16 +419,12 @@ export async function resumeAccountPayment(
   if (!order)
     throw new HttpError(404, "PAYMENT_NOT_FOUND", "Payment request not found.");
   const matter = await requireMatter(actor, order.matterId);
+  if (order.kind === "service") assertServiceCheckoutAllowed(matter);
   if (
-    order.kind === "service" &&
-    (matter.stage === "terminated" || isPreClosingTermination(matter))
+    order.status !== "pending" ||
+    !order.stripeSessionId ||
+    savedCheckoutCancellation(order.details)
   )
-    throw new HttpError(
-      409,
-      "SERVICE_NOT_DUE_TERMINATED",
-      "This terminated transaction cannot resume an unpaid service checkout. Ireland must review any existing payment separately.",
-    );
-  if (order.status !== "pending" || !order.stripeSessionId)
     throw new HttpError(
       409,
       "PAYMENT_NOT_PAYABLE",
@@ -430,31 +454,25 @@ export async function resumeAccountPayment(
     );
   // Re-check visibility after the provider round trip; revoked participants lose access immediately.
   const latestMatter = await requireMatter(actor, order.matterId);
-  if (
-    order.kind === "service" &&
-    (latestMatter.stage === "terminated" ||
-      isPreClosingTermination(latestMatter))
-  )
-    throw new HttpError(
-      409,
-      "SERVICE_NOT_DUE_TERMINATED",
-      "This transaction terminated while checkout was opening. Ireland must review the saved request.",
-    );
+  if (order.kind === "service") assertServiceCheckoutAllowed(latestMatter);
   const current = await prisma.paymentOrder.findUniqueOrThrow({
     where: { id },
   });
-  if (current.status !== "pending" || session.status !== "open" || !session.url)
+  if (
+    current.status !== "pending" ||
+    current.stripeSessionId !== session.id ||
+    savedCheckoutCancellation(current.details) ||
+    session.status !== "open" ||
+    !session.url
+  )
     throw new HttpError(
       409,
       "PAYMENT_NOT_PAYABLE",
       "This checkout has closed. Ireland must reconcile the saved payment status.",
     );
-  const url = new URL(session.url);
-  if (url.protocol !== "https:" || url.hostname !== "checkout.stripe.com")
-    throw new HttpError(
-      409,
-      "PAYMENT_URL_INVALID",
-      "The provider returned an invalid checkout address.",
-    );
-  return { id: order.id, status: current.status, url: session.url };
+  return {
+    id: order.id,
+    status: current.status,
+    url: verifiedCheckoutUrl(session.url),
+  };
 }

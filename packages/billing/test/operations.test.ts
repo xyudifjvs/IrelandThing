@@ -57,11 +57,20 @@ const provider = async () =>
     checkout: {
       sessions: {
         create,
-        retrieve: async () => ({
-          id: `cs_${id}`,
-          url: "https://checkout.stripe.com/synthetic",
-          status: "open",
-        }),
+        retrieve: async (sessionId: string) => {
+          const order = await prisma.paymentOrder.findUniqueOrThrow({
+            where: { stripeSessionId: sessionId },
+          });
+          return {
+            id: sessionId,
+            url: "https://checkout.stripe.com/synthetic",
+            status: "open",
+            metadata: { paymentOrderId: order.id },
+            livemode: false,
+            amount_total: order.amountCents,
+            currency: order.currency.toLowerCase(),
+          };
+        },
       },
     },
     refunds: { create: refunds },

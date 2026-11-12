@@ -4,6 +4,7 @@ import { prisma } from "@weatherly/db";
 import type { Principal } from "@weatherly/platform";
 import { registerMatterChangeHook } from "../../src/change-hook";
 import { updateFileFacts } from "../../src/commands/file-facts";
+import { getMatter, listMatters } from "../../src/projections/matters";
 
 async function user(role: Principal["role"]): Promise<Principal> {
   const id = randomUUID();
@@ -12,10 +13,14 @@ async function user(role: Principal["role"]): Promise<Principal> {
   return { ...actor, sessionId: id };
 }
 
-async function matter(input: {
+async function matter({
+  checklistVersion = 1,
+  ...input
+}: {
   stage: string;
   business: "hto" | "weatherly";
   agentId?: string;
+  checklistVersion?: number | null;
 }) {
   return prisma.matter.create({
     data: {
@@ -25,7 +30,7 @@ async function matter(input: {
       side: "buyer",
       packageCode: input.business === "hto" ? "hto_included" : "complete",
       purchasePriceCents: 12500000,
-      checklistVersion: 1,
+      checklistVersion,
       details: {
         fileReview: { status: "confirmed" },
         checklistDateAnchors: { remedies: { date: "2026-12-01" } },
@@ -172,6 +177,144 @@ it("updates canonical HTO facts while preserving the intake, checklist, and clie
   ).toMatchObject({
     details: { previousPurchasePriceCents: 12500000, purchasePriceCents: 0 },
   });
+});
+
+it("rejects conflicting or empty structured addresses before changing facts", async () => {
+  const coordinator = await user("coordinator");
+  const file = await matter({ stage: "under_contract", business: "hto" });
+  const patch = { expectedRevision: file.revision, purchasePriceCents: 1 };
+  await expect(
+    prisma.$transaction((tx) =>
+      updateFileFacts(tx, coordinator, file.id, {
+        ...patch,
+        propertyAddress: "100 Synthetic Street, Columbus, OH 43215",
+        address: {
+          street: "200 Different Street",
+          city: "Columbus",
+          state: "OH",
+          zip: "43215",
+        },
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "INVALID_FILE_ADDRESS", status: 422 });
+  await expect(
+    prisma.$transaction((tx) =>
+      updateFileFacts(tx, coordinator, file.id, {
+        ...patch,
+        address: { street: "", city: "", state: "", zip: "" },
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "INVALID_FILE_ADDRESS", status: 422 });
+  expect(await prisma.matter.findUnique({ where: { id: file.id } })).toEqual(
+    file,
+  );
+  expect(await prisma.auditEvent.count({ where: { matterId: file.id } })).toBe(
+    0,
+  );
+});
+
+it("accepts matching address forms and retains only current structure during legacy address writes", async () => {
+  const coordinator = await user("coordinator");
+  const file = await matter({ stage: "under_contract", business: "hto" });
+  const address = {
+    street: "100 Synthetic Street",
+    city: "Columbus",
+    state: "OH",
+    zip: "43215",
+  };
+  const propertyAddress = "100 Synthetic Street, Columbus, OH 43215";
+  const saved = await prisma.$transaction((tx) =>
+    updateFileFacts(tx, coordinator, file.id, {
+      expectedRevision: file.revision,
+      propertyAddress,
+      address,
+    }),
+  );
+  const repeated = await prisma.$transaction((tx) =>
+    updateFileFacts(tx, coordinator, file.id, {
+      expectedRevision: saved.revision,
+      propertyAddress,
+    }),
+  );
+  expect(
+    await prisma.matter.findUniqueOrThrow({ where: { id: file.id } }),
+  ).toMatchObject({ propertyAddress, details: { structuredAddress: address } });
+
+  const unstructured = "200 Legacy Lane";
+  await prisma.$transaction((tx) =>
+    updateFileFacts(tx, coordinator, file.id, {
+      expectedRevision: repeated.revision,
+      propertyAddress: unstructured,
+    }),
+  );
+  const current = await prisma.matter.findUniqueOrThrow({
+    where: { id: file.id },
+  });
+  expect(current).toMatchObject({
+    propertyAddress: unstructured,
+    title: unstructured,
+  });
+  expect(current.details).toEqual(file.details);
+});
+
+it("keeps private structured facts out of legacy agent detail and list projections", async () => {
+  const coordinator = await user("coordinator");
+  const agent = await user("agent");
+  const file = await matter({
+    stage: "closed",
+    business: "hto",
+    agentId: agent.id,
+    checklistVersion: null,
+  });
+  const address = {
+    street: "100 Synthetic Street",
+    city: "",
+    state: "",
+    zip: "",
+  };
+  await prisma.$transaction((tx) =>
+    updateFileFacts(tx, coordinator, file.id, {
+      expectedRevision: file.revision,
+      address,
+      clients: [
+        {
+          firstName: "PrivateSynthetic",
+          lastName: "Client",
+          email: "private-synthetic@example.test",
+          phone: "",
+        },
+      ],
+    }),
+  );
+  const client = await prisma.matterContact.findFirstOrThrow({
+    where: { matterId: file.id, name: "PrivateSynthetic Client" },
+  });
+  expect(client).toMatchObject({
+    shareWithAgent: false,
+    shareWithClient: false,
+  });
+  expect(await getMatter(coordinator, file.id)).toMatchObject({
+    details: {
+      structuredAddress: address,
+      structuredClientNames: {
+        [client.id]: { firstName: "PrivateSynthetic", lastName: "Client" },
+      },
+    },
+  });
+  const agentDetail = await getMatter(agent, file.id);
+  const agentListEntry = (await listMatters(agent)).find(
+    ({ id }) => id === file.id,
+  );
+  for (const entry of [agentDetail, agentListEntry]) {
+    expect(entry).toMatchObject({
+      id: file.id,
+      propertyAddress: address.street,
+      details: { fileReview: { status: "confirmed" } },
+    });
+    expect(entry).not.toHaveProperty("details.structuredAddress");
+    expect(entry).not.toHaveProperty("details.structuredClientNames");
+    expect(JSON.stringify(entry)).not.toContain("PrivateSynthetic");
+  }
 });
 
 it("rejects a stale update, foreign client ID, and a non-HTO terminal file", async () => {

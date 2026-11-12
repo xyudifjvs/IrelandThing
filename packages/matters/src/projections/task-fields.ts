@@ -24,6 +24,8 @@ export function projectTaskFields<T extends { details: Prisma.JsonValue }>(
 export function agentMatterDetails(value: Prisma.JsonValue): Prisma.JsonValue {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const {
+    structuredAddress: _structuredAddress,
+    structuredClientNames: _structuredClientNames,
     workflow: _workflow,
     sourceConflicts: _conflicts,
     confirmedFacts: _facts,

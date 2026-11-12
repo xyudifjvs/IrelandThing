@@ -89,9 +89,20 @@ export async function updateFileFacts(
       "Choose a published transaction to edit its facts.",
     );
 
-  const propertyAddress =
-    facts.propertyAddress ??
-    (address ? formatAddress(address) || undefined : undefined);
+  const structuredPropertyAddress = address
+    ? formatAddress(address)
+    : undefined;
+  if (
+    structuredPropertyAddress !== undefined &&
+    facts.propertyAddress !== undefined &&
+    facts.propertyAddress !== structuredPropertyAddress
+  )
+    throw new HttpError(
+      422,
+      "INVALID_FILE_ADDRESS",
+      "The property address must match its street, city, state and ZIP.",
+    );
+  const propertyAddress = structuredPropertyAddress ?? facts.propertyAddress;
   if (
     propertyAddress !== undefined &&
     !transactionFactsSchema.shape.propertyAddress.safeParse(propertyAddress)
@@ -100,7 +111,7 @@ export async function updateFileFacts(
     throw new HttpError(
       422,
       "INVALID_FILE_ADDRESS",
-      "Enter a property address of at most 500 characters.",
+      "Enter a nonempty property address of at most 500 characters.",
     );
 
   const data: Prisma.MatterUncheckedUpdateInput = {
@@ -126,13 +137,18 @@ export async function updateFileFacts(
   )
     data.title = propertyAddress.slice(0, 200);
 
-  const addressChanged =
-    propertyAddress !== undefined && propertyAddress !== matter.propertyAddress;
-  if (address !== undefined || addressChanged || clients !== undefined) {
+  if (
+    address !== undefined ||
+    propertyAddress !== undefined ||
+    clients !== undefined
+  ) {
     const details = json.safeParse(matter.details).data ?? {};
-    if (address !== undefined || addressChanged) {
-      if (address) details.structuredAddress = address;
-      else delete details.structuredAddress;
+    if (address) details.structuredAddress = address;
+    else if (address === null) delete details.structuredAddress;
+    else if (propertyAddress !== undefined) {
+      const stored = addressInput.safeParse(details.structuredAddress).data;
+      if (!stored || formatAddress(stored) !== propertyAddress)
+        delete details.structuredAddress;
     }
     if (clients !== undefined)
       details.structuredClientNames = await writeFileClients(

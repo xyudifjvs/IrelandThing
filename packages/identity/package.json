@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./membership": "./src/agent-membership.ts"
+    "./membership": "./src/agent-membership.ts",
+    "./roster": "./src/roster-registry.ts"
   }
 }

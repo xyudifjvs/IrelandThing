@@ -11,11 +11,14 @@ type SavedDocument = { id: string; name: string };
 
 export default function SignedAgreementBatch({
   onSaved,
+  agent,
 }: {
   onSaved: () => Promise<void>;
+  agent?: { id: string; email: string; userId: string | null };
 }) {
   const [email, setEmail] = useState("");
   const [version, setVersion] = useState("");
+  const [signedOn, setSignedOn] = useState("");
   const [primaryId, setPrimaryId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -42,6 +45,10 @@ export default function SignedAgreementBatch({
       onSubmit={async (event) => {
         event.preventDefault();
         if (saving || queue.running || queue.hasPending) return;
+        if (agent && (!saved.length || !signedOn)) {
+          setError("Attach the signed agreement and enter its signed date.");
+          return;
+        }
         if (
           saved.length &&
           !saved.some((item) => item.result!.id === primaryId)
@@ -54,8 +61,9 @@ export default function SignedAgreementBatch({
         setMessage("");
         try {
           const payload = {
-            userId: email,
+            userId: agent?.userId || agent?.email || email,
             version,
+            ...(agent ? { rosterAgentId: agent.id, signedOn } : {}),
             status: saved.length ? "approved" : "draft",
             ...(saved.length
               ? {
@@ -82,6 +90,7 @@ export default function SignedAgreementBatch({
           setPrimaryId("");
           setEmail("");
           setVersion("");
+          setSignedOn("");
           setMessage(
             saved.length
               ? "Signed agreement recorded and approved with all supporting files."
@@ -105,18 +114,20 @@ export default function SignedAgreementBatch({
         }
       }}
     >
-      <label className={s.field}>
-        Agent email
-        <input
-          className={s.input}
-          name="userId"
-          type="email"
-          required
-          value={email}
-          disabled={saving || queue.running}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-      </label>
+      {!agent && (
+        <label className={s.field}>
+          Agent email
+          <input
+            className={s.input}
+            name="userId"
+            type="email"
+            required
+            value={email}
+            disabled={saving || queue.running}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+      )}
       <label className={s.field}>
         Agreement version
         <input
@@ -129,6 +140,19 @@ export default function SignedAgreementBatch({
           onChange={(event) => setVersion(event.target.value)}
         />
       </label>
+      {agent && (
+        <label className={s.field}>
+          Signed date
+          <input
+            className={s.input}
+            type="date"
+            required
+            value={signedOn}
+            disabled={saving || queue.running}
+            onChange={(event) => setSignedOn(event.target.value)}
+          />
+        </label>
+      )}
       <DocumentUploadQueue
         queue={queue}
         label="Signed agreement and supporting evidence"
@@ -187,6 +211,7 @@ export default function SignedAgreementBatch({
           saving ||
           queue.running ||
           queue.hasPending ||
+          (!!agent && (!saved.length || !signedOn)) ||
           (saved.length > 0 && !primaryId)
         }
       >

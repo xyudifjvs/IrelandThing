@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
+import { captureRosterLead } from "@weatherly/identity/roster";
 import { asyncHandler, HttpError } from "@weatherly/platform";
 
 const apiUri = (kind: string) =>
@@ -187,6 +188,10 @@ export async function processCalendlyDelivery(
         status !== "confirmed");
     let applied = false;
     if (fresh && !(terminal && status === "confirmed")) {
+      const agent = await captureRosterLead(tx, {
+        email: p.email,
+        name: p.name,
+      });
       const values = {
         eventUri: p.event,
         eventTypeUri: verifiedEvent.event_type,
@@ -202,6 +207,7 @@ export async function processCalendlyDelivery(
         lastDeliveryHash: hash,
         verifiedAt: new Date(),
         provenance: "calendly_signed_webhook",
+        rosterAgentId: agent.id,
       };
       await tx.schedulingBooking.upsert({
         where: { inviteeUri: p.uri },

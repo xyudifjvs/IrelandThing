@@ -23,10 +23,12 @@ export function projectTaskFields<T extends { details: Prisma.JsonValue }>(
 /** Source-review/workflow internals are not an alternate route to hidden tasks. */
 export function agentMatterDetails(
   value: Prisma.JsonValue,
-  ownPendingIntake = false,
+  ownPendingIntake?: Prisma.JsonValue,
 ): Prisma.JsonValue {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const { fileReview, referenceIntake } = value;
+  const fileReview =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value.fileReview
+      : null;
   const review =
     fileReview && typeof fileReview === "object" && !Array.isArray(fileReview)
       ? {
@@ -37,7 +39,7 @@ export function agentMatterDetails(
         }
       : undefined;
   return {
-    ...(ownPendingIntake && referenceIntake ? { referenceIntake } : {}),
+    ...(ownPendingIntake ? { referenceIntake: ownPendingIntake } : {}),
     ...(review ? { fileReview: review } : {}),
   };
 }

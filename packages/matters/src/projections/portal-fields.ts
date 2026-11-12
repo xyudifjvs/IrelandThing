@@ -1,5 +1,6 @@
 import type { Prisma } from "@weatherly/db";
 import { dateOnly } from "../validation/common";
+import { audienceAllows } from "./deadline-fields";
 
 export const portalClientRoles = ["client", "buyer", "seller"];
 
@@ -21,10 +22,15 @@ export function portalClosedDate(
     stepKey: string | null;
     actualDate: string | null;
     dueDate: string | null;
+    visibility: string;
   }[],
+  audience: "client" | "agent",
 ) {
   if (matter.stage !== "closed") return null;
-  const closing = tasks.find(({ stepKey }) => stepKey === "closing");
+  const closing = tasks.find(
+    ({ stepKey, visibility }) =>
+      stepKey === "closing" && audienceAllows(visibility, audience),
+  );
   for (const value of [closing?.actualDate, closing?.dueDate]) {
     const parsed = dateOnly.safeParse(value);
     if (parsed.success) return parsed.data;

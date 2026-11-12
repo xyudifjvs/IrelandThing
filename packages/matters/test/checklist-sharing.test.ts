@@ -4,6 +4,7 @@ import express from "express";
 import request from "supertest";
 import { ZodError } from "zod";
 import { prisma } from "@weatherly/db";
+import { createDocumentsRouter } from "@weatherly/documents";
 import {
   HttpError,
   hashToken,
@@ -513,6 +514,15 @@ describe("canonical client checklist sharing", () => {
         },
       ],
     });
+    await prisma.task.create({
+      data: {
+        matterId: matter.id,
+        title: "Private Closing",
+        stepKey: "closing",
+        visibility: "coordinator",
+        actualDate: "2026-12-15",
+      },
+    });
     const bytes = Buffer.from("Published legacy document");
     const doc = await prisma.document.create({
       data: {
@@ -573,6 +583,81 @@ describe("canonical client checklist sharing", () => {
       .set("Authorization", `Bearer ${share}`);
     expect(download.status).toBe(200);
     expect(download.body).toEqual(bytes);
+  });
+
+  it("preserves the other legacy document grant without publishing it from an agent-only toggle", async () => {
+    const matter = await fixture();
+    const doc = await prisma.document.findFirstOrThrow({
+      where: { matterId: matter.id },
+    });
+    const token = tokenFrom(
+      await createChecklistShare(actors.owner, matter.id),
+    );
+    const server = express()
+      .use(express.json())
+      .use((req, _res, next) => {
+        req.principal = actors[req.get("x-synthetic-actor") || "owner"];
+        next();
+      })
+      .use("/documents", createDocumentsRouter());
+    const change = await request(server)
+      .patch(`/documents/${doc.id}`)
+      .send({ expectedRevision: doc.revision, shareWithAgent: false });
+    expect(change.status, change.text).toBe(200);
+    expect(change.body).toMatchObject({
+      visibility: "client",
+      shareWithAgent: false,
+      shareWithClient: null,
+    });
+    expect((await getPublicChecklist(token)).documents).toEqual([]);
+    expect(
+      (
+        await request(server)
+          .get(`/documents/${doc.id}`)
+          .set("x-synthetic-actor", "client")
+      ).status,
+    ).toBe(200);
+    const publish = await request(server)
+      .patch(`/documents/${doc.id}`)
+      .send({ expectedRevision: change.body.revision, shareWithClient: true });
+    expect(publish.status).toBe(200);
+    expect((await getPublicChecklist(token)).documents).toEqual([
+      expect.objectContaining({ id: doc.id }),
+    ]);
+  });
+
+  it("uses the original receipt for its submitting agent rather than later coordinator edits", async () => {
+    const matter = await fixture();
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: {
+        stage: "pending_review",
+        details: {
+          referenceIntake: { notes: "PRIVATE EDIT" },
+          fileReview: { status: "pending" },
+        },
+      },
+    });
+    const receipt = await prisma.intakeSubmission.create({
+      data: {
+        draftId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        userId: actors.agent.id,
+        matterId: matter.id,
+        snapshot: { referenceIntake: { notes: "Original submission" } },
+      },
+    });
+    try {
+      expect(await getMatter(actors.agent, matter.id)).toMatchObject({
+        details: { referenceIntake: { notes: "Original submission" } },
+      });
+      const participant = await getMatter(actors.participant, matter.id);
+      expect(JSON.stringify(participant)).not.toMatch(
+        /PRIVATE EDIT|Original submission/,
+      );
+    } finally {
+      await prisma.intakeSubmission.delete({ where: { id: receipt.id } });
+    }
   });
 
   it("uses one canonical milestone for four visibility combinations and safe short notes/appointments, with all ongoing writes restricted to Ireland", async () => {

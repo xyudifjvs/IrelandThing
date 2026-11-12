@@ -28,7 +28,7 @@ import {
   portalDocumentSelect,
 } from "./projections/document-audience";
 import { peopleAudienceWhere, portalPersonSelect } from "./people/projection";
-import { portalClosedDate, portalDocument } from "./projections/portal-fields";
+import { portalClosedDate } from "./projections/portal-fields";
 
 /** Apply before authentication/rate limiting as well when mounting these routes. */
 export const checklistPrivacyHeaders: RequestHandler = (_req, res, next) => {
@@ -346,8 +346,11 @@ export async function getPublicChecklist(token: string) {
             },
           },
           documents: {
-            where: documentAudienceWhere("client"),
-            select: { ...portalDocumentSelect, shareWithClient: true },
+            where: {
+              ...documentAudienceWhere("client"),
+              shareWithClient: true,
+            },
+            select: portalDocumentSelect,
             orderBy: { createdAt: "desc" },
           },
           contacts: {
@@ -371,7 +374,7 @@ export async function getPublicChecklist(token: string) {
       const portalMatter = {
         ...summary,
         side,
-        closedOn: portalClosedDate(matter, tasks),
+        closedOn: portalClosedDate(matter, tasks, "client"),
       };
       if (checklistVersion !== null)
         return {
@@ -379,7 +382,7 @@ export async function getPublicChecklist(token: string) {
           tasks: canonicalPortalTimeline(tasks, "client"),
           clientRequests: [],
           deadlines: [],
-          documents: documents.map(portalDocument),
+          documents,
           people: contacts,
         };
       const dates = deadlineProjection(deadlines, tasks, details, "client");
@@ -422,9 +425,7 @@ export async function getPublicChecklist(token: string) {
             (deadline) => deadline.status === "confirmed" && deadline.date,
           )
           .map(({ id, label, date }) => ({ id, label, date })),
-        documents: documents
-          .filter(({ shareWithClient }) => shareWithClient === true)
-          .map(portalDocument),
+        documents,
         people: contacts,
       };
     },
@@ -459,13 +460,13 @@ async function publicDocumentVersion(token: string, documentId: string) {
           id: documentId,
           matterId: share.matterId,
           ...documentAudienceWhere("client"),
+          shareWithClient: true,
         },
         select: {
           name: true,
           mimeType: true,
-          shareWithClient: true,
           matter: {
-            select: { stage: true, details: true, checklistVersion: true },
+            select: { stage: true, details: true },
           },
           versions: {
             orderBy: { version: "desc" },
@@ -479,12 +480,7 @@ async function publicDocumentVersion(token: string, documentId: string) {
           },
         },
       });
-      if (
-        !document?.matter ||
-        (document.matter.checklistVersion === null &&
-          document.shareWithClient !== true) ||
-        fileReviewPending(document.matter)
-      )
+      if (!document?.matter || fileReviewPending(document.matter))
         throw unavailable();
       const [version] = document.versions;
       if (!version) throw unavailable();

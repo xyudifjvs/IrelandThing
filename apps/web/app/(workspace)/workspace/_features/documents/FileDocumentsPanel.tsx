@@ -126,10 +126,7 @@ export function FileDocumentsPanel({
                   <input
                     type="checkbox"
                     disabled={pending}
-                    checked={
-                      document.shareWithClient ??
-                      document.visibility === "client"
-                    }
+                    checked={document.shareWithClient === true}
                     onChange={(event) =>
                       void share(
                         document,

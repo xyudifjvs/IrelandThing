@@ -228,35 +228,30 @@ export function createDocumentsRouter(store = createObjectStore()) {
           if (current.matterId)
             await requireUploadMatter(actor, current.matterId, tx);
           const independent =
-            current.shareWithAgent !== null ||
-            shareWithAgent !== undefined ||
-            shareWithClient !== undefined;
+            current.shareWithAgent !== null || current.shareWithClient !== null;
           const agent =
             shareWithAgent ??
-            (legacyVisibility
+            (legacyVisibility && independent
               ? legacyVisibility !== "coordinator"
-              : (current.shareWithAgent ??
-                current.visibility !== "coordinator"));
+              : current.shareWithAgent);
           const client =
             shareWithClient ??
-            (legacyVisibility
+            (legacyVisibility && independent
               ? legacyVisibility === "client"
-              : (current.shareWithClient ?? current.visibility === "client"));
+              : current.shareWithClient);
           const data = {
             ...(category !== undefined ? { category } : {}),
-            ...(independent
-              ? {
-                  shareWithAgent: agent,
-                  shareWithClient: client,
-                  visibility: agent
-                    ? client
-                      ? "client"
-                      : "agent"
-                    : "coordinator",
-                }
-              : legacyVisibility
-                ? { visibility: legacyVisibility }
-                : {}),
+            shareWithAgent: agent,
+            shareWithClient: client,
+            visibility:
+              legacyVisibility ??
+              (agent === null || client === null
+                ? current.visibility
+                : agent
+                  ? client
+                    ? "client"
+                    : "agent"
+                  : "coordinator"),
           };
           const changed = await tx.document.updateMany({
             where: {

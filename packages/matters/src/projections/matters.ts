@@ -189,7 +189,7 @@ export async function listMatters(
           clientNames: fileReviewPending(matter)
             ? []
             : portalClientNames(matter.contacts),
-          closedOn: portalClosedDate(matter, matter.tasks),
+          closedOn: portalClosedDate(matter, matter.tasks, "agent"),
           details:
             matter.checklistVersion !== null
               ? {}
@@ -244,17 +244,20 @@ export async function getMatter(actor: Principal, id: string) {
           },
         },
       });
+      const receipt =
+        actor.role === "agent" && matter && fileReviewPending(matter)
+          ? await tx.intakeSubmission.findFirst({
+              where: { matterId: matter.id, userId: actor.id, deletedAt: null },
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              select: { snapshot: true },
+            })
+          : null;
+      const snapshot = receipt?.snapshot;
       const ownPendingIntake =
-        actor.role === "agent" &&
-        matter &&
-        fileReviewPending(matter) &&
-        Boolean(
-          await tx.intakeSubmission.findFirst({
-            where: { matterId: matter.id, userId: actor.id, deletedAt: null },
-            select: { id: true },
-          }),
-        );
-      return { matter, ownPendingIntake: !!ownPendingIntake };
+        snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+          ? snapshot.referenceIntake
+          : undefined;
+      return { matter, ownPendingIntake };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
   );
@@ -271,19 +274,16 @@ export async function getMatter(actor: Principal, id: string) {
       };
     const summary = {
       ...portalMatterSummary(matter),
-      closedOn: portalClosedDate(matter, matter.tasks),
+      closedOn: portalClosedDate(matter, matter.tasks, actor.role),
       tasks: canonicalPortalTimeline(matter.tasks, actor.role),
       deadlines: [],
       notes: [],
-      documents: matter.documents.map(
-        ({ id, name, mimeType, createdAt, updatedAt }) => ({
-          id,
-          name,
-          mimeType,
-          createdAt,
-          updatedAt,
-        }),
-      ),
+      documents: matter.documents
+        .filter(
+          ({ shareWithClient }) =>
+            actor.role !== "client" || shareWithClient === true,
+        )
+        .map(portalDocument),
       people: matter.contacts.map(({ id, role, name, email, phone }) => ({
         id,
         role,
@@ -333,7 +333,7 @@ export async function getMatter(actor: Principal, id: string) {
       revision: matter.revision,
       createdAt: matter.createdAt,
       updatedAt: matter.updatedAt,
-      closedOn: portalClosedDate(matter, matter.tasks),
+      closedOn: portalClosedDate(matter, matter.tasks, "client"),
       tasks: matter.tasks
         .filter(({ status }) => status !== "not_applicable")
         .map((task, position) => {
@@ -361,7 +361,7 @@ export async function getMatter(actor: Principal, id: string) {
         clientNames: fileReviewPending(matter)
           ? []
           : portalClientNames(matter.contacts),
-        closedOn: portalClosedDate(matter, matter.tasks),
+        closedOn: portalClosedDate(matter, matter.tasks, "agent"),
         documents: matter.documents.map(portalDocument),
         people: fileReviewPending(matter) ? [] : matter.contacts,
         notes: [],

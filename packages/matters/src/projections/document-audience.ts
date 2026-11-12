@@ -8,7 +8,9 @@ export function documentAudienceWhere(
     category: { not: "service_agreement" },
     OR: [
       role === "agent" ? { shareWithAgent: true } : { shareWithClient: true },
-      { shareWithAgent: null, shareWithClient: null, visibility: legacy },
+      role === "agent"
+        ? { shareWithAgent: null, visibility: legacy }
+        : { shareWithClient: null, visibility: legacy },
     ],
   };
 }

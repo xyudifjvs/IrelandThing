@@ -32,7 +32,7 @@ export function useTransactionDocumentUploads(
   const active = useRef({ ...context, key });
   active.current = { ...context, key };
   const [boundKey, setBoundKey] = useState(key);
-  const [visibility, setVisibility] = useState("agent");
+  const [visibility, setVisibility] = useState("coordinator");
   const refreshRef = useRef(new Set<() => Promise<void>>());
   const registerRefresh = useCallback((refresh: () => Promise<void>) => {
     refreshRef.current.add(refresh);
@@ -58,7 +58,8 @@ export function useTransactionDocumentUploads(
       body.set("file", file, file.name);
       body.set("matterId", context.matterId);
       body.set("category", "other");
-      body.set("visibility", context.coordinator ? visibility : "agent");
+      if (!context.coordinator || visibility !== "coordinator")
+        body.set("visibility", context.coordinator ? visibility : "agent");
       body.set("uploadRequestId", itemId);
       const saved = await api<SavedUpload>("/api/v1/documents", {
         method: "POST",
@@ -69,7 +70,7 @@ export function useTransactionDocumentUploads(
       return { id: saved.id };
     },
     onBatchComplete: async () => {
-      await Promise.all([...refreshRef.current].map(refresh => refresh()));
+      await Promise.all([...refreshRef.current].map((refresh) => refresh()));
     },
   });
   const matchesContext = boundKey === key;
@@ -77,7 +78,7 @@ export function useTransactionDocumentUploads(
   useEffect(() => {
     if (matchesContext || queue.running) return;
     queue.clear();
-    setVisibility("agent");
+    setVisibility("coordinator");
     setBoundKey(key);
   }, [matchesContext, queue.running, key]);
 

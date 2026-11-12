@@ -27,7 +27,7 @@ export async function uploadDocument(
     .object({
       matterId: z.string().optional(),
       creationReviewId: z.string().trim().min(1).max(200).optional(),
-      visibility: visibility.default("agent"),
+      visibility: visibility.optional(),
       category: z.string().max(100).default("contract"),
       uploadRequestId: z.uuid().optional(),
     })
@@ -46,7 +46,9 @@ export async function uploadDocument(
   let previous: Awaited<ReturnType<typeof authorizedDocument>> | undefined;
   if (documentId) previous = await authorizedDocument(actor, documentId, true);
   const matterId = previous?.matterId ?? data.matterId;
-  const reviewId = previous?.creationReviewId ?? data.creationReviewId;
+  const reviewId = matterId
+    ? undefined
+    : (previous?.creationReviewId ?? data.creationReviewId);
   const agreementUpload =
     previous?.category === "service_agreement" ||
     data.category === "service_agreement";
@@ -55,7 +57,8 @@ export async function uploadDocument(
     (actor.role !== "coordinator" ||
       matterId ||
       reviewId ||
-      (previous?.visibility ?? data.visibility) !== "coordinator")
+      (previous?.visibility ?? data.visibility ?? "coordinator") !==
+        "coordinator")
   )
     throw new HttpError(
       403,
@@ -79,19 +82,13 @@ export async function uploadDocument(
       "AGREEMENT_IMMUTABLE",
       "Upload a separate signed agreement to preserve the previous record.",
     );
-  if (reviewId) {
-    if (
-      previous &&
-      data.creationReviewId &&
-      previous.creationReviewId !== data.creationReviewId
-    )
-      throw new HttpError(
-        422,
-        "REVIEW_MISMATCH",
-        "A document version cannot move to a creation review.",
-      );
-    await requireCreationUpload(actor, reviewId);
-  }
+  if (previous && data.creationReviewId && data.creationReviewId !== reviewId)
+    throw new HttpError(
+      422,
+      "REVIEW_MISMATCH",
+      "A document version cannot move to a creation review.",
+    );
+  if (reviewId) await requireCreationUpload(actor, reviewId);
   if (matterId) await requireUploadMatter(actor, matterId);
   if (previous && data.matterId && previous.matterId !== data.matterId)
     throw new HttpError(
@@ -99,7 +96,11 @@ export async function uploadDocument(
       "MATTER_MISMATCH",
       "A document version cannot move to another matter",
     );
-  if (actor.role !== "coordinator" && data.visibility !== "agent")
+  if (
+    actor.role !== "coordinator" &&
+    data.visibility &&
+    data.visibility !== "agent"
+  )
     throw new HttpError(
       403,
       "FORBIDDEN",
@@ -126,7 +127,7 @@ export async function uploadDocument(
         documentId: documentId || null,
         matterId: data.matterId || null,
         ...(reviewId ? { creationReviewId: reviewId } : {}),
-        visibility: data.visibility,
+        visibility: data.visibility ?? "agent",
         category: data.category,
         name: file.originalname,
         size: file.size,
@@ -231,7 +232,9 @@ export async function uploadDocument(
         const independent = Boolean(
           reviewId ||
           (matter &&
-            (matter.checklistVersion !== null || actor.role === "agent")),
+            (matter.checklistVersion !== null ||
+              actor.role === "agent" ||
+              data.visibility === undefined)),
         );
         const shareWithAgent = actor.role === "agent";
         doc = await tx.document.create({
@@ -245,7 +248,8 @@ export async function uploadDocument(
               ? shareWithAgent
                 ? "agent"
                 : "coordinator"
-              : data.visibility,
+              : (data.visibility ??
+                (actor.role === "agent" ? "agent" : "coordinator")),
             ...(independent ? { shareWithAgent, shareWithClient: false } : {}),
             createdById: actor.id,
           },

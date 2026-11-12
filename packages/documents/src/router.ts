@@ -112,13 +112,17 @@ export function createDocumentsRouter(store = createObjectStore()) {
         String(req.params.matterId),
         store,
       );
-      res.set({
-        "Content-Type": "application/zip",
-        "Content-Disposition":
-          'attachment; filename="transaction-documents.zip"',
-        "X-Content-Type-Options": "nosniff",
-      });
-      await pipeline(archive, res);
+      try {
+        res.set({
+          "Content-Type": "application/zip",
+          "Content-Disposition":
+            'attachment; filename="transaction-documents.zip"',
+          "X-Content-Type-Options": "nosniff",
+        });
+        await pipeline(archive.stream, res);
+      } finally {
+        await archive.cleanup();
+      }
     }),
   );
   r.get(
@@ -204,7 +208,7 @@ export function createDocumentsRouter(store = createObjectStore()) {
         )
         .parse(req.body);
       const current = await authorizedDocument(actor, id, true);
-      if (current.creationReviewId)
+      if (current.creationReviewId && current.matterId === null)
         throw new HttpError(
           409,
           "REVIEW_DOCUMENT_PRIVATE",

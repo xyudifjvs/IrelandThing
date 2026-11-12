@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
-import { authorizedDocument } from "./access";
+import { assertCurrentDocumentActor, authorizedDocument } from "./access";
 import { createObjectStore } from "./storage";
 
 export async function getDocument(actor: Principal, id: string) {
@@ -41,6 +41,7 @@ export async function readDocumentContent(
   versionId: string | undefined,
   store: ReturnType<typeof createObjectStore>,
 ) {
+  await assertCurrentDocumentActor(actor);
   const doc = await authorizedDocument(actor, documentId);
   const version = await prisma.documentVersion.findFirst({
     where: {
@@ -61,6 +62,7 @@ export async function readDocumentContent(
       "CHECKSUM_MISMATCH",
       "Stored evidence failed integrity validation",
     );
+  await assertCurrentDocumentActor(actor);
   await authorizedDocument(actor, documentId);
   return {
     name: doc.name,

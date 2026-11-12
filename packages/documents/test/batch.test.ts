@@ -129,6 +129,16 @@ beforeAll(async () => {
       emailVerified: true,
     })),
   });
+  await prisma.auditEvent.createMany({
+    data: actors
+      .filter((actor) => actor.role === "agent")
+      .map((actor) => ({
+        actorId: coordinator.id,
+        entityType: "User",
+        entityId: actor.id,
+        action: "agent.access_override",
+      })),
+  });
   const matter = await prisma.matter.create({
     data: {
       title: `Batch review ${runId}`,
@@ -326,7 +336,10 @@ describe("independent batch upload backend checks", () => {
   it("preserves original Unicode filenames and serves the exact original bytes after a fresh router", async () => {
     const name = "Éva O’Connor – closing 日本語.pdf";
     const bytes = pdf("Original file bytes");
-    const result = await upload(app(), coordinator, name, bytes, { matterId });
+    const result = await upload(app(), coordinator, name, bytes, {
+      matterId,
+      visibility: "agent",
+    });
     expect(result.status, result.text).toBe(201);
     expect(result.body.name).toBe(name);
     const download = await request(app(createObjectStore()))
@@ -542,6 +555,16 @@ describe("independent batch upload backend checks", () => {
             .set("x-review-actor", agent.id)
         ).status,
       ).toBe(404);
+      await prisma.document.update({
+        where: { id: first.body.id },
+        data: { matterId },
+      });
+      const published = await request(server)
+        .patch(`/documents/${first.body.id}`)
+        .set("x-review-actor", coordinator.id)
+        .send({ expectedRevision: first.body.revision, shareWithAgent: true });
+      expect(published.status, published.text).toBe(200);
+      expect(published.body.shareWithAgent).toBe(true);
       await prisma.creationReview.update({
         where: { id: review.id },
         data: { state: "confirmed" },
@@ -555,6 +578,64 @@ describe("independent batch upload backend checks", () => {
       ).toBe(409);
     } finally {
       await prisma.creationReview.delete({ where: { id: review.id } });
+    }
+  });
+
+  it("defaults a coordinator upload to private on historical active files", async () => {
+    const server = app();
+    const result = await upload(
+      server,
+      coordinator,
+      "private-by-default.pdf",
+      pdf("Private default"),
+      { matterId },
+    );
+    expect(result.status, result.text).toBe(201);
+    expect(result.body).toMatchObject({
+      shareWithAgent: false,
+      shareWithClient: false,
+    });
+    expect(
+      (
+        await request(server)
+          .get(`/documents/${result.body.id}/view`)
+          .set("x-review-actor", agent.id)
+      ).status,
+    ).toBe(404);
+  });
+
+  it("withholds bytes after an access change during an authenticated read", async () => {
+    const document = await upload(
+      app(),
+      coordinator,
+      "revoke-in-flight.pdf",
+      pdf("In flight"),
+      { matterId, visibility: "agent" },
+    );
+    let revoked: string | undefined;
+    try {
+      const server = app({
+        ...store,
+        async get(key) {
+          const event = await prisma.auditEvent.create({
+            data: {
+              actorId: coordinator.id,
+              entityType: "User",
+              entityId: agent.id,
+              action: "identity.access_revoked",
+            },
+          });
+          revoked = event.id;
+          return store.get(key);
+        },
+      });
+      const denied = await request(server)
+        .get(`/documents/${document.body.id}/view`)
+        .set("x-review-actor", agent.id);
+      expect(denied.status).toBe(404);
+      expect(denied.headers["content-type"]).toContain("application/json");
+    } finally {
+      if (revoked) await prisma.auditEvent.delete({ where: { id: revoked } });
     }
   });
 
@@ -606,6 +687,30 @@ describe("independent batch upload backend checks", () => {
         two,
       );
       expect(zip.file("private-archive.pdf")).toBeNull();
+      let changedAudience = false;
+      const racedServer = app({
+        ...store,
+        async get(key) {
+          if (!changedAudience) {
+            changedAudience = true;
+            await prisma.document.update({
+              where: { id: second.body.id },
+              data: {
+                visibility: "coordinator",
+                shareWithAgent: false,
+                shareWithClient: false,
+              },
+            });
+          }
+          return store.get(key);
+        },
+      });
+      const denied = await request(racedServer)
+        .get(`/documents/archive/${matterId}`)
+        .set("x-review-actor", agent.id);
+      expect([404, 409]).toContain(denied.status);
+      expect(denied.headers["content-type"]).toContain("application/json");
+      expect(denied.text).not.toContain("duplicate");
     } finally {
       await prisma.matter.update({
         where: { id: matterId },

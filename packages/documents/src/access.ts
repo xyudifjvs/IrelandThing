@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { prisma, type Prisma } from "@weatherly/db";
+import { prisma, Prisma } from "@weatherly/db";
+import { hasAgentAgreementAccess } from "@weatherly/identity/membership";
 import { HttpError, type Principal } from "@weatherly/platform";
 import {
   requireMatter,
@@ -27,6 +28,41 @@ function documentScope(actor: Principal): Prisma.DocumentWhereInput {
       { matterId: null, creationReviewId: null, createdById: actor.id },
     ],
   };
+}
+
+export async function assertCurrentDocumentActor(actor: Principal) {
+  const authorized = await prisma.$transaction(
+    async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: actor.id },
+        select: { role: true },
+      });
+      if (user?.role !== actor.role) return false;
+      const lastAccess = await tx.auditEvent.findFirst({
+        where: {
+          entityType: "User",
+          entityId: actor.id,
+          action: {
+            in: ["identity.access_revoked", "identity.access_restored"],
+          },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: { action: true },
+      });
+      if (lastAccess?.action === "identity.access_revoked") return false;
+      const localPreview =
+        process.env.APP_ENV === "local" &&
+        process.env.NODE_ENV !== "production";
+      return (
+        actor.role !== "agent" ||
+        localPreview ||
+        (await hasAgentAgreementAccess(actor.id, tx))
+      );
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
+  if (!authorized)
+    throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
 }
 
 export async function listDocuments(

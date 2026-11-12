@@ -108,6 +108,7 @@ export async function queueSend(
       textArray(old.to),
       textArray(old.cc),
       tx,
+      { saved: details.formerRecipientEvidence },
     );
     requireSameRecipients(recipients, {
       to: old.to,
@@ -144,6 +145,7 @@ export async function queueSend(
       to: recipients.to,
       cc: recipients.cc,
       recipientEvidence: recipients.recipientEvidence,
+      formerRecipientEvidence: recipients.formerRecipientEvidence,
       directoryRecipients: recipients.directoryRecipients,
       subject: old.subject,
       body: old.body,

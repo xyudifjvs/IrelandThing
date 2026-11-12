@@ -11,6 +11,7 @@ export const draftInput = z
     matterId: z.string(),
     to: recipientArray.min(1),
     cc: recipientArray.default([]),
+    enteredRecipients: z.array(email).max(80).optional(),
     subject: z
       .string()
       .trim()
@@ -35,12 +36,21 @@ export function textArray(value: unknown): string[] {
     ? value.filter((x): x is string => typeof x === "string")
     : [];
 }
+const isClientRole = (role: unknown) =>
+  ["client", "buyer", "seller", "buyer_client", "seller_client"].includes(
+    String(role)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_"),
+  );
+
 export async function recipientPolicy(
   actor: Principal,
   matterId: string,
   to: string[],
   cc: string[],
   db: Prisma.TransactionClient | typeof prisma = prisma,
+  formerRecipients: { entered?: string[]; saved?: unknown } = {},
 ) {
   const matter = await requireMatter(actor, matterId, false, db);
   const details = asRecord(matter.details);
@@ -49,12 +59,6 @@ export async function recipientPolicy(
     where: { matterId },
     select: { id: true, name: true, role: true, email: true, retiredAt: true },
   });
-  const retired = new Set(
-    storedContacts
-      .filter(({ retiredAt }) => retiredAt)
-      .map(({ email }) => email.trim().toLowerCase()),
-  );
-  const contacts = storedContacts.filter(({ retiredAt }) => !retiredAt);
   const legacyContacts =
     !canonical && Array.isArray(details.contacts) ? details.contacts : [];
   const clients =
@@ -70,6 +74,7 @@ export async function recipientPolicy(
     return p.success ? p.data : null;
   };
   const clientEmails = new Set<string>();
+  const retired = new Map<string, string[]>();
   const associations = new Map<string, string[]>();
   const addAssociation = (
     address: string,
@@ -83,36 +88,40 @@ export async function recipientPolicy(
       item.role ?? null,
     ]);
     associations.set(address, [...(associations.get(address) ?? []), identity]);
-    if (
-      source === "client" ||
-      ["client", "buyer", "seller", "buyer_client", "seller_client"].includes(
-        String(item.role)
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "_"),
-      )
-    )
+    if (source === "client" || isClientRole(item.role))
       clientEmails.add(address);
   };
   if (agent) addAssociation(agent.email.toLowerCase(), "agent", agent);
-  for (const contact of contacts) {
+  for (const contact of storedContacts) {
     const address = normalize(contact.email);
-    if (address) addAssociation(address, "file", contact);
+    if (!address) continue;
+    if (contact.retiredAt) {
+      const retirement = JSON.stringify([
+        contact.id,
+        contact.retiredAt,
+        contact.role,
+      ]);
+      retired.set(address, [...(retired.get(address) ?? []), retirement]);
+      if (isClientRole(contact.role)) clientEmails.add(address);
+    } else {
+      addAssociation(address, "file", contact);
+    }
   }
   for (const contact of [...clients, ...legacyContacts]) {
     const item = asRecord(contact);
     const address = normalize(item.email);
-    if (address && !retired.has(address))
-      addAssociation(
-        address,
-        clients.includes(contact) ? "client" : "legacy",
-        item,
-      );
+    if (!address) continue;
+    const isClient = clients.includes(contact);
+    if (isClient || isClientRole(item.role)) clientEmails.add(address);
+    if (!retired.has(address))
+      addAssociation(address, isClient ? "client" : "legacy", item);
   }
   const normalizedTo = [...new Set(to.map((v) => email.parse(v)))];
   const normalizedCc = [...new Set(cc.map((v) => email.parse(v)))].filter(
     (v) => !normalizedTo.includes(v),
   );
+  const savedFormerEvidence = asRecord(formerRecipients.saved);
+  const formerRecipientEvidence: Record<string, string> = {};
   for (const address of [...normalizedTo, ...normalizedCc]) {
     if (address === "ireland@ireland.com")
       throw new HttpError(
@@ -120,23 +129,35 @@ export async function recipientPolicy(
         "PLACEHOLDER_EMAIL",
         "The preview address cannot receive external messages",
       );
-    if (retired.has(address) && !associations.has(address))
-      throw new HttpError(
-        409,
-        "RECIPIENT_RETIRED",
-        "A file recipient was removed or replaced. Review the recipients and remove the old address.",
-      );
-    if (!canonical && !associations.has(address))
-      throw new HttpError(
-        422,
-        "UNAPPROVED_RECIPIENT",
-        "Save the recipient as a matter contact before sending",
-      );
     if (details.directContact !== "copy_agent" && clientEmails.has(address))
       throw new HttpError(
         403,
         "CLIENT_CONTACT_RESTRICTED",
         "This matter permits client contact only through the agent",
+      );
+    const retirements = retired.get(address);
+    if (retirements && !associations.has(address)) {
+      const evidence = createHash("sha256")
+        .update(JSON.stringify(retirements.sort()))
+        .digest("hex");
+      if (
+        !canonical ||
+        clientEmails.has(address) ||
+        (savedFormerEvidence[address] !== evidence &&
+          !formerRecipients.entered?.includes(address))
+      )
+        throw new HttpError(
+          409,
+          "RECIPIENT_RETIRED",
+          "A file recipient was removed or replaced. Review the recipients and remove the old address.",
+        );
+      formerRecipientEvidence[address] = evidence;
+    }
+    if (!canonical && !associations.has(address))
+      throw new HttpError(
+        422,
+        "UNAPPROVED_RECIPIENT",
+        "Save the recipient as a matter contact before sending",
       );
   }
   if (
@@ -159,12 +180,15 @@ export async function recipientPolicy(
     matter,
     to: normalizedTo,
     cc: normalizedCc,
+    formerRecipientEvidence,
     recipientEvidence: createHash("sha256")
       .update(
         JSON.stringify(
           [...normalizedTo, ...normalizedCc].map((address) => [
             address,
-            (associations.get(address) ?? []).sort(),
+            formerRecipientEvidence[address]
+              ? ["entered-former", formerRecipientEvidence[address]]
+              : (associations.get(address) ?? []).sort(),
           ]),
         ),
       )

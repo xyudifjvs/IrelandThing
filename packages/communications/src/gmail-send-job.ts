@@ -214,6 +214,7 @@ async function dispatchGmail(
       textArray(snapshot.to),
       textArray(snapshot.cc),
       db,
+      { saved: snapshot.formerRecipientEvidence },
     );
     requireSameRecipients(recipients, {
       to: snapshot.to,

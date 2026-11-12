@@ -32,7 +32,7 @@ export function RecipientField({
 }: {
   title: string;
   value: string;
-  change: (value: string) => void;
+  change: (value: string, entered?: string[]) => void;
   addToDeal?: (email: string) => void;
   existingEmails: ReadonlySet<string>;
   searchDirectory?: boolean;
@@ -60,7 +60,7 @@ export function RecipientField({
       !selected.includes(email.trim().toLowerCase()),
   );
   function select(next: string[]) {
-    change([...new Set([...selected, ...next])].join(", "));
+    change([...new Set([...selected, ...next])].join(", "), next);
     setEntry("");
     setError("");
   }

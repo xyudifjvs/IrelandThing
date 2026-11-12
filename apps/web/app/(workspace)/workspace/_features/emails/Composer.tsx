@@ -80,6 +80,7 @@ export function Composer({
     [confirmed, setConfirmed] = useState(false),
     [template, setTemplate] = useState(initialTemplateId || ""),
     [recipientName, setRecipientName] = useState("");
+  const enteredRecipients = useRef<string[]>([]);
   const busyRef = useRef(false);
   function setBusy(value: boolean) {
     busyRef.current = value;
@@ -153,6 +154,7 @@ export function Composer({
       setNewPersonEmail("");
       setTo("");
       setCc("");
+      enteredRecipients.current = [];
       setSubject(value.subject);
       setBody(value.body);
       setAttachments([]);
@@ -171,7 +173,19 @@ export function Composer({
     setDirty(true);
     setConfirmed(false);
   };
+  function changeRecipients(
+    field: "to" | "cc",
+    value: string,
+    entered: string[] = [],
+  ) {
+    const remaining = addresses(value + "," + (field === "to" ? cc : to));
+    enteredRecipients.current = [
+      ...new Set([...enteredRecipients.current, ...entered]),
+    ].filter((address) => remaining.includes(address));
+    edit(field === "to" ? setTo : setCc, value);
+  }
   function loadDraft(d: Draft) {
+    enteredRecipients.current = [];
     setDraft(d);
     setReplyToMessageId(undefined);
     setMatter(d.matterId);
@@ -349,7 +363,9 @@ export function Composer({
     setMessage("");
     try {
       const values = {
-        ...(draft ? {} : { matterId: matter }),
+        ...(draft
+          ? {}
+          : { matterId: matter, enteredRecipients: enteredRecipients.current }),
         to: addresses(to),
         cc: addresses(cc),
         subject,
@@ -408,6 +424,7 @@ export function Composer({
                   setMatter(value);
                   setTo("");
                   setCc("");
+                  enteredRecipients.current = [];
                   setSubject("");
                   setBody("");
                   setRecipientName("");
@@ -440,6 +457,7 @@ export function Composer({
                     setRecipientName("");
                     setTo("");
                     setCc("");
+                    enteredRecipients.current = [];
                     setSubject("");
                     setBody("");
                     setAttachments([]);
@@ -535,7 +553,9 @@ export function Composer({
             <RecipientField
               title="To"
               value={to}
-              change={(value) => edit(setTo, value)}
+              change={(value, entered) =>
+                changeRecipients("to", value, entered)
+              }
               addToDeal={editablePeople ? setNewPersonEmail : undefined}
               existingEmails={existingEmails}
               searchDirectory={editablePeople}
@@ -543,7 +563,9 @@ export function Composer({
             <RecipientField
               title="CC"
               value={cc}
-              change={(value) => edit(setCc, value)}
+              change={(value, entered) =>
+                changeRecipients("cc", value, entered)
+              }
               addToDeal={editablePeople ? setNewPersonEmail : undefined}
               existingEmails={existingEmails}
             />

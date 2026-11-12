@@ -222,6 +222,117 @@ it("requires saved recipient evidence and never reclassifies a replaced file rec
   ).toBe(0);
 });
 
+it("records a freshly entered former non-client without reviving saved or queued evidence", async () => {
+  const matter = await file();
+  const lender = {
+    name: "Previous lender",
+    role: "lender",
+    email: oldEmail,
+    phone: "",
+  };
+  const first = await addMatterPerson(owner, matter.id, lender);
+  const stale = await draft(matter.id, oldEmail);
+  const next = await addMatterPerson(owner, matter.id, {
+    ...lender,
+    email: newEmail,
+    replace: { id: first.id, expectedRevision: first.revision },
+  });
+  await expect(
+    service.updateDraft(owner, stale.id, {
+      expectedRevision: stale.revision,
+      to: [oldEmail],
+    }),
+  ).rejects.toMatchObject({ code: "RECIPIENT_RETIRED" });
+  const binding = await template();
+  const composed = {
+    matterId: matter.id,
+    templateId: binding.id,
+    templateRevision: binding.revision,
+    to: [oldEmail],
+    subject: "Explicit former lender follow-up",
+    body: "New message for a separately reviewed recipient",
+  };
+  await expect(
+    service.createDraft(owner, { ...composed, enteredRecipients: [] }),
+  ).rejects.toMatchObject({ code: "RECIPIENT_RETIRED" });
+
+  const fresh = await draft(matter.id, oldEmail);
+  const edited = await service.updateDraft(owner, fresh.id, {
+    expectedRevision: fresh.revision,
+    body: "Revised wording for the same deliberately entered address",
+  });
+  const priorSends = sent.length;
+  await dispatch(await approve(edited));
+  expect(sent).toHaveLength(priorSends + 1);
+
+  const typed = await service.createDraft(owner, {
+    ...composed,
+    enteredRecipients: [oldEmail],
+  });
+  const approved = await approve(typed);
+  const saved = await draft(matter.id, oldEmail);
+  const restoredAddress = await addMatterPerson(owner, matter.id, {
+    ...lender,
+    replace: { id: next.id, expectedRevision: next.revision },
+  });
+  await expect(approve(saved)).rejects.toMatchObject({
+    code: "RECIPIENT_POLICY_CHANGED",
+  });
+  await addMatterPerson(owner, matter.id, {
+    ...lender,
+    email: newEmail,
+    replace: {
+      id: restoredAddress.id,
+      expectedRevision: restoredAddress.revision,
+    },
+  });
+  await expect(approve(saved)).rejects.toMatchObject({
+    code: "RECIPIENT_RETIRED",
+  });
+  await expect(
+    service.updateDraft(owner, saved.id, {
+      expectedRevision: saved.revision,
+      to: [oldEmail],
+    }),
+  ).rejects.toMatchObject({ code: "RECIPIENT_RETIRED" });
+  await expect(dispatch(approved)).rejects.toMatchObject({
+    code: "RECIPIENT_RETIRED",
+  });
+  expect(sent).toHaveLength(priorSends + 1);
+  await expect(
+    approve(await draft(matter.id, oldEmail)),
+  ).resolves.toMatchObject({
+    status: "queued",
+  });
+});
+
+it("keeps retired client addresses subject to client contact restrictions", async () => {
+  const matter = await file();
+  const client = await addMatterPerson(owner, matter.id, {
+    name: "Previous client",
+    role: "buyer_client",
+    email: oldEmail,
+    phone: "",
+  });
+  await updateMatterPerson(
+    owner,
+    matter.id,
+    client.id,
+    { expectedRevision: client.revision },
+    true,
+  );
+  await expect(draft(matter.id, oldEmail)).rejects.toMatchObject({
+    code: "CLIENT_CONTACT_RESTRICTED",
+  });
+  await prisma.matter.update({
+    where: { id: matter.id },
+    data: { details: { directContact: "copy_agent" } },
+  });
+  await expect(draft(matter.id, oldEmail)).rejects.toMatchObject({
+    code: "RECIPIENT_RETIRED",
+  });
+});
+
 it("blocks placeholders at legacy approval and dispatch while allowing the draft to be recovered", async () => {
   const matter = await file(null);
   const blocked = await template({ isPlaceholder: true });

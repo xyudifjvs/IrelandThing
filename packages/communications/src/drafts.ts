@@ -96,6 +96,14 @@ export async function createDraft(
       data.to,
       data.cc,
       tx,
+      {
+        // A scratch API request without composer defaults supplies its own addresses.
+        entered:
+          data.enteredRecipients ??
+          (data.templateId || data.replyToMessageId
+            ? []
+            : [...data.to, ...data.cc]),
+      },
     );
     let workItemId: string | null = null;
     if (recipients.matter.checklistVersion !== null) {
@@ -121,6 +129,7 @@ export async function createDraft(
         status: "draft",
         details: {
           recipientEvidence: recipients.recipientEvidence,
+          formerRecipientEvidence: recipients.formerRecipientEvidence,
           knownRecipients: recipients.knownRecipients,
           templateId: data.templateId || null,
           templateRevision: data.templateRevision || null,
@@ -181,14 +190,15 @@ export async function updateDraft(
     const file = await requireMatter(actor, old.matterId, true, tx);
     if (file.checklistVersion !== null)
       await requireEmailWorkFile(tx, actor, old.matterId);
+    const details = asRecord(old.details);
     const recipients = await recipientPolicy(
       actor,
       old.matterId,
       patch.to || textArray(old.to),
       patch.cc || textArray(old.cc),
       tx,
+      { saved: details.formerRecipientEvidence },
     );
-    const details = asRecord(old.details);
     const removedRecipients = textArray(details.knownRecipients);
     if (
       recipients.directoryRecipients.some((address) =>
@@ -209,6 +219,7 @@ export async function updateDraft(
         details: {
           ...details,
           recipientEvidence: recipients.recipientEvidence,
+          formerRecipientEvidence: recipients.formerRecipientEvidence,
           knownRecipients: recipients.knownRecipients,
           sendFailure: null,
         },

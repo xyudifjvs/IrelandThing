@@ -5,7 +5,12 @@ import {
   entityIdSchema,
 } from "@weatherly/platform/handoff-contracts";
 import type { CreationSources } from "./source-bundle";
-import { quoteSupportsCents, quoteSupportsCivilDate } from "./evidence";
+import {
+  normalizeEvidenceText,
+  quoteSupportsCents,
+  quoteSupportsCivilDate,
+  quoteSupportsInstant,
+} from "./evidence";
 
 export const extractionDateKeySchema = z.enum([
   "preapproval_pof",
@@ -83,76 +88,78 @@ export const creationProposalSchema = z
   .strict();
 
 export type CreationProposal = z.infer<typeof creationProposalSchema>;
+type Cited = { evidence: z.infer<typeof evidenceSchema> };
 
 export function normalizeCreationProposal(
   proposal: CreationProposal,
   sources: CreationSources,
 ): CreationProposal {
-  const normalized = (text: string) => text.replace(/\s+/g, " ").trim();
-  const hasEvidence = ({
-    evidence,
-  }: {
-    evidence: z.infer<typeof evidenceSchema>;
-  }) => {
+  const readEvidence = ({ evidence }: Cited) => {
     const document = sources.documents.find(
       ({ versionId }) => versionId === evidence.versionId,
     );
     const page = document?.pages.find(({ page }) => page === evidence.page);
-    return !!page && normalized(page.text).includes(normalized(evidence.quote));
+    if (!page) return null;
+    const pageText = normalizeEvidenceText(page.text);
+    const quote = normalizeEvidenceText(evidence.quote);
+    return pageText.includes(quote) ? { pageText, quote } : null;
   };
-  const withEvidence = <T extends { evidence: z.infer<typeof evidenceSchema> }>(
-    value: T | null,
-  ) => (value && hasEvidence(value) ? value : null);
+  const withEvidence = <T extends Cited>(value: T | null) =>
+    value && readEvidence(value) ? value : null;
   const verifiedMoney = (value: CreationProposal["purchasePriceCents"]) => {
-    const item = withEvidence(value);
-    return item && quoteSupportsCents(item.evidence.quote, item.value)
-      ? item
+    const evidence = value && readEvidence(value);
+    return value &&
+      evidence &&
+      quoteSupportsCents(evidence.pageText, evidence.quote, value.value)
+      ? value
       : null;
   };
-  const acceptance = withEvidence(proposal.acceptance);
+  const verifiedDate = (
+    value: z.infer<typeof dateValueSchema> | null,
+    citation: Cited,
+  ) => {
+    const evidence = value && readEvidence(citation);
+    if (
+      !value ||
+      !evidence ||
+      !quoteSupportsCivilDate(evidence.pageText, evidence.quote, value.date)
+    )
+      return null;
+    return {
+      ...value,
+      instant:
+        value.instant &&
+        quoteSupportsInstant(evidence.pageText, evidence.quote, value)
+          ? value.instant
+          : null,
+    };
+  };
+  const acceptance =
+    proposal.acceptance &&
+    verifiedDate(proposal.acceptance.value, proposal.acceptance);
 
   return {
     propertyAddress: withEvidence(proposal.propertyAddress),
     purchasePriceCents: verifiedMoney(proposal.purchasePriceCents),
     acceptance:
-      acceptance &&
-      quoteSupportsCivilDate(acceptance.evidence.quote, acceptance.value.date)
-        ? acceptance
+      acceptance && proposal.acceptance
+        ? { ...proposal.acceptance, value: acceptance }
         : null,
-    buyers: proposal.buyers.filter(hasEvidence),
-    sellers: proposal.sellers.filter(hasEvidence),
+    buyers: proposal.buyers.filter(readEvidence),
+    sellers: proposal.sellers.filter(readEvidence),
     earnestMoneyCents: verifiedMoney(proposal.earnestMoneyCents),
     earnestMoneyHolder: withEvidence(proposal.earnestMoneyHolder),
     homeWarrantyCompany: withEvidence(proposal.homeWarrantyCompany),
     homeWarrantyCents: verifiedMoney(proposal.homeWarrantyCents),
     titleCompany: withEvidence(proposal.titleCompany),
     // The checklist calculates relative dates from authoritative anchors.
-    dates: proposal.dates
-      .filter((item) => {
-        if (!hasEvidence(item)) return false;
-        if (item.rule && item.rule.kind !== "fixed") return true;
-        return (
-          !!item.date &&
-          quoteSupportsCivilDate(item.evidence.quote, item.date.date)
-        );
-      })
-      .map((item) => {
-        const { rule } = item;
-        if (rule?.kind === "relative") {
-          return {
-            ...item,
-            date: null,
-            rule: { kind: rule.kind, offset: rule.offset },
-          };
-        }
-        if (rule?.kind === "earliest") {
-          return {
-            ...item,
-            date: null,
-            rule: { kind: rule.kind, offsets: rule.offsets },
-          };
-        }
-        return item;
-      }),
+    dates: proposal.dates.flatMap<CreationProposal["dates"][number]>((item) => {
+      const { rule } = item;
+      if (rule && rule.kind !== "fixed") {
+        return readEvidence(item) ? [{ ...item, date: null }] : [];
+      }
+      const date = verifiedDate(item.date, item);
+      return date ? [{ ...item, date }] : [];
+    }),
   };
 }

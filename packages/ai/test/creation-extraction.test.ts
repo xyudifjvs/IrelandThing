@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { HttpError } from "@weatherly/platform";
 import { assembleCreationSources } from "../src/creation-extraction/source-bundle";
 import { extractCreationProposal } from "../src/creation-extraction/extract";
+import {
+  creationProposalSchema,
+  normalizeCreationProposal,
+} from "../src/creation-extraction/proposal";
 import { generateStructured } from "../src/gateway";
 
 const offer = { documentId: "offer", versionId: "offer-version" };
@@ -73,6 +77,67 @@ const proposal = {
 };
 
 describe("creation contract extraction", () => {
+  it("checks the entire cited numeric token and preserves only documented clocks", () => {
+    const sources = assembleCreationSources(
+      [counter],
+      [
+        {
+          ...counter,
+          processingStatus: "complete",
+          pages: [
+            {
+              page: 1,
+              text: "Price $100,000. Closing 6/3/2027. Possession June 4, 2027. Walkthrough June 2, 2027 at 10:30 a.m. Eastern Time.",
+            },
+          ],
+        },
+      ],
+    );
+    if (!sources) throw new Error("Expected a complete synthetic packet");
+    const evidence = (quote: string) => ({
+      versionId: counter.versionId,
+      page: 1,
+      quote,
+    });
+    const parsed = creationProposalSchema.parse({
+      ...proposal,
+      purchasePriceCents: { value: 10000, evidence: evidence("Price $100") },
+      earnestMoneyCents: {
+        value: 10000000,
+        evidence: evidence("Price $100,000"),
+      },
+      dates: [
+        {
+          key: "closing",
+          date: { date: "2020-06-03", instant: null },
+          rule: null,
+          evidence: evidence("Closing 6/3/20"),
+        },
+        {
+          key: "possession",
+          date: { date: "2027-06-04", instant: "2027-06-04T10:30:00-04:00" },
+          rule: null,
+          evidence: evidence("Possession June 4, 2027."),
+        },
+        {
+          key: "final_walkthrough",
+          date: { date: "2027-06-02", instant: "2027-06-02T10:30:00-04:00" },
+          rule: null,
+          evidence: evidence(
+            "Walkthrough June 2, 2027 at 10:30 a.m. Eastern Time.",
+          ),
+        },
+      ],
+    });
+    const result = normalizeCreationProposal(parsed, sources);
+    expect(result.purchasePriceCents).toBeNull();
+    expect(result.earnestMoneyCents).toEqual(parsed.earnestMoneyCents);
+    expect(result.dates).toEqual([
+      { ...parsed.dates[1], date: { date: "2027-06-04", instant: null } },
+      parsed.dates[2],
+    ]);
+  });
+
   it("retries a malformed successful response envelope exactly once", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "synthetic-only");
     vi.stubEnv("OPENROUTER_MODEL", "synthetic/model");

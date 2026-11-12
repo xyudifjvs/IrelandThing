@@ -18,6 +18,10 @@ export function scratchpadPath(ownerId: string) {
 // latest saved notes when it mounts again.
 const pending = new Map<string, ReturnType<typeof createDraft>>();
 
+export function clearScratchpadDrafts() {
+  pending.clear();
+}
+
 export function scratchpadDraft(ownerId: string, initial: ScratchpadSnapshot) {
   return pending.get(ownerId) ?? createDraft(ownerId, initial);
 }

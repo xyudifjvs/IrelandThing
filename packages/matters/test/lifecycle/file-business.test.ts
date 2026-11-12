@@ -109,13 +109,34 @@ it("preserves a historically agreed price when classifying a legacy file or retu
     expectedRevision: classified.revision,
     business: hto,
   });
-  await changeFileBusiness(owner, file.id, {
+  const returned = await changeFileBusiness(owner, file.id, {
     expectedRevision: switched.revision,
     business: essentials,
   });
   expect(
     (await prisma.matter.findUniqueOrThrow({ where: { id: file.id } })).details,
   ).toMatchObject({ serviceSnapshot: historical });
+
+  const changedPackage = await changeFileBusiness(owner, file.id, {
+    expectedRevision: returned.revision,
+    business: fullService,
+  });
+  const toHto = await changeFileBusiness(owner, file.id, {
+    expectedRevision: changedPackage.revision,
+    business: hto,
+  });
+  await changeFileBusiness(owner, file.id, {
+    expectedRevision: toHto.revision,
+    business: essentials,
+  });
+  const currentCatalog = await prisma.catalogItem.findUniqueOrThrow({
+    where: { code: "essentials" },
+  });
+  expect(
+    (await prisma.matter.findUniqueOrThrow({ where: { id: file.id } })).details,
+  ).toMatchObject({
+    serviceSnapshot: { priceCents: currentCatalog.priceCents },
+  });
 });
 
 it("checks the coordinator, revision and pending service terms and rolls back the entire business switch if a hook fails", async () => {

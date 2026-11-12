@@ -84,7 +84,7 @@ async function termsForPackage(
       where: {
         matterId,
         action: "matter.business_changed",
-        details: { path: ["previousPackageCode"], equals: packageCode },
+        details: { path: ["business"], equals: "hto" },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: { details: true },

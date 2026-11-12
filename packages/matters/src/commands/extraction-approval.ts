@@ -43,6 +43,18 @@ export async function applyReviewedFacts(
     .parse(input);
   const apply = async (tx: Prisma.TransactionClient) => {
     const matter = await requireMatter(actor, matterId, true, tx);
+    if (
+      matter.checklistVersion !== null ||
+      await tx.creationReview.findFirst({
+        where: { state: "open", intake: { matterId } },
+        select: { id: true },
+      })
+    )
+      throw new HttpError(
+        409,
+        "CANONICAL_REVIEW_REQUIRED",
+        "Use the creation review or checklist to apply these facts.",
+      );
     const labels = data.deadlines.map((deadline) =>
       deadline.label.replace(/\s+/g, " ").trim().toLowerCase(),
     );

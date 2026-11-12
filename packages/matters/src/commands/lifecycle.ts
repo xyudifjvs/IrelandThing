@@ -115,6 +115,11 @@ export async function updateMatter(
       if (priorDetails.serviceSnapshot !== undefined)
         patch.details.serviceSnapshot = priorDetails.serviceSnapshot;
       else delete patch.details.serviceSnapshot;
+      if (old.checklistVersion !== null) {
+        if (priorDetails.checklistDateAnchors !== undefined)
+          patch.details.checklistDateAnchors = priorDetails.checklistDateAnchors;
+        else delete patch.details.checklistDateAnchors;
+      }
     }
     if (data.stage === "terminated" && old.stage !== "terminated") {
       // Closed files cannot enter this path. Preserve the original lifecycle

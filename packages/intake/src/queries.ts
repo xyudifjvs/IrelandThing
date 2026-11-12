@@ -1,0 +1,34 @@
+import { z } from "zod";
+import { prisma } from "@weatherly/db";
+import { HttpError, type Principal } from "@weatherly/platform";
+import { requireMatter } from "@weatherly/matters";
+
+export async function getIntakeSubmission(actor: Principal, id: string) {
+  if (actor.role === "client") throw new HttpError(403, "FORBIDDEN", "Intakes are available to agents and coordinators.");
+  const submission = await prisma.intakeSubmission.findFirst({ where: { id, ...(actor.role === "agent" ? { userId: actor.id } : {}) } });
+  if (!submission) throw new HttpError(404, "INTAKE_NOT_FOUND", "Intake not found.");
+  await requireMatter(actor, submission.matterId);
+  const documents = await prisma.document.findMany({ where: {
+    matterId: submission.matterId,
+    ...(actor.role === "coordinator" ? {} : { visibility: { in: ["agent", "client"] } }),
+  }, select: {
+    id: true, name: true, category: true, mimeType: true,
+    versions: { orderBy: { version: "desc" }, select: { id: true, version: true, processingStatus: true, error: true } },
+  } });
+  const agent = await prisma.user.findUnique({ where: { id: submission.userId }, select: { id: true, name: true, email: true, brokerage: true } });
+  return { ...submission, agent, documents };
+}
+
+export async function listIntakeSubmissions(actor: Principal, raw: unknown = {}) {
+  if (actor.role === "client") throw new HttpError(403, "FORBIDDEN", "Intakes are available to agents and coordinators.");
+  const input = z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(raw);
+  const scope = actor.role === "agent" ? { userId: actor.id } : {};
+  return prisma.$transaction(async tx => {
+    const items = await tx.intakeSubmission.findMany({ where: scope, orderBy: [{ processedAt: { sort: "desc", nulls: "first" } }, { createdAt: "desc" }, { id: "desc" }], skip: (input.page - 1) * input.limit, take: input.limit });
+    const total = await tx.intakeSubmission.count({where:scope});
+    const newCount = await tx.intakeSubmission.count({where:{...scope,processedAt:null}});
+    const agents = await tx.user.findMany({ where: { id: { in: items.map(x => x.userId) } }, select: { id: true, name: true, email: true } });
+    return { items: items.map(item => ({ ...item, agent: agents.find(a => a.id === item.userId) || null })), total, newCount, page: input.page };
+  });
+}
+

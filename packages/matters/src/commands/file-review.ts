@@ -141,6 +141,15 @@ export async function confirmFile(
         "FILE_ALREADY_CONFIRMED",
         "This file is not awaiting initial review.",
       );
+    if (await tx.creationReview.findFirst({
+      where: { state: "open", intake: { matterId } },
+      select: { id: true },
+    }))
+      throw new HttpError(
+        409,
+        "CREATION_REVIEW_REQUIRED",
+        "Confirm this file in its creation review.",
+      );
     const state = await pendingFileReview(tx, matter);
     if (state.blockers.length)
       throw new HttpError(

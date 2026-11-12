@@ -1,21 +1,82 @@
 import { z } from "zod";
-import { prisma } from "@weatherly/db";
+import { prisma, type Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
 import { requireMatter } from "@weatherly/matters";
+import { originalIntakeDocumentIds } from "./snapshot";
 
 export async function getIntakeSubmission(actor: Principal, id: string) {
-  if (actor.role === "client") throw new HttpError(403, "FORBIDDEN", "Intakes are available to agents and coordinators.");
-  const submission = await prisma.intakeSubmission.findFirst({ where: { id, deletedAt: null, ...(actor.role === "agent" ? { userId: actor.id } : {}) } });
-  if (!submission) throw new HttpError(404, "INTAKE_NOT_FOUND", "Intake not found.");
+  if (actor.role === "client")
+    throw new HttpError(
+      403,
+      "FORBIDDEN",
+      "Intakes are available to agents and coordinators.",
+    );
+  const submission = await prisma.intakeSubmission.findFirst({
+    where: {
+      id,
+      deletedAt: null,
+      ...(actor.role === "agent" ? { userId: actor.id } : {}),
+    },
+  });
+  if (!submission)
+    throw new HttpError(404, "INTAKE_NOT_FOUND", "Intake not found.");
   await requireMatter(actor, submission.matterId);
-  const documents = await prisma.document.findMany({ where: {
-    matterId: submission.matterId,
-    ...(actor.role === "coordinator" ? {} : { visibility: { in: ["agent", "client"] } }),
-  }, select: {
-    id: true, name: true, category: true, mimeType: true,
-    versions: { orderBy: { version: "desc" }, select: { id: true, version: true, processingStatus: true, error: true } },
-  } });
-  const agent = await prisma.user.findUnique({ where: { id: submission.userId }, select: { id: true, name: true, email: true, brokerage: true } });
+  const agentReceiptDocuments: Prisma.DocumentWhereInput = {
+    creationReviewId: null,
+    AND: [
+      {
+        OR: [
+          {
+            intakeSubmissionId: submission.id,
+            OR: [{ matterId: null }, { matterId: submission.matterId }],
+          },
+          {
+            intakeSubmissionId: null,
+            matterId: submission.matterId,
+            id: { in: originalIntakeDocumentIds(submission.snapshot) },
+          },
+        ],
+      },
+      {
+        OR: [
+          { shareWithAgent: true },
+          {
+            shareWithAgent: null,
+            shareWithClient: null,
+            visibility: { in: ["agent", "client"] },
+          },
+        ],
+      },
+    ],
+  };
+  const documents = await prisma.document.findMany({
+    where:
+      actor.role === "agent"
+        ? agentReceiptDocuments
+        : { matterId: submission.matterId },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      mimeType: true,
+      versions: {
+        ...(actor.role === "agent"
+          ? { where: { createdAt: { lte: submission.createdAt } } }
+          : {}),
+        orderBy: { version: "desc" },
+        select: {
+          id: true,
+          version: true,
+          processingStatus: true,
+          error: true,
+        },
+      },
+    },
+  });
+  const agent = await prisma.user.findUnique({
+    where: { id: submission.userId },
+    select: { id: true, name: true, email: true, brokerage: true },
+  });
   return { ...submission, agent, documents };
 }
 

@@ -1,3 +1,4 @@
+import { jsonObject } from "../snapshot";
 import type { Prisma } from "@weatherly/db";
 import {
   creationPersonSchema,
@@ -5,12 +6,6 @@ import {
 } from "@weatherly/platform/handoff-contracts";
 import { transactionContactSources } from "../../../contacts/src/transaction-sources";
 import type { ReviewPayload } from "./inputs";
-
-export function jsonObject(value: Prisma.JsonValue | undefined) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value
-    : {};
-}
 
 export function defaultReviewPayload(
   intake: {
@@ -97,17 +92,4 @@ export function defaultReviewPayload(
     dates: [],
     ...(business.success ? { business: business.data } : {}),
   };
-}
-
-export function intakeContractIds(snapshot: Prisma.JsonValue) {
-  const data = jsonObject(snapshot);
-  const reference = jsonObject(data.referenceIntake);
-  const ids = data.referenceIntake
-    ? jsonObject(reference.uploads).contractDocs
-    : data.documentIds;
-  return new Set(
-    Array.isArray(ids)
-      ? ids.filter((id): id is string => typeof id === "string")
-      : [],
-  );
 }

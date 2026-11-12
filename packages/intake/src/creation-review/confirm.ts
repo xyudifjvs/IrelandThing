@@ -11,7 +11,7 @@ import {
   type CreationConfirm,
 } from "@weatherly/platform/handoff-contracts";
 import { sourcesSchema } from "./inputs";
-import { jsonObject } from "./intake-defaults";
+import { jsonObject } from "../snapshot";
 import { attachReviewDocuments, verifySources } from "./sources";
 import {
   assertReviewRevision,
@@ -46,27 +46,18 @@ export type CreationReviewDependencies = {
   ) => Promise<void>;
 };
 
-async function resolveAgentId(
-  tx: Prisma.TransactionClient,
-  input: CreationConfirm,
-) {
-  const { facts, business } = input;
+async function resolveAgentId(tx: Prisma.TransactionClient, facts: Facts) {
   let agentId = facts.agentId;
   if (facts.agentRosterId) {
     const roster = await tx.rosterAgent.findUnique({
       where: { id: facts.agentRosterId },
-      select: { userId: true, business: true, archivedAt: true },
+      select: { userId: true, archivedAt: true },
     });
-    if (
-      !roster ||
-      roster.archivedAt ||
-      (roster.business && roster.business !== business.business) ||
-      (agentId && roster.userId !== agentId)
-    )
+    if (!roster || roster.archivedAt || (agentId && roster.userId !== agentId))
       throw new HttpError(
         422,
         "INVALID_AGENT_ROSTER",
-        "Select an active roster entry consistent with the assigned agent and business.",
+        "Select an active roster entry consistent with the assigned agent.",
       );
     agentId = roster.userId;
   }
@@ -195,7 +186,7 @@ export async function confirmCreationReview(
       await verifySources(tx, review, sources, true);
 
       const now = new Date();
-      const agentId = await resolveAgentId(tx, input);
+      const agentId = await resolveAgentId(tx, facts);
       const details = await matterDetails(tx, actor, input, pending, now);
       const data = {
         title: facts.title,

@@ -13,7 +13,8 @@ import {
   sourcesSchema,
   startReviewSchema,
 } from "./inputs";
-import { defaultReviewPayload, intakeContractIds } from "./intake-defaults";
+import { defaultReviewPayload } from "./intake-defaults";
+import { intakeContractIds } from "../snapshot";
 import { listReviewDocuments, verifySources } from "./sources";
 
 const includeIntake = { intake: true } as const;

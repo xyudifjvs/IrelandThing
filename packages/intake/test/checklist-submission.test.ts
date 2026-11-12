@@ -216,6 +216,58 @@ describe("durable intake document batch submissions", () => {
     expect(visible).not.toContain(privateDocument.id);
   });
 
+  it("projects original agent receipt attachments with the effective agent audience", async () => {
+    const legacy = await upload(agent, "legacy-original.pdf", "contract");
+    const privateOriginal = await upload(agent, "private-original.pdf", "brokerage_checklist");
+    const saved = await draft(payload([legacy.id], { checklistDocumentIds: [privateOriginal.id] }));
+    const submitted = await submitIntake(agent, saved.id, {
+      expectedRevision: 1,
+      idempotencyKey: `receipt-audience-${saved.id}`,
+    });
+    matterIds.push(submitted.matter.id);
+    const { id: intakeSubmissionId, createdAt: submittedAt } = submitted.submission;
+    const matterId = submitted.matter.id;
+    await prisma.document.update({
+      where: { id: privateOriginal.id },
+      data: { shareWithAgent: false, shareWithClient: true },
+    });
+
+    const later = await prisma.document.create({
+      data: {
+        matterId, name: "Later file upload", mimeType: "application/pdf",
+        createdById: agent.id, visibility: "agent",
+        shareWithAgent: true, shareWithClient: false,
+      },
+    });
+    const receiptOwned = await prisma.document.create({
+      data: {
+        matterId, intakeSubmissionId, name: "Receipt attachment", mimeType: "application/pdf",
+        createdById: agent.id, visibility: "coordinator",
+        shareWithAgent: true, shareWithClient: false,
+      },
+    });
+    const originalVersion = await prisma.documentVersion.findFirstOrThrow({
+      where: { documentId: legacy.id, version: 1 }, select: { id: true },
+    });
+    const laterVersion = await prisma.documentVersion.create({
+      data: {
+        documentId: legacy.id, objectKey: `receipt-version-${randomUUID()}`,
+        version: 2, checksum: "a".repeat(64), size: 1,
+        createdAt: new Date(submittedAt.getTime() + 1),
+      },
+    });
+
+    const detail = await getIntakeSubmission(agent, intakeSubmissionId);
+    expect(detail.documents.map(({ id }) => id).sort()).toEqual([legacy.id, receiptOwned.id].sort());
+    expect(detail.documents.find(({ id }) => id === legacy.id)?.versions.map(({ id }) => id))
+      .toEqual([originalVersion.id]);
+    const full = await getIntakeSubmission(coordinator, intakeSubmissionId);
+    expect(full.documents.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([legacy.id, privateOriginal.id, receiptOwned.id, later.id]),
+    );
+    expect(full.documents.find(({ id }) => id === legacy.id)?.versions[0].id).toBe(laterVersion.id);
+  });
+
   it("keeps new intakes first and converts exactly once with the original contract and contacts", async () => {
     const contract = await upload(agent, "queue-contract.pdf", "contract");
     const first = await draft(payload([contract.id], {}));

@@ -330,6 +330,53 @@ describe("creation review", () => {
     expect(await prisma.matter.count()).toBe(count + 1);
   });
 
+  it("keeps the chosen file business independent of the selected roster affiliation", async () => {
+    const roster = await prisma.rosterAgent.create({
+      data: { name: agent.name, business: "weatherly", userId: agent.id },
+    });
+    const open = await startCreationReview(owner, { requestId: randomUUID() });
+    const body = confirmation(open.revision);
+    await expect(
+      confirmCreationReview(
+        owner,
+        open.id,
+        {
+          ...body,
+          facts: {
+            ...body.facts,
+            agentId: outsider.id,
+            agentRosterId: roster.id,
+          },
+        },
+        hooks,
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_AGENT_ROSTER" });
+
+    const { matterId } = await confirmCreationReview(
+      owner,
+      open.id,
+      {
+        ...body,
+        facts: { ...body.facts, agentId: null, agentRosterId: roster.id },
+      },
+      hooks,
+    );
+    expect(
+      await prisma.matter.findUnique({ where: { id: matterId } }),
+    ).toMatchObject({
+      business: "hto",
+      packageCode: "hto_included",
+      agentId: agent.id,
+      agentRosterId: roster.id,
+    });
+    expect(
+      await prisma.rosterAgent.findUnique({ where: { id: roster.id } }),
+    ).toMatchObject({
+      business: "weatherly",
+      userId: agent.id,
+    });
+  });
+
   it("keeps the legacy intake pending until confirmation and preserves the original receipt and history", async () => {
     const oldTerms = {
       code: "complete",

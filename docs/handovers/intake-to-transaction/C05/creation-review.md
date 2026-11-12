@@ -21,6 +21,8 @@ Mount `createCreationReviewRouter({ seedChecklist, seedPeople, afterConfirm })` 
 
 ## Wiring
 
+- Confirmation uses the selected file business independently of roster affiliation. The selected roster entry must still be active and consistent with the assigned login.
+- Agent receipt documents use explicit intake ownership or the original upload IDs in the immutable snapshot, with the effective agent audience. Version metadata is limited to versions present at submission. The coordinator keeps the existing file document view. After C06 integrates, replace the equivalent agent audience predicate in `queries.ts` with `documentAudienceWhere("agent")`.
 - C00 supplies C03's `seedMatterChecklist`, a C06 transaction-scoped initial people writer and the transactional after-confirm hook. The hook is where C00 composes C11 HTO synchronization and other confirmed-file internal effects. Tests supply deterministic transaction callbacks that write real database rows.
 - C06 owns staged upload/view and document audience handling. A staged upload must serialize with confirmation by locking its open review before association. Confirmation leaves document visibility and sharing fields intact.
 - C00 can enqueue the gift-only effect after intake confirmation. The existing `intake.submitted` job also invokes legacy extraction and is unsuitable for the canonical path.

@@ -20,3 +20,9 @@ The coordinator can amend the Remedies request deadline from the Inspections row
 The appointment editor uses the coordinator's browser timezone. It rejects a local time that falls in a daylight-saving gap and shows both UTC offsets when a local time repeats. A place-only edit preserves the existing appointment instant.
 
 The follow-up passed typecheck, a Webpack production build, 48 focused PostgreSQL tests, and Chromium with real checklist routes and disposable synthetic records. Chromium confirmed the Remedies preview and save, rejection of a nonexistent time, explicit selection of the second repeated hour, and preservation of that instant during a place edit.
+
+## HTO closing-date adapter
+
+C11 can inject `previewHtoChecklistClosingDate` and `applyHtoChecklistClosingDate` from `checklist/date-commands.ts` and pass the locked linked-row transaction. The adapter uses the canonical edit and apply shapes, accepts only a set of the Closing due date on an eligible linked HTO file, and binds the preview to HTO Operations. The audit event records its source.
+
+On a closed or terminated file, the correction can change the completed Closing due date. Its status and actual event remain intact. The selected apply mode governs eligible unfinished dependents, and the canonical change hook still runs in the same transaction. The ordinary File routes keep terminal checklists read-only. Ireland's confirmation of terminal-row corrections is tracked in the handoff.

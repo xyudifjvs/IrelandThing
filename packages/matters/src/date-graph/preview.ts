@@ -43,7 +43,13 @@ function targetNode(snapshot: ChecklistDateSnapshot, key: string) {
   return node;
 }
 
-function editTarget(snapshot: ChecklistDateSnapshot, edit: ChecklistDateEdit) {
+export type ChecklistDateEditContext = "hto_operations" | "hto_terminal_correction";
+
+function editTarget(
+  snapshot: ChecklistDateSnapshot,
+  edit: ChecklistDateEdit,
+  context?: ChecklistDateEditContext,
+) {
   const { change } = edit;
   const calendar = deadlineCalendar(snapshot.timeZone);
   const target: DateAnchor =
@@ -73,7 +79,13 @@ function editTarget(snapshot: ChecklistDateSnapshot, edit: ChecklistDateEdit) {
       );
     updated = { ...node, actual: change.value };
   } else {
-    if (!node.dateCapable || node.status !== "open")
+    const correctingCompletedClosing =
+      context === "hto_terminal_correction" &&
+      node.status === "completed" &&
+      change.kind === "set" &&
+      target.kind === "step" &&
+      target.key === "closing";
+    if (!node.dateCapable || (node.status !== "open" && !correctingCompletedClosing))
       throw new ChecklistDateError(
         "DATE_NOT_EDITABLE",
         "This checklist step has no editable due date.",
@@ -121,6 +133,7 @@ function editTarget(snapshot: ChecklistDateSnapshot, edit: ChecklistDateEdit) {
 function computePreview(
   snapshot: ChecklistDateSnapshot,
   edit: ChecklistDateEdit,
+  context?: ChecklistDateEditContext,
 ) {
   if (snapshot.revision !== edit.expectedRevision)
     throw new ChecklistDateError(
@@ -132,6 +145,7 @@ function computePreview(
   const { target, before, graph, recalculateTarget } = editTarget(
     original,
     edit,
+    context,
   );
   const affected = affectedChecklistKeys(graph, target);
   if (recalculateTarget && target.kind === "step") affected.add(target.key);
@@ -171,6 +185,7 @@ function computePreview(
         matterId: snapshot.matterId,
         revision: snapshot.revision,
         change: edit.change,
+        ...(context ? { context } : {}),
         primary,
         dependents,
       }),
@@ -188,8 +203,10 @@ function computePreview(
 export function previewChecklistDateEdit(
   snapshot: ChecklistDateSnapshot,
   edit: ChecklistDateEdit,
+  context?: ChecklistDateEditContext,
 ): ChecklistDatePreview {
-  return computePreview(snapshot, checklistDateEditSchema.parse(edit)).preview;
+  return computePreview(snapshot, checklistDateEditSchema.parse(edit), context)
+    .preview;
 }
 
 /**
@@ -199,12 +216,14 @@ export function previewChecklistDateEdit(
 export function applyChecklistDateEdit(
   snapshot: ChecklistDateSnapshot,
   command: ChecklistDateApply,
+  context?: ChecklistDateEditContext,
 ) {
   const { previewDigest, mode, ...edit } =
     checklistDateApplySchema.parse(command);
   const { preview, updateAll, priorDue, dependentKeys } = computePreview(
     snapshot,
     edit,
+    context,
   );
   if (preview.previewDigest !== previewDigest)
     throw new ChecklistDateError(

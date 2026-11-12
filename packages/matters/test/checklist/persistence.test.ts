@@ -5,7 +5,9 @@ import type { Principal } from "@weatherly/platform";
 import type { ChecklistDateEdit } from "@weatherly/platform/handoff-contracts";
 import { registerMatterChangeHook } from "../../src/change-hook";
 import {
+  applyHtoChecklistClosingDate,
   applyMatterChecklistDates,
+  previewHtoChecklistClosingDate,
   previewMatterChecklistDates,
 } from "../../src/checklist/date-commands";
 import { seedMatterChecklist } from "../../src/checklist/persistence";
@@ -38,6 +40,7 @@ beforeAll(async () => {
 afterEach(() => registerMatterChangeHook(undefined));
 afterAll(async () => {
   await prisma.auditEvent.deleteMany({ where: { actorId: actor.id } });
+  await prisma.htoClosing.deleteMany({ where: { matterId: { in: matterIds } } });
   await prisma.matter.deleteMany({ where: { id: { in: matterIds } } });
   await prisma.user.delete({ where: { id: actor.id } });
   await prisma.$disconnect();
@@ -410,5 +413,156 @@ describe("canonical checklist persistence", () => {
         },
       }),
     ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("HTO closing-date correction", () => {
+  async function linkedMatter(stage: string) {
+    const matter = await createMatter();
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: { business: "hto", stage },
+    });
+    await prisma.htoClosing.create({ data: { matterId: matter.id } });
+    const relative = (amount: number) => ({
+      kind: "relative" as const,
+      offset: {
+        ...acceptanceOffset(amount),
+        anchor: { kind: "step" as const, key: "closing" },
+      },
+    });
+    await prisma.$transaction((tx) =>
+      seedMatterChecklist(tx, matter.id, {
+        side: "buyer",
+        purchaseType: "cash",
+        acceptance: null,
+        timeZone: null,
+        dates: [
+          {
+            key: "closing",
+            value: date("2026-10-23"),
+            rule: { kind: "fixed" },
+          },
+          { key: "final_walkthrough", value: null, rule: relative(-1) },
+          { key: "possession", value: null, rule: relative(1) },
+        ],
+      }),
+    );
+    return matter;
+  }
+
+  function closingEdit(expectedRevision: number): ChecklistDateEdit {
+    return {
+      expectedRevision,
+      change: {
+        kind: "set",
+        target: { kind: "step", key: "closing" },
+        value: date("2026-10-27"),
+      },
+    };
+  }
+
+  it.each([
+    { stage: "closed", mode: "update_all" as const, possession: "2026-10-28" },
+    { stage: "terminated", mode: "only_this_date" as const, possession: "2026-10-24" },
+  ])("corrects a completed Closing in a $stage file without reopening it", async ({
+    stage,
+    mode,
+    possession,
+  }) => {
+    const matter = await linkedMatter(stage);
+    await prisma.task.updateMany({
+      where: {
+        matterId: matter.id,
+        stepKey: { in: ["closing", "final_walkthrough"] },
+      },
+      data: { status: "completed", actualDate: "2026-10-23" },
+    });
+    const edit = closingEdit(matter.revision);
+    const preview = await previewHtoChecklistClosingDate(actor, matter.id, edit);
+    expect(preview.dependents).toEqual([
+      {
+        target: { kind: "step", key: "possession" },
+        before: date("2026-10-24"),
+        after: date("2026-10-28"),
+      },
+    ]);
+
+    const apply = { ...edit, previewDigest: preview.previewDigest, mode };
+    await expect(previewMatterChecklistDates(actor, matter.id, edit))
+      .rejects.toMatchObject({ code: "CHECKLIST_READ_ONLY" });
+    await expect(applyMatterChecklistDates(actor, matter.id, apply))
+      .rejects.toMatchObject({ code: "CHECKLIST_READ_ONLY" });
+
+    registerMatterChangeHook(async (tx, hookActor, id) => {
+      expect(hookActor.id).toBe(actor.id);
+      expect(id).toBe(matter.id);
+      expect(await tx.matter.findUniqueOrThrow({ where: { id } }))
+        .toMatchObject({ stage, revision: matter.revision + 1 });
+      expect(await tx.task.findUniqueOrThrow({
+        where: { matterId_stepKey: { matterId: id, stepKey: "closing" } },
+      })).toMatchObject({ dueDate: "2026-10-27", status: "completed" });
+      throw new Error("Synthetic downstream hook failure");
+    });
+    await expect(prisma.$transaction((tx) =>
+      applyHtoChecklistClosingDate(actor, matter.id, apply, tx),
+    )).rejects.toThrow("Synthetic downstream hook failure");
+    expect(await task(matter.id, "closing")).toMatchObject({ dueDate: "2026-10-23" });
+    registerMatterChangeHook(undefined);
+
+    await prisma.$transaction((tx) =>
+      applyHtoChecklistClosingDate(actor, matter.id, apply, tx),
+    );
+    await expect(applyHtoChecklistClosingDate(actor, matter.id, apply))
+      .rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+    expect(await task(matter.id, "closing")).toMatchObject({
+      dueDate: "2026-10-27",
+      actualDate: "2026-10-23",
+      status: "completed",
+    });
+    expect(await task(matter.id, "final_walkthrough")).toMatchObject({
+      dueDate: "2026-10-22",
+      actualDate: "2026-10-23",
+      status: "completed",
+    });
+    expect(await task(matter.id, "possession")).toMatchObject({
+      dueDate: possession,
+      dateRule: { kind: mode === "only_this_date" ? "fixed" : "relative" },
+    });
+    expect(await prisma.matter.findUniqueOrThrow({ where: { id: matter.id } }))
+      .toMatchObject({ stage, revision: matter.revision + 1 });
+    expect(await prisma.auditEvent.findMany({
+      where: { matterId: matter.id, action: "checklist.date_updated" },
+    })).toMatchObject([{
+      actorId: actor.id,
+      details: {
+        source: "hto_operations",
+        mode,
+        primary: { before: date("2026-10-23"), after: date("2026-10-27") },
+      },
+    }]);
+  });
+
+  it("binds the preview to HTO and rejects unrelated targets or ineligible files", async () => {
+    const matter = await linkedMatter("under_contract");
+    const edit = closingEdit(matter.revision);
+    const preview = await previewHtoChecklistClosingDate(actor, matter.id, edit);
+    const apply = { ...edit, previewDigest: preview.previewDigest, mode: "update_all" };
+    await expect(applyMatterChecklistDates(actor, matter.id, apply))
+      .rejects.toMatchObject({ code: "PREVIEW_CONFLICT" });
+    await expect(previewHtoChecklistClosingDate({ ...actor, role: "agent" }, matter.id, edit))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(previewHtoChecklistClosingDate(actor, matter.id, {
+      ...edit,
+      change: { kind: "set", target: { kind: "acceptance" }, value: date("2026-10-01") },
+    })).rejects.toMatchObject({ code: "HTO_CLOSING_DATE_TARGET" });
+
+    await prisma.matter.update({ where: { id: matter.id }, data: { business: "weatherly" } });
+    await expect(applyHtoChecklistClosingDate(actor, matter.id, apply))
+      .rejects.toMatchObject({ code: "HTO_CLOSING_DATE_UNAVAILABLE" });
+    await prisma.matter.update({ where: { id: matter.id }, data: { business: "hto" } });
+    await prisma.htoClosing.delete({ where: { matterId: matter.id } });
+    await expect(applyHtoChecklistClosingDate(actor, matter.id, apply))
+      .rejects.toMatchObject({ code: "HTO_CLOSING_DATE_UNAVAILABLE" });
   });
 });

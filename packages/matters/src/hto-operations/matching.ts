@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import { htoAddress, type HtoStatus } from "./contracts";
 import {
   decimalCents,
@@ -80,6 +81,37 @@ export function activeManualMatches(
   );
 }
 
+const matchEmail = z.string().trim().toLowerCase().pipe(z.email().max(254));
+
+function knownClientEmails(values: readonly unknown[]) {
+  return new Set(
+    values.flatMap((value) => {
+      const parsed = matchEmail.safeParse(value);
+      return parsed.success ? [parsed.data] : [];
+    }),
+  );
+}
+
+export function hasConflictingClientEmails(
+  matter: HtoMatter,
+  candidate: StoredHtoClosing,
+) {
+  if (
+    candidate.manualStatus !== "under_contract" ||
+    !Array.isArray(candidate.manualClients)
+  )
+    return false;
+  const manual = knownClientEmails(
+    candidate.manualClients.map((client) => jsonRecord(client).email),
+  );
+  const file = knownClientEmails(matter.contacts.map((client) => client.email));
+  return (
+    manual.size > 0 &&
+    file.size > 0 &&
+    ![...manual].some((email) => file.has(email))
+  );
+}
+
 export function automaticManualMatch(
   matter: HtoMatter,
   matches: readonly StoredHtoClosing[],
@@ -121,6 +153,7 @@ export function automaticManualMatch(
       !close ||
       !candidate.manualCloseDate ||
       close !== candidate.manualCloseDate ||
+      hasConflictingClientEmails(matter, candidate) ||
       (candidatePrice !== null &&
         currentPrice !== null &&
         candidatePrice !== currentPrice)

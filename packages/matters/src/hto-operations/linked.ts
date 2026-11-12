@@ -15,6 +15,7 @@ import { linkedClosingEdit, type LinkedClosingEdit } from "./contracts";
 import {
   activeManualMatches,
   automaticManualMatch,
+  hasConflictingClientEmails,
   matchKey,
   matterAddress,
 } from "./matching";
@@ -79,7 +80,12 @@ async function linkManualRow(
     "HtoClosing",
     linked.id,
     matter.id,
-    { replacedRowId },
+    {
+      replacedRowId,
+      ...(hasConflictingClientEmails(matter, manual)
+        ? { clientEmailConflict: true }
+        : {}),
+    },
   );
   const previous = decimalCents(manual.manualPriceCents);
   const current = decimalCents(matter.purchasePriceCents);

@@ -88,10 +88,13 @@ export function ClosingFactsForm({
       if (
         (!linked || clientsEdited) &&
         clients.some(
-          (client) => !client.firstName.trim() && !client.lastName.trim(),
+          (client) =>
+            (!linked || !client.id) &&
+            !client.firstName.trim() &&
+            !client.lastName.trim(),
         )
       )
-        throw new Error("Enter a first or last name for each client.");
+        throw new Error("Enter a first or last name for each new client.");
       const people = clients.map(
         ({ id, firstName, lastName, email, phone }) => ({
           ...(linked && id ? { id } : {}),

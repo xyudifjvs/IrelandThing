@@ -5,6 +5,8 @@ import {
   revisionSchema,
 } from "@weatherly/platform/handoff-contracts";
 
+import { fileClientsInput } from "../commands/file-fact-clients";
+
 export const htoStatus = z.enum([
   "active_listing",
   "under_contract",
@@ -63,14 +65,7 @@ export const linkedClosingEdit = z
     agentRosterId: entityIdSchema.nullable().optional(),
     propertyAddress: z.string().trim().min(1).max(500).optional(),
     address: htoAddress.nullable().optional(),
-    clients: z
-      .array(
-        htoClientFields
-          .extend({ id: entityIdSchema.optional() })
-          .refine(hasFullName, clientNameError),
-      )
-      .max(100)
-      .optional(),
+    clients: fileClientsInput.optional(),
     side: htoSide.optional(),
     purchasePriceCents: htoPrice.nullable().optional(),
   })
@@ -120,6 +115,7 @@ export type HtoClosingRow = {
       propertyAddress: string;
       agentName: string | null;
       clientNames: string[];
+      clientEmailConflict?: true;
     }[];
   };
 };

@@ -173,7 +173,8 @@ export function ClosingTable({
                           onClick={() => resolveMatch(row, candidate)}
                         >
                           Link {candidate.propertyAddress}
-                          {row.match!.candidates.length > 1 &&
+                          {(row.match!.candidates.length > 1 ||
+                            candidate.clientEmailConflict) &&
                             (candidate.agentName ||
                               candidate.clientNames.length > 0) && (
                               <span className={s.detail}>
@@ -182,6 +183,11 @@ export function ClosingTable({
                                   .join(" · ")}
                               </span>
                             )}
+                          {candidate.clientEmailConflict && (
+                            <span className={s.detail}>
+                              Different client emails
+                            </span>
+                          )}
                         </button>
                       ))}
                       <button

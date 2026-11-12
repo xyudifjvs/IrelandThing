@@ -283,6 +283,91 @@ describe("HTO operations", () => {
     );
   });
 
+  it("asks before linking an exact contract row with disjoint client emails", async () => {
+    const parts = address();
+    const manual = await addManualClosing(actor, {
+      ...manualInput(parts, "under_contract"),
+      closeDate: "2025-12-22",
+      purchasePriceCents: 25_500_032,
+      clients: [people[0]],
+    });
+    const canonical = await file(parts, { seedDates: true });
+    await prisma.matterContact.createMany({
+      data: [
+        {
+          matterId: canonical.id,
+          role: "seller",
+          name: "Distinct Seller",
+          email: "seller@example.test",
+        },
+        {
+          matterId: canonical.id,
+          role: "co_op_agent",
+          name: "Co-op",
+          email: people[0].email,
+        },
+      ],
+    });
+    const separate = (await synchronize(canonical.id))!;
+    expect(separate.id).not.toBe(manual.id);
+    expect(
+      await prisma.htoClosing.findUnique({ where: { id: manual.id } }),
+    ).toMatchObject({ matterId: null });
+    expect(
+      await prisma.auditEvent.count({
+        where: { action: "hto.manual_linked", matterId: canonical.id },
+      }),
+    ).toBe(0);
+    const shown = (await view()).rows.find(({ id }) => id === separate.id)!;
+    expect(shown.match?.candidates).toEqual([
+      expect.objectContaining({ id: manual.id, clientEmailConflict: true }),
+    ]);
+    await resolveHtoMatch(actor, shown.id, {
+      ...matchInput(shown),
+      action: "link",
+      candidateId: manual.id,
+      candidateRevision: manual.revision,
+    });
+    expect(
+      await prisma.htoClosing.findUnique({ where: { matterId: canonical.id } }),
+    ).toMatchObject({ id: manual.id });
+    expect(
+      await prisma.auditEvent.findFirst({
+        where: { action: "hto.manual_linked", matterId: canonical.id },
+      }),
+    ).toMatchObject({
+      entityId: manual.id,
+      details: { replacedRowId: separate.id, clientEmailConflict: true },
+    });
+  });
+
+  it("still links an exact contract row with a case-insensitive client email in common", async () => {
+    const parts = address();
+    const manual = await addManualClosing(actor, {
+      ...manualInput(parts, "under_contract"),
+      closeDate: "2025-12-22",
+      purchasePriceCents: 25_500_032,
+    });
+    const canonical = await file(parts, { seedDates: true });
+    await prisma.matterContact.createMany({
+      data: [
+        {
+          matterId: canonical.id,
+          role: "client",
+          name: "Existing Client",
+          email: people[0].email.toUpperCase(),
+        },
+        {
+          matterId: canonical.id,
+          role: "client",
+          name: "Additional Client",
+          email: "added@example.test",
+        },
+      ],
+    });
+    expect((await synchronize(canonical.id))?.id).toBe(manual.id);
+  });
+
   it("dismisses a near match once and requires current revisions for an explicit link", async () => {
     const long = address("414 Synthetic Drive");
     const short = { ...long, street: "414 Synthetic Dr" };

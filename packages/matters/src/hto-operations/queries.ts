@@ -13,6 +13,7 @@ import {
 import {
   activeManualMatches,
   fileStatus,
+  hasConflictingClientEmails,
   matchKey,
   matterAddress,
   matterCloseDate,
@@ -270,9 +271,10 @@ export async function loadHtoOperations(
         name: view.agentName,
         active: false,
       });
-    if (row.matter && !row.manualPropertyAddress) {
-      const candidates = activeManualMatches(row.matter, manual);
-      const key = matchKey(row.matter, candidates);
+    const matter = row.matter;
+    if (matter && !row.manualPropertyAddress) {
+      const candidates = activeManualMatches(matter, manual);
+      const key = matchKey(matter, candidates);
       const dismissed = dismissals.get(row.id)?.has(key);
       if (candidates.length && !dismissed)
         view.match = {
@@ -282,6 +284,9 @@ export async function loadHtoOperations(
             revision: candidate.revision,
             propertyAddress: candidate.manualPropertyAddress,
             agentName: candidate.manualAgent?.name ?? null,
+            ...(hasConflictingClientEmails(matter, candidate)
+              ? { clientEmailConflict: true as const }
+              : {}),
             clientNames: manualClients(candidate).map(
               ({ firstName, lastName }) =>
                 [firstName, lastName].filter(Boolean).join(" "),

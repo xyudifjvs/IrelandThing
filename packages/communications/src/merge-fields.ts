@@ -3,6 +3,7 @@ import { type Principal } from "@weatherly/platform";
 import { requireMatter, approvedWorkflowTaskDates, canonicalDeadlineLabel } from "@weatherly/matters";
 import { asRecord } from "./policy";
 import { contactMergeFields } from "./contact-fields";
+import { canonicalMergeFields } from "./canonical-merge-fields";
 export interface MergeField {
   key: string;
   label: string;
@@ -32,6 +33,7 @@ export async function mergeFields(
   db: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
   const matter = await requireMatter(actor, matterId, false, db);
+  if (matter.checklistVersion !== null) return canonicalMergeFields(actor, matter, db);
   const deadlines = await db.deadline.findMany({ where: { matterId } });
   const rawTasks = await db.task.findMany({ where: { matterId } });
   const tasks=approvedWorkflowTaskDates(rawTasks,deadlines,matter.details);

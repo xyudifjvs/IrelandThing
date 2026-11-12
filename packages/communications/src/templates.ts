@@ -7,6 +7,7 @@ import {
   type Principal,
 } from "@weatherly/platform";
 import { requireMatter, audit, revision } from "@weatherly/matters";
+import { stepKeySchema } from "@weatherly/platform/handoff-contracts";
 import { asRecord, assertReviewedMatter, validateMerge } from "./policy";
 import type { CommunicationsService } from "./service";
 
@@ -14,7 +15,11 @@ export async function listTemplates(actor: Principal, includeInactive = false) {
   assertCoordinator(actor);
   return prisma.communicationTemplate.findMany({
     where: includeInactive ? {} : { active: true },
-    orderBy: { name: "asc" },
+    orderBy: [
+      { recipientGroup: { sort: "asc", nulls: "last" } },
+      { position: { sort: "asc", nulls: "last" } },
+      { name: "asc" },
+    ],
     take: 200,
   });
 }
@@ -45,6 +50,14 @@ export async function saveTemplate(
         .max(998)
         .refine((v) => !/[\r\n]/.test(v)),
       body: z.string().min(1).max(100000),
+      linkedStepKey: stepKeySchema.nullable().optional(),
+      recipientGroup: z.string().trim().min(1).max(100).nullable().optional(),
+      recipientRoles: z
+        .array(z.string().trim().min(1).max(80))
+        .max(15)
+        .optional(),
+      position: z.number().int().min(0).max(10000).nullable().optional(),
+      isPlaceholder: z.boolean().optional(),
     })
     .strict();
   const parsed = id
@@ -60,6 +73,9 @@ export async function saveTemplate(
   validateMerge(parsed.body);
   return prisma.$transaction(async (tx) => {
     let next = 1;
+    let previous: Awaited<
+      ReturnType<typeof tx.communicationTemplate.findUnique>
+    > = null;
     if (id) {
       const old = await tx.communicationTemplate.findUnique({
         where: { id },
@@ -77,11 +93,40 @@ export async function saveTemplate(
           "Template changed; refresh",
         );
       next = old.revision + 1;
+      previous = old;
     }
     const { expectedRevision: _, ...data } = parsed;
     const row = await tx.communicationTemplate.create({
-      data: { ...data, revision: next, active: true },
+      data: {
+        ...data,
+        linkedStepKey:
+          data.linkedStepKey === undefined
+            ? previous?.linkedStepKey
+            : data.linkedStepKey,
+        recipientGroup:
+          data.recipientGroup === undefined
+            ? previous?.recipientGroup
+            : data.recipientGroup,
+        recipientRoles:
+          data.recipientRoles ?? previous?.recipientRoles ?? undefined,
+        position:
+          data.position === undefined ? previous?.position : data.position,
+        isPlaceholder: data.isPlaceholder ?? previous?.isPlaceholder ?? false,
+        revision: next,
+        active: true,
+      },
     });
+    if (previous) {
+      await tx.emailWork.updateMany({
+        where: { templateId: previous.id },
+        data: {
+          templateId: row.id,
+          templateRevision: row.revision,
+          linkedStepKey: row.linkedStepKey,
+          revision: { increment: 1 },
+        },
+      });
+    }
     await audit(
       tx,
       actor,
@@ -92,6 +137,110 @@ export async function saveTemplate(
       { previousId: id || null, revision: next },
     );
     return row;
+  });
+}
+
+export async function archiveTemplate(
+  actor: Principal,
+  id: string,
+  raw: unknown,
+) {
+  assertCoordinator(actor);
+  const { expectedRevision } = z
+    .object({ expectedRevision: revision })
+    .strict()
+    .parse(raw);
+  return prisma.$transaction(async (tx) => {
+    const archived = await tx.communicationTemplate.updateMany({
+      where: { id, active: true, revision: expectedRevision },
+      data: { active: false },
+    });
+    if (!archived.count)
+      throw new HttpError(
+        409,
+        "REVISION_CONFLICT",
+        "This template changed. Refresh before deleting.",
+      );
+    await audit(
+      tx,
+      actor,
+      "email.template_archived",
+      "CommunicationTemplate",
+      id,
+      null,
+    );
+    return { id, archived: true };
+  });
+}
+
+export async function reorderTemplates(actor: Principal, raw: unknown) {
+  assertCoordinator(actor);
+  const { side, recipientGroup, items } = z
+    .object({
+      side: z.enum(["buyer", "seller", "both"]),
+      recipientGroup: z.string().trim().min(1).max(100).nullable(),
+      items: z
+        .array(
+          z
+            .object({ id: z.string().min(1), expectedRevision: revision })
+            .strict(),
+        )
+        .min(1)
+        .max(200),
+    })
+    .strict()
+    .refine(
+      ({ items }) => new Set(items.map(({ id }) => id)).size === items.length,
+    )
+    .parse(raw);
+  return prisma.$transaction(async (tx) => {
+    const group = await tx.communicationTemplate.findMany({
+      where: { side, recipientGroup, active: true },
+      select: { id: true, revision: true },
+    });
+    const revisions = new Map(group.map(({ id, revision }) => [id, revision]));
+    if (
+      items.length !== revisions.size ||
+      items.some(
+        ({ id, expectedRevision }) => revisions.get(id) !== expectedRevision,
+      )
+    )
+      throw new HttpError(
+        409,
+        "REVISION_CONFLICT",
+        "This template group changed. Refresh before reordering.",
+      );
+    // Lock in stable ID order while preserving the requested display positions.
+    for (const { id, expectedRevision, position } of items
+      .map((item, position) => ({ ...item, position }))
+      .sort((a, b) => a.id.localeCompare(b.id))) {
+      const saved = await tx.communicationTemplate.updateMany({
+        where: {
+          id,
+          side,
+          recipientGroup,
+          active: true,
+          revision: expectedRevision,
+        },
+        data: { position },
+      });
+      if (!saved.count)
+        throw new HttpError(
+          409,
+          "REVISION_CONFLICT",
+          "A template changed during reordering.",
+        );
+    }
+    await audit(
+      tx,
+      actor,
+      "email.templates_reordered",
+      "CommunicationTemplate",
+      side,
+      null,
+      { recipientGroup, ids: items.map(({ id }) => id) },
+    );
+    return { ordered: true };
   });
 }
 
@@ -146,22 +295,25 @@ export async function renderInDb(
     computed[key] = value;
   }
   const missing = new Set<string>();
-  const render = (source: string) => {
+  const missingSubjectFields = new Set<string>();
+  const missingBodyFields = new Set<string>();
+  const render = (source: string, missingPart: Set<string>) => {
     validateMerge(source);
     return source.replace(
       /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
       (_all, key: string) => {
         if (!computed[key]?.trim()) {
           missing.add(key);
-          return `{{${key}}}`;
+          missingPart.add(key);
+          return matter.checklistVersion !== null ? "" : `{{${key}}}`;
         }
         return computed[key];
       },
     );
   };
-  const subject = render(template.subject),
-    body = render(template.body);
-  if (missing.size && !allowUnresolved)
+  const subject = render(template.subject, missingSubjectFields),
+    body = render(template.body, missingBodyFields);
+  if (missing.size && !allowUnresolved && matter.checklistVersion === null)
     throw new HttpError(
       422,
       "MISSING_MERGE_FIELD",
@@ -173,6 +325,8 @@ export async function renderInDb(
     templateId: template.id,
     templateRevision: template.revision,
     missingFields: [...missing],
+    missingSubjectFields: [...missingSubjectFields],
+    missingBodyFields: [...missingBodyFields],
   };
 }
 

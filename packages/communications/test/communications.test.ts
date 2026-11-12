@@ -597,8 +597,9 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
       ).revision,
       visibility: "client",
     });
+    expect(await service.listMessages(client, matterIds[0])).toEqual([]);
     expect(
-      (await service.listMessages(client, matterIds[0])).map((m) => m.id),
+      (await service.listMessages(owner, matterIds[0])).map((m) => m.id),
     ).toContain(thread.messages[0].id);
     paginatedHistory = true;
     const firstHistory = await jobs["gmail.sync"]({ ownerId });
@@ -678,7 +679,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     const projected = (await service.listThreads(client, first)).find(
       (t) => t.id === thread.id,
     );
-    expect(projected?.subject).toBe("Shared update only");
+    expect(projected).toBeUndefined();
     await prisma.matterParticipant.updateMany({
       where: { matterId: first, userId: clientId },
       data: { revokedAt: new Date() },
@@ -1006,21 +1007,21 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     expect(
       (
         await collect((c) =>
-          service.listThreads(client, matter.id, { cursor: c, limit: 17 }),
+          service.listThreads(owner, matter.id, { cursor: c, limit: 17 }),
         )
       ).size,
-    ).toBe(210);
+    ).toBe(230);
     expect(
       (
         await collect((c) =>
-          service.listMessages(client, matter.id, {
+          service.listMessages(owner, matter.id, {
             cursor: c,
             limit: 19,
             q: "Historical pagination fixture",
           }),
         )
       ).size,
-    ).toBe(210);
+    ).toBe(230);
     expect(
       (
         await collect((c) =>
@@ -1040,13 +1041,13 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
         cursor: rows[229].id,
         limit: 1,
       }),
-    ).rejects.toMatchObject({ status: 404 });
+    ).resolves.toEqual([]);
     await expect(
       service.listMessages(client, matter.id, {
         cursor: `historical-message-${suffix}-229`,
         limit: 1,
       }),
-    ).rejects.toMatchObject({ status: 404 });
+    ).resolves.toEqual([]);
     await expect(
       service.listDrafts(client, matter.id, { limit: 1 }),
     ).rejects.toMatchObject({ status: 403 });

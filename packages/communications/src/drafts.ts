@@ -13,6 +13,7 @@ import {
   recipientPolicy,
 } from "./policy";
 import type { CommunicationsService } from "./service";
+import { ensureTemplateWork, requireEmailWorkFile } from "./email-work";
 
 export async function listDrafts(
   actor: Principal,
@@ -89,9 +90,27 @@ export async function createDraft(
       })
     : null;
   return prisma.$transaction(async (tx) => {
+    let workItemId: string | null = null;
+    if (recipients.matter.checklistVersion !== null) {
+      const current = await requireEmailWorkFile(tx, actor, data.matterId);
+      if (current.revision !== recipients.matter.revision)
+        throw new HttpError(
+          409,
+          "FILE_CHANGED",
+          "Review the updated file before saving this draft.",
+        );
+      const work = data.templateId
+        ? await ensureTemplateWork(tx, current, data.templateId)
+        : await tx.emailWork.create({
+            data: { matterId: current.id },
+            select: { id: true },
+          });
+      workItemId = work.id;
+    }
     const draft = await tx.emailDraft.create({
       data: {
         matterId: data.matterId,
+        workItemId,
         createdById: actor.id,
         to: recipients.to,
         cc: recipients.cc,
@@ -162,6 +181,15 @@ export async function updateDraft(
     patch.attachmentIds || textArray(old.attachmentIds),
   );
   return prisma.$transaction(async (tx) => {
+    if (recipients.matter.checklistVersion !== null) {
+      const file = await requireEmailWorkFile(tx, actor, old.matterId);
+      if (file.revision !== recipients.matter.revision)
+        throw new HttpError(
+          409,
+          "FILE_CHANGED",
+          "Review the current file before updating this draft.",
+        );
+    }
     const changed = await tx.emailDraft.updateMany({
       where: { id, revision: expectedRevision, status: "draft" },
       data: {
@@ -197,18 +225,30 @@ export async function deleteDraft(
   assertCoordinator(actor);
   const old = await prisma.emailDraft.findUnique({ where: { id } });
   if (!old) throw new HttpError(404, "DRAFT_NOT_FOUND", "Draft not found");
-  await requireMatter(actor, old.matterId, true);
-  const changed = await prisma.emailDraft.updateMany({
-    where: { id, revision: expectedRevision, status: "draft" },
-    data: { status: "cancelled", revision: { increment: 1 } },
+  return prisma.$transaction(async (tx) => {
+    const matter = await requireMatter(actor, old.matterId, true, tx);
+    if (matter.checklistVersion !== null)
+      await requireEmailWorkFile(tx, actor, matter.id);
+    const changed = await tx.emailDraft.updateMany({
+      where: { id, revision: expectedRevision, status: "draft" },
+      data: { status: "cancelled", revision: { increment: 1 } },
+    });
+    if (!changed.count)
+      throw new HttpError(
+        409,
+        "REVISION_CONFLICT",
+        "Draft changed or is already queued",
+      );
+    if (old.workItemId)
+      await tx.emailWork.deleteMany({
+        where: {
+          id: old.workItemId,
+          templateId: null,
+          drafts: { every: { status: "cancelled" } },
+        },
+      });
+    return { cancelled: true };
   });
-  if (!changed.count)
-    throw new HttpError(
-      409,
-      "REVISION_CONFLICT",
-      "Draft changed or is already queued",
-    );
-  return { cancelled: true };
 }
 
 export async function validateAttachments(

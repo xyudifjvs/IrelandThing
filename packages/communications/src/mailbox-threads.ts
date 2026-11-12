@@ -5,50 +5,24 @@ import {
   assertCoordinator,
   type Principal,
 } from "@weatherly/platform";
-import {
-  requireMatter,
-  matterScope,
-  audit,
-  revision,
-} from "@weatherly/matters";
+import { requireMatter, audit, revision } from "@weatherly/matters";
 import { assignDocumentToMatter } from "@weatherly/documents";
 import { asRecord, textArray } from "./policy";
-import type { CommunicationsService } from "./service";
 
-export async function threadReadScope(
+async function threadReadScope(
   actor: Principal,
   matterId?: string,
 ): Promise<Prisma.EmailThreadWhereInput> {
   if (matterId) await requireMatter(actor, matterId);
-  if (actor.role === "coordinator") return matterId ? { matterId } : {};
-  const matters = await prisma.matter.findMany({
-    where: matterScope(actor),
-    select: { id: true },
-  });
-  const allowed = matters.map((m) => m.id);
-  return { matterId: matterId ? matterId : { in: allowed } };
-}
-
-export function messageVisibility(
-  actor: Principal,
-): Prisma.EmailMessageWhereInput {
-  return actor.role === "coordinator"
-    ? {}
-    : {
-        OR: (actor.role === "client" ? ["client"] : ["agent", "client"]).map(
-          (visibility) => ({
-            details: { path: ["visibility"], equals: visibility },
-          }),
-        ),
-      };
+  return { ownerId: actor.id, ...(matterId ? { matterId } : {}) };
 }
 
 export async function listThreads(
-  this: CommunicationsService,
   actor: Principal,
   matterId?: string,
   options: { cursor?: string; limit?: number } = {},
 ) {
+  if (actor.role !== "coordinator") return [];
   const limit = z
     .number()
     .int()
@@ -56,12 +30,7 @@ export async function listThreads(
     .max(200)
     .default(100)
     .parse(options.limit);
-  const where: Prisma.EmailThreadWhereInput = {
-    ...(await this.threadReadScope(actor, matterId)),
-    ...(actor.role === "coordinator"
-      ? {}
-      : { messages: { some: this.messageVisibility(actor) } }),
-  };
+  const where = await threadReadScope(actor, matterId);
   if (
     options.cursor &&
     !(await prisma.emailThread.findFirst({
@@ -75,57 +44,24 @@ export async function listThreads(
     take: limit,
     ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
   };
-  if (actor.role === "coordinator")
-    return prisma.emailThread.findMany({
-      where,
-      ...pagination,
-      include: {
-        messages: {
-          orderBy: [{ sentAt: "desc" }, { id: "desc" }],
-          take: 100,
-        },
-      },
-    });
-  const threads = await prisma.emailThread.findMany({
+  return prisma.emailThread.findMany({
     where,
     ...pagination,
-    select: {
-      id: true,
-      matterId: true,
-      subject: true,
-      status: true,
-      revision: true,
-      updatedAt: true,
+    include: {
       messages: {
-        where: this.messageVisibility(actor),
-        select: {
-          id: true,
-          fromEmail: true,
-          to: true,
-          cc: true,
-          subject: true,
-          text: true,
-          sentAt: true,
-          direction: true,
-          revision: true,
-        },
-        orderBy: [{ sentAt: "asc" }, { id: "asc" }],
+        orderBy: [{ sentAt: "desc" }, { id: "desc" }],
         take: 100,
       },
     },
   });
-  return threads.map((t) => ({
-    ...t,
-    subject: t.messages[0]?.subject || "(Shared message)",
-  }));
 }
 
 export async function listMessages(
-  this: CommunicationsService,
   actor: Principal,
   matterId?: string,
   options: { cursor?: string; limit?: number; q?: string } = {},
 ) {
+  if (actor.role !== "coordinator") return [];
   const limit = z
     .number()
     .int()
@@ -135,8 +71,7 @@ export async function listMessages(
     .parse(options.limit);
   const where: Prisma.EmailMessageWhereInput = {
     AND: [
-      { thread: { is: await this.threadReadScope(actor, matterId) } },
-      this.messageVisibility(actor),
+      { thread: { is: await threadReadScope(actor, matterId) } },
       options.q
         ? {
             OR: [
@@ -160,36 +95,13 @@ export async function listMessages(
     take: limit,
     ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
   };
-  if (actor.role === "coordinator") {
-    const rows = await prisma.emailMessage.findMany({
-      where,
-      ...pagination,
-      include: { thread: { select: { id: true, matterId: true } } },
-    });
-    return rows.map(({ thread, ...m }) => ({
-      ...m,
-      matterId: thread.matterId,
-    }));
-  }
   const rows = await prisma.emailMessage.findMany({
     where,
     ...pagination,
-    select: {
-      id: true,
-      threadId: true,
-      fromEmail: true,
-      to: true,
-      cc: true,
-      subject: true,
-      text: true,
-      sentAt: true,
-      direction: true,
-      revision: true,
-      thread: { select: { matterId: true } },
-    },
+    include: { thread: { select: { id: true, matterId: true } } },
   });
-  return rows.map(({ thread, ...m }) => ({
-    ...m,
+  return rows.map(({ thread, ...message }) => ({
+    ...message,
     matterId: thread.matterId,
   }));
 }
@@ -205,8 +117,8 @@ export async function associateThread(
     .strict()
     .parse(input);
   return prisma.$transaction(async (tx) => {
-    const thread = await tx.emailThread.findUnique({
-      where: { id },
+    const thread = await tx.emailThread.findFirst({
+      where: { id, ownerId: actor.id },
       include: { messages: true },
     });
     if (!thread)
@@ -280,8 +192,8 @@ export async function shareMessage(
     .strict()
     .parse(input);
   return prisma.$transaction(async (tx) => {
-    const message = await tx.emailMessage.findUnique({
-      where: { id },
+    const message = await tx.emailMessage.findFirst({
+      where: { id, thread: { ownerId: actor.id } },
       include: { thread: true },
     });
     if (!message)

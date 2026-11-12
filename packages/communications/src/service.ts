@@ -13,8 +13,6 @@ import {
   queueSync,
 } from "./gmail-connection";
 import {
-  threadReadScope,
-  messageVisibility,
   listThreads,
   listMessages,
   associateThread,
@@ -61,10 +59,8 @@ export class CommunicationsService {
   callback = callback.bind(this);
   disconnect = disconnect.bind(this);
   queueSync = queueSync.bind(this);
-  threadReadScope = threadReadScope;
-  messageVisibility = messageVisibility;
-  listThreads = listThreads.bind(this);
-  listMessages = listMessages.bind(this);
+  listThreads = listThreads;
+  listMessages = listMessages;
   associateThread = associateThread;
   shareMessage = shareMessage;
   listDrafts = listDrafts;

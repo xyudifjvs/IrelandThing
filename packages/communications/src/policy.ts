@@ -42,8 +42,17 @@ export async function recipientPolicy(
 ) {
   const matter = await requireMatter(actor, matterId, false, db);
   const details = asRecord(matter.details);
-  const contacts = Array.isArray(details.contacts) ? details.contacts : [];
-  const clients = Array.isArray(details.clients) ? details.clients : [];
+  const canonical = matter.checklistVersion !== null;
+  const contacts = canonical
+    ? await db.matterContact.findMany({
+        where: { matterId, retiredAt: null },
+        select: { role: true, email: true },
+      })
+    : Array.isArray(details.contacts)
+      ? details.contacts
+      : [];
+  const clients =
+    !canonical && Array.isArray(details.clients) ? details.clients : [];
   const agent = matter.agentId
     ? await db.user.findUnique({
         where: { id: matter.agentId },
@@ -79,7 +88,7 @@ export async function recipientPolicy(
         "PLACEHOLDER_EMAIL",
         "The preview address cannot receive external messages",
       );
-    if (!allowed.has(address))
+    if (!canonical && !allowed.has(address))
       throw new HttpError(
         422,
         "UNAPPROVED_RECIPIENT",
@@ -116,6 +125,9 @@ export const templateKeys = new Set([
   "agentEmail",
   "clientNames",
   "closingDate",
+  "acceptanceDate",
+  "closingAppointmentAt",
+  "closingAppointmentPlace",
   "packageName",
   "recipientName",
   "coordinatorName",
@@ -213,15 +225,17 @@ export function assertNoSourceConflicts(details: unknown) {
 export function assertReviewedMatter(matter: {
   stage: string;
   details: unknown;
+  checklistVersion?: number | null;
 }) {
   if (
     matter.stage === "pending_review" ||
-    asRecord(asRecord(matter.details).fileReview).status === "pending"
+    (matter.checklistVersion == null &&
+      asRecord(asRecord(matter.details).fileReview).status === "pending")
   )
     throw new HttpError(
       409,
       "FILE_REVIEW_REQUIRED",
       "Confirm and create this file after reviewing its sources before preparing or sending transaction correspondence.",
     );
-  assertNoSourceConflicts(matter.details);
+  if (matter.checklistVersion == null) assertNoSourceConflicts(matter.details);
 }

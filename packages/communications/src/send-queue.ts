@@ -15,6 +15,7 @@ import {
   requireResolved,
 } from "./policy";
 import type { CommunicationsService } from "./service";
+import { finishSentWork, requireEmailWorkFile } from "./email-work";
 
 export async function queueSend(
   this: CommunicationsService,
@@ -37,6 +38,55 @@ export async function queueSend(
     ["queued", "sending", "sent", "delivery_unknown"].includes(old.status)
   )
     return old;
+  const details = asRecord(old.details);
+  const canonical = currentMatter.checklistVersion !== null;
+  if (
+    canonical &&
+    !["under_contract", "closing", "listing"].includes(currentMatter.stage)
+  )
+    throw new HttpError(
+      409,
+      "EMAIL_FILE_READ_ONLY",
+      "Open an active file to send transaction email.",
+    );
+  if (canonical && typeof details.templateId === "string") {
+    const template = await prisma.communicationTemplate.findUnique({
+      where: { id: details.templateId },
+    });
+    if (!template?.active || template.revision !== details.templateRevision)
+      throw new HttpError(
+        409,
+        "TEMPLATE_CHANGED",
+        "Open the current template and review a fresh draft.",
+      );
+    if (template.isPlaceholder)
+      throw new HttpError(
+        422,
+        "TEMPLATE_PLACEHOLDER",
+        "Add the template's approved content before sending.",
+      );
+    const current = await this.renderInDb(actor, template.id, {
+      matterId: old.matterId,
+      values: asRecord(details.templateValues),
+    });
+    const preview = asRecord(details.templateSnapshot);
+    if (preview.subject !== current.subject || preview.body !== current.body)
+      throw new HttpError(
+        409,
+        "SOURCE_PREVIEW_CHANGED",
+        "Transaction fields changed. Refresh this draft and review it again.",
+      );
+    if (
+      (current.missingSubjectFields.length &&
+        old.subject === current.subject) ||
+      (current.missingBodyFields.length && old.body === current.body)
+    )
+      throw new HttpError(
+        422,
+        "MISSING_MERGE_FIELD",
+        "Fill or remove the blank fields in this email before sending.",
+      );
+  }
   assertConfigured(this.config, true);
   requireResolved(old.subject, old.body);
   const recipients = await recipientPolicy(
@@ -90,6 +140,12 @@ export async function queueSend(
     approvedAt: new Date().toISOString(),
     approvedRevision: expectedRevision,
     sourceMatterRevision: currentMatter.revision,
+    ...(canonical && typeof details.templateId === "string"
+      ? {
+          templateId: details.templateId,
+          templateRevision: details.templateRevision as number,
+        }
+      : {}),
     sourceTasks: asRecord(old.details).templateId
       ? await prisma.task.findMany({
           where: { matterId: old.matterId, dueDate: { not: null } },
@@ -104,6 +160,31 @@ export async function queueSend(
       : [],
   };
   return prisma.$transaction(async (tx) => {
+    if (canonical) {
+      const file = await requireEmailWorkFile(tx, actor, old.matterId);
+      if (file.revision !== currentMatter.revision)
+        throw new HttpError(
+          409,
+          "FILE_CHANGED",
+          "Review the current transaction before sending.",
+        );
+      if (old.workItemId) {
+        const another = await tx.emailDraft.findFirst({
+          where: {
+            id: { not: old.id },
+            workItemId: old.workItemId,
+            status: { in: ["queued", "sending", "sent", "delivery_unknown"] },
+          },
+          select: { id: true },
+        });
+        if (another)
+          throw new HttpError(
+            409,
+            "EMAIL_ALREADY_APPROVED",
+            "This email already has an approved or sent draft.",
+          );
+      }
+    }
     const changed = await tx.emailDraft.updateMany({
       where: { id, revision: expectedRevision, status: "draft" },
       data: {
@@ -229,6 +310,7 @@ export async function reconcileSend(
         "REVISION_CONFLICT",
         "Delivery record changed; refresh",
       );
+    await finishSentWork(tx, draft.workItemId);
     await audit(
       tx,
       actor,

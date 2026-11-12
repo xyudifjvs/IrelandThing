@@ -17,6 +17,11 @@ import {
   type ObjectStore,
 } from "@weatherly/documents";
 import { CommunicationsService } from "./service";
+import { finishSentWork } from "./email-work";
+import {
+  agentInvitationEmailTopic,
+  sendQueuedAgentInvitation,
+} from "./agent-invitation-email";
 import {
   asRecord,
   assertReviewedMatter,
@@ -645,6 +650,33 @@ export function createCommunicationJobHandlers(
         db,
       );
       assertReviewedMatter(currentMatter);
+      if (currentMatter.checklistVersion !== null) {
+        if (
+          !["under_contract", "closing", "listing"].includes(
+            currentMatter.stage,
+          )
+        )
+          throw new HttpError(
+            409,
+            "EMAIL_FILE_READ_ONLY",
+            "This file no longer permits sending.",
+          );
+        if (typeof snapshot.templateId === "string") {
+          const template = await db.communicationTemplate.findUnique({
+            where: { id: snapshot.templateId },
+          });
+          if (
+            !template?.active ||
+            template.isPlaceholder ||
+            template.revision !== snapshot.templateRevision
+          )
+            throw new HttpError(
+              409,
+              "TEMPLATE_CHANGED",
+              "The approved template changed before sending.",
+            );
+        }
+      }
       if (
         Array.isArray(snapshot.sourceDeadlines) &&
         snapshot.sourceDeadlines.length
@@ -872,6 +904,7 @@ export function createCommunicationJobHandlers(
             revision: { increment: 1 },
           },
         });
+        await finishSentWork(tx, draft!.workItemId);
         const replyThread = replyLocalThreadId
           ? await tx.emailThread.findUnique({
               where: { id: replyLocalThreadId },
@@ -1080,6 +1113,8 @@ export function createCommunicationJobHandlers(
     "gmail.send": send,
     "gmail.renew": renew,
     "system.email": systemEmail,
+    [agentInvitationEmailTopic]: (payload: unknown) =>
+      sendQueuedAgentInvitation(service, payload),
   };
 }
 import { createHash, randomUUID } from "node:crypto";

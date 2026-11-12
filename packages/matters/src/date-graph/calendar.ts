@@ -76,6 +76,45 @@ function instantForLocalTime(
   return new Date(candidate).toISOString();
 }
 
+export function localDeadlineClock(
+  instant: string | null | undefined,
+  timeZone: string | null,
+) {
+  const calendar = deadlineCalendar(timeZone);
+  return instant && calendar
+    ? (localDateTime(Date.parse(instant), calendar)?.slice(11) ?? "")
+    : "";
+}
+
+export function dateValueAtLocalTime(
+  date: string,
+  time: string,
+  timeZone: string | null,
+): DateValue {
+  if (!civilDateSchema.safeParse(date).success)
+    throw new ChecklistDateError("INVALID_DATE", "Enter a valid date.");
+  if (!time) return { date, instant: null };
+  const calendar = deadlineCalendar(timeZone);
+  if (!calendar)
+    throw new ChecklistDateError(
+      "INVALID_DATE",
+      "Set the file's deadline timezone before entering an exact time.",
+    );
+  const clock = /^(\d{2}:\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/.exec(time);
+  const instant = clock
+    ? instantForLocalTime(
+        `${date}T${clock[1]}:${clock[2] ?? "00"}.${(clock[3] ?? "").padEnd(3, "0")}`,
+        calendar,
+      )
+    : null;
+  if (!instant)
+    throw new ChecklistDateError(
+      "INVALID_DATE",
+      "Choose a time that occurs once on this date in the file's timezone.",
+    );
+  return { date, instant };
+}
+
 export function validateDateValue(
   value: DateValue | null,
   calendar: Intl.DateTimeFormat | null,

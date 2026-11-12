@@ -10,6 +10,7 @@ import { matterChanged } from "../change-hook";
 import { resolveDateFollowup } from "./date-followup";
 import { projectDeadlineFields } from "../projections/deadline-fields";
 import { projectTaskFields } from "../projections/task-fields";
+import { updateVersionedChecklistTask } from "../checklist/task-commands";
 
 export async function updateChild(
   actor: Principal,
@@ -63,11 +64,17 @@ export async function updateChild(
               visibility: z.enum(["coordinator", "agent", "client"]).optional(),
             })
             .strict();
-  const { expectedRevision, ...data } = schema
-    .extend({ expectedRevision: revision })
-    .parse(input);
   return prisma.$transaction(async (tx) => {
-    await requireMatter(actor, matterId, true, tx);
+    const matter = await requireMatter(actor, matterId, true, tx);
+    if (matter.checklistVersion !== null) {
+      if (kind === "task")
+        return updateVersionedChecklistTask(tx, actor, matter, id, input, remove);
+      if (kind === "deadline")
+        throw new HttpError(409, "DATE_PREVIEW_REQUIRED", "Change due dates on the checklist.");
+    }
+    const { expectedRevision, ...data } = schema
+      .extend({ expectedRevision: revision })
+      .parse(input);
     if (
       kind === "deadline" &&
       "sourceDocumentId" in data &&

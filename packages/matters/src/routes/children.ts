@@ -3,6 +3,10 @@ import { addTask, reorderTasks } from "../commands/tasks";
 import { addNote } from "../commands/notes";
 import { addDeadline } from "../commands/deadlines";
 import { updateChild } from "../commands/update-child";
+import {
+  applyMatterChecklistDates,
+  previewMatterChecklistDates,
+} from "../checklist/date-commands";
 import type { Router } from "express";
 
 export const reorderTasksHandler = asyncHandler(async (req, res) => {
@@ -10,6 +14,30 @@ export const reorderTasksHandler = asyncHandler(async (req, res) => {
 });
 
 export function registerChildRoutes(router: Router) {
+  router.post(
+    "/:id/checklist/dates/preview",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await previewMatterChecklistDates(
+          principal(req),
+          String(req.params.id),
+          req.body,
+        ),
+      ),
+    ),
+  );
+  router.post(
+    "/:id/checklist/dates/apply",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await applyMatterChecklistDates(
+          principal(req),
+          String(req.params.id),
+          req.body,
+        ),
+      ),
+    ),
+  );
   for (const kind of ["tasks", "deadlines", "notes"] as const) {
     const one =
       kind === "tasks" ? "task" : kind === "notes" ? "note" : "deadline";

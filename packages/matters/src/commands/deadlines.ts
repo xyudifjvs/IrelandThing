@@ -15,6 +15,8 @@ export async function addDeadline(
   const { visibility, details, ...data } = deadlineInput.parse(input);
   return prisma.$transaction(async (tx) => {
     const matter = await requireMatter(actor, matterId, true, tx);
+    if (matter.checklistVersion !== null)
+      throw new HttpError(409, "DATE_PREVIEW_REQUIRED", "Change due dates on the checklist.");
     if (
       data.sourceDocumentId &&
       !(await tx.document.findFirst({

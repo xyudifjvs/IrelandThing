@@ -12,6 +12,7 @@ import {
 } from "../../_components/transaction-controls";
 
 import { DeadlineEditor } from "./LegacyDeadlineEditor";
+import { hasVersionedChecklist } from "./canonical-checklist-model";
 
 export function LegacyDatesPanel({
   matter: m,
@@ -26,6 +27,7 @@ export function LegacyDatesPanel({
   act: TransactionAction;
   setNotice: (notice: string) => void;
 }) {
+  if (hasVersionedChecklist(m)) return null;
   return (
     <section className={s.section}>
       <div className={s.sectionHead}>

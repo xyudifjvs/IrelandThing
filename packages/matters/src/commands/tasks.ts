@@ -7,6 +7,8 @@ import { projectTaskFields } from "../projections/task-fields";
 import { z } from "zod";
 import { revision } from "../validation/common";
 import { updateChild } from "./update-child";
+import { addVersionedChecklistTask } from "../checklist/task-commands";
+import { requireEditableChecklist } from "../checklist/persistence";
 
 export async function addTask(
   actor: Principal,
@@ -14,9 +16,11 @@ export async function addTask(
   input: unknown,
 ) {
   assertCoordinator(actor);
-  const { note, appointmentAt, ...data } = taskInput.parse(input);
   return prisma.$transaction(async (tx) => {
-    await requireMatter(actor, matterId, true, tx);
+    const matter = await requireMatter(actor, matterId, true, tx);
+    if (matter.checklistVersion !== null)
+      return addVersionedChecklistTask(tx, actor, matter, input);
+    const { note, appointmentAt, ...data } = taskInput.parse(input);
     const last = await tx.task.aggregate({
       where: { matterId },
       _max: { position: true },
@@ -58,8 +62,11 @@ export async function reorderTasks(
     .strict()
     .parse(input);
   return prisma.$transaction(async (tx) => {
-    await requireMatter(actor, matterId, true, tx);
-    const tasks = await tx.task.findMany({ where: { matterId } });
+    const matter = await requireMatter(actor, matterId, true, tx);
+    if (matter.checklistVersion !== null) requireEditableChecklist(matter);
+    const tasks = await tx.task.findMany({
+      where: { matterId, ...(matter.checklistVersion !== null ? { stepKey: { not: null } } : {}) },
+    });
     const ids = new Set(data.taskIds);
     if (
       ids.size !== data.taskIds.length ||

@@ -15,6 +15,8 @@ import {
   BusyForm,
   type TransactionAction,
 } from "../../_components/transaction-controls";
+import { CanonicalChecklistPanel } from "./CanonicalChecklistPanel";
+import { hasVersionedChecklist } from "./canonical-checklist-model";
 
 export function useChecklistDraft() {
   const [task, setTask] = useState("");
@@ -52,6 +54,8 @@ export function TransactionChecklistPanel({
   act: TransactionAction;
   draft: ReturnType<typeof useChecklistDraft>;
 }) {
+  if (hasVersionedChecklist(m))
+    return <CanonicalChecklistPanel matter={m} busy={!!busy} act={act} />;
   const {
     task,
     setTask,

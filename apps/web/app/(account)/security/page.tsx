@@ -5,13 +5,13 @@ import { api } from "@weatherly/ui";
 import s from "../login/login.module.css";
 import { safeAuthorizationReturn } from "../_components/navigation";
 export default function Page() {
-  const [returnTo, setReturnTo] = useState("/workspace");
+  const [returnTo, setReturnTo] = useState("/account");
   useEffect(() => {
     setReturnTo(
       safeAuthorizationReturn(
         new URLSearchParams(window.location.search).get("next"),
         window.location.origin,
-      ) || "/workspace",
+      ) || "/account",
     );
   }, []);
   const [setup, setSetup] = useState<{
@@ -60,7 +60,7 @@ export default function Page() {
           )}
           {done ? (
             <Link className={s.button} href={returnTo}>
-              Continue to workspace
+              Continue
             </Link>
           ) : !setup ? (
             <form

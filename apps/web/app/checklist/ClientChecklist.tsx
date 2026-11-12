@@ -1,45 +1,26 @@
 "use client";
+
 import { useEffect, useState } from "react";
-import { Circle, CircleCheck, LockKeyhole } from "lucide-react";
-import { LiveStatus, useLiveData } from "../_components/useLiveData";
-import s from "./checklist.module.css";
-import {appointment} from "../(workspace)/workspace/_components/data";
-type Checklist = {
-  matter: { id: string; title: string; propertyAddress: string; stage: string };
-  tasks: {
-    id: string;
-    title: string;
-    status: string;
-    dueDate: string | null;
-    position: number;
-    note?:string;
-    appointmentAt?:string|null;
-  }[];
-  clientRequests?: {
-    note?:string;
-    appointmentAt?:string|null;
-    id: string;
-    title: string;
-    status: string;
-    dueDate: string | null;
-    position: number;
-  }[];
+import { useLiveData } from "../_components/useLiveData";
+import { ClientFile, ClientHeader } from "../(portal)/portal/_views/ClientFile";
+import { ClientFooter } from "../(portal)/portal/_views/PortalBrand";
+import type {
+  PortalDocument,
+  PortalFile,
+  PortalPerson,
+  PortalTask,
+} from "../(portal)/portal/_views/portal-model";
+import s from "../(portal)/portal/_components/portal.module.css";
+
+type SharedChecklist = {
+  matter: PortalFile;
+  tasks: PortalTask[];
+  clientRequests?: { id: string }[];
   deadlines: { id: string; label: string; date: string | null }[];
+  documents?: PortalDocument[];
+  people?: PortalPerson[];
 };
-function label(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-function date(value: string | null) {
-  return value
-    ? new Date(
-        value.length === 10 ? `${value}T12:00:00` : value,
-      ).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "Date to be confirmed";
-}
+
 export default function ClientChecklist() {
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
@@ -53,153 +34,62 @@ export default function ClientChecklist() {
     window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
   }, []);
-  const q = useLiveData<Checklist>(
+  const query = useLiveData<SharedChecklist>(
     token ? "/api/public/checklist" : null,
     token || undefined,
   );
-  const data = q.data;
-  const complete =
-    data?.tasks.filter((task) =>
-      ["completed", "signed", "not_applicable"].includes(task.status),
-    ).length || 0;
+  const data = query.data;
+  const requests = new Set(data?.clientRequests?.map(({ id }) => id));
   return (
-    <div className={s.page}>
-      <header className={s.brand}>
-        <span>WEATHERLY</span>
-        <small>TRANSACTION CO.</small>
-      </header>
-      <main id="main-content" className={s.main} tabIndex={-1}>
-        <p className={s.eyebrow}>Your transaction · live checklist</p>
-        {!data ? (
-          <section className={s.card}>
-            <h1>
-              {token === ""
-                ? "This link is incomplete"
-                : q.loading || token === null
-                  ? "Opening your checklist…"
-                  : "Checklist unavailable"}
-            </h1>
-            <p>
-              {token === ""
-                ? "Use the complete link provided by your agent or coordinator, including everything after the # sign."
-                : "Only the latest confirmed information is shown here. If this link has been replaced or revoked, ask your agent or coordinator for a current link."}
-            </p>
-            {token && <LiveStatus query={q} />}
-          </section>
+    <div className={`weatherly-theme ${s.page}`}>
+      <ClientHeader side={data?.matter.side} />
+      <main id="main-content" tabIndex={-1}>
+        {data && token ? (
+          <ClientFile
+            key={token}
+            bearer={token}
+            file={{
+              ...data.matter,
+              tasks: data.tasks.filter(({ id }) => !requests.has(id)),
+              deadlines: data.deadlines.map((deadline) => ({
+                ...deadline,
+                status: "confirmed",
+              })),
+              documents: data.documents,
+              people: data.people,
+            }}
+          />
         ) : (
-          <>
-            <h1>{data.matter.title || data.matter.propertyAddress}</h1>
-            {data.matter.propertyAddress !== data.matter.title && (
-              <p className={s.address}>{data.matter.propertyAddress}</p>
-            )}
-            <div className={s.meta}>
-              <span>{label(data.matter.stage)}</span>
-              <span>
-                {complete} of {data.tasks.length} steps complete
-              </span>
-            </div>
-            <LiveStatus query={q} />
-            <section className={s.card} aria-label="What we need from you">
-              <h2>What we need from you</h2>
-              <p className={s.hint}>Instructions from Ireland. This view is read-only.</p>
-              {(data.clientRequests || []).filter(
-                (task) =>
-                  !["completed", "signed", "not_applicable"].includes(
-                    task.status,
-                  ),
-              ).length ? (
-                <ol className={s.tasks}>
-                  {(data.clientRequests || [])
-                    .filter(
-                      (task) =>
-                        !["completed", "signed", "not_applicable"].includes(
-                          task.status,
-                        ),
-                    )
-                    .map((task) => (
-                      <li key={task.id}>
-                        <Circle aria-hidden="true" />
-                        <div>
-                          <strong>{task.title}</strong>
-                          {task.note&&<p>{task.note}</p>}
-                          {task.appointmentAt&&<small>{appointment(task.appointmentAt)}</small>}
-                          <small>
-                            {task.dueDate
-                              ? date(task.dueDate)
-                              : "Ireland will confirm any due date"}
-                          </small>
-                        </div>
-                      </li>
-                    ))}
-                </ol>
-              ) : (
-                <p>Nothing requested right now.</p>
+          <div className={`${s.clientWidth} ${s.clientFile}`}>
+            <section className={s.panel}>
+              <h1>
+                {token === ""
+                  ? "This link is incomplete"
+                  : query.loading || token === null
+                    ? "Opening your timeline…"
+                    : "This link is unavailable"}
+              </h1>
+              {token === "" && (
+                <p>
+                  Open the complete link provided by your agent or coordinator.
+                </p>
               )}
-              <p className={s.hint}>
-                Ireland updates completion as your transaction moves forward.
-              </p>
-            </section>
-            <section className={s.card} aria-label="Client checklist">
-              <h2>Transaction milestones</h2>
-              <p className={s.hint}>
-                Ireland updates these steps as your transaction moves forward.
-              </p>
-              {data.tasks.length ? (
-                <ol className={s.tasks}>
-                  {data.tasks.map((task) => {
-                    const done = [
-                      "completed",
-                      "signed",
-                      "not_applicable",
-                    ].includes(task.status);
-                    return (
-                      <li key={task.id}>
-                        {done ? (
-                          <CircleCheck
-                            aria-label="Complete"
-                            className={s.done}
-                          />
-                        ) : (
-                          <Circle aria-hidden="true" />
-                        )}
-                        <div>
-                          <strong>{task.title}</strong>
-                          {task.note&&<p>{task.note}</p>}
-                          {task.appointmentAt&&<small>{appointment(task.appointmentAt)}</small>}
-                          <small>
-                            {label(task.status)}
-                            {task.dueDate ? ` · ${date(task.dueDate)}` : ""}
-                          </small>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
-              ) : (
-                <p>No checklist steps have been shared yet.</p>
+              {query.error && (
+                <>
+                  <p>Ask your agent or coordinator for the current link.</p>
+                  <button
+                    className={s.secondary}
+                    type="button"
+                    onClick={() => void query.refresh()}
+                  >
+                    Try again
+                  </button>
+                </>
               )}
             </section>
-            <section className={s.card} aria-label="Confirmed dates">
-              <h2>Confirmed dates</h2>
-              {data.deadlines.length ? (
-                <dl className={s.dates}>
-                  {data.deadlines.map((deadline) => (
-                    <div key={deadline.id}>
-                      <dt>{deadline.label}</dt>
-                      <dd>{date(deadline.date)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p>Confirmed contract dates will appear here after review.</p>
-              )}
-            </section>
-          </>
+            <ClientFooter />
+          </div>
         )}
-        <p className={s.footer}>
-          <LockKeyhole size={13} aria-hidden="true" /> Read-only checklist. Keep
-          this link with the people involved in your transaction.
-        </p>
       </main>
     </div>
   );

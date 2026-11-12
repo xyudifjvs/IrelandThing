@@ -535,3 +535,115 @@
     grid-template-columns: 1fr;
   }
 }
+
+.page {
+  background: var(--weatherly-color-background);
+  color: var(--weatherly-color-text);
+}
+
+.header {
+  background: var(--weatherly-color-dark);
+  border-color: var(--weatherly-color-dark);
+  color: var(--weatherly-color-on-dark);
+}
+
+.headerInner {
+  min-height: 76px;
+  padding-block: 12px;
+}
+
+.header .back {
+  color: inherit;
+}
+
+.header .back:focus-visible {
+  outline-color: var(--weatherly-color-on-dark);
+}
+
+.intro h1,
+.sectionHeader h2 {
+  color: var(--weatherly-color-text);
+}
+
+.section {
+  background: var(--weatherly-color-surface);
+  border-color: var(--weatherly-color-border);
+  border-radius: var(--weatherly-radius-panel);
+}
+
+.sectionNav a,
+.input,
+.button,
+.secondary {
+  border-radius: var(--weatherly-radius-control);
+}
+
+.sectionNav a:first-child,
+.button {
+  background: var(--weatherly-color-accent);
+  border-color: var(--weatherly-color-accent);
+  color: var(--weatherly-color-surface);
+}
+
+.profileFields {
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.profileFields input {
+  width: 100%;
+}
+
+.passwordDetails {
+  margin-top: 18px;
+}
+
+.passwordDetails summary {
+  cursor: pointer;
+  padding-bottom: 12px;
+  color: var(--weatherly-color-accent);
+  font-weight: 600;
+}
+
+.obligations {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.obligations li {
+  padding-block: 10px;
+  border-bottom: 1px solid var(--weatherly-color-border);
+}
+
+.obligations li:first-child {
+  padding-top: 0;
+}
+
+.obligations li:last-child {
+  border-bottom: 0;
+}
+
+.obligations a {
+  color: var(--weatherly-color-accent);
+  font-weight: 600;
+}
+
+.obligation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: var(--weatherly-type-detail);
+}
+
+@media (max-width: 480px) {
+  .obligation {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

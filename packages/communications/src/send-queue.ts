@@ -47,8 +47,7 @@ export async function queueSend(
   return prisma.$transaction(async (tx) => {
     const matter = await requireMatter(actor, old.matterId, true, tx);
     assertReviewedMatter(matter);
-    if (matter.checklistVersion !== null)
-      await requireEmailWorkFile(tx, actor, matter.id);
+    await requireEmailWorkFile(tx, actor, matter.id);
     const details = asRecord(old.details);
     if (details.templateNeedsRebind === true)
       throw new HttpError(

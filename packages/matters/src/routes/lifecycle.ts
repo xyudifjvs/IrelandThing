@@ -12,9 +12,14 @@ export const createMatterHandler = asyncHandler(async (req, res) =>
   res.status(201).json(await createMatter(principal(req), req.body)),
 );
 
-export const updateMatterHandler = asyncHandler(async (req, res) =>
-  res.json(await updateMatter(principal(req), String(req.params.id), req.body)),
-);
+export const updateMatterHandler = (explicitLifecycle: boolean) =>
+  asyncHandler(async (req, res) =>
+    res.json(
+      await updateMatter(principal(req), String(req.params.id), req.body, {
+        explicitLifecycle,
+      }),
+    ),
+  );
 
 export function registerFileLifecycleRoutes(
   router: Router,

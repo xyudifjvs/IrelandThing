@@ -132,10 +132,7 @@ async function dispatchGmail(
   ) => {
     const currentMatter = await requireMatter(actor, draft.matterId, lock, db);
     assertReviewedMatter(currentMatter);
-    if (
-      currentMatter.checklistVersion !== null &&
-      !["under_contract", "closing", "listing"].includes(currentMatter.stage)
-    )
+    if (!["under_contract", "closing", "listing"].includes(currentMatter.stage))
       throw new HttpError(
         409,
         "EMAIL_FILE_READ_ONLY",

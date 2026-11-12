@@ -53,7 +53,10 @@ const beforeIntakeDelete: BeforeIntakeDelete = async (tx, actor, source) => {
 };
 
 export function mountFileWorkspace(app: Express) {
-  const matters = createMattersRouter(fileLifecycle);
+  const matters = createMattersRouter({
+    effects: fileLifecycle,
+    canonicalCreation: true,
+  });
   matters.patch(
     "/:id/business",
     asyncHandler(async (req, res) =>
@@ -69,7 +72,10 @@ export function mountFileWorkspace(app: Express) {
   app.use("/api/v1/matters", matters);
   app.use(
     ["/api/v1/intakes", "/api/v1/intake"],
-    createIntakeRouter(beforeIntakeDelete),
+    createIntakeRouter({
+      beforeDelete: beforeIntakeDelete,
+      canonicalCreation: true,
+    }),
   );
   app.use("/api/v1/portfolio", createPortfolioRouter({ listEmailWork }));
   app.use(

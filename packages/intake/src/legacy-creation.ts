@@ -11,6 +11,7 @@ import { audit, requireMatter } from "@weatherly/matters";
 export async function createTransactionFromIntake(
   actor: Principal,
   id: string,
+  options: { resumeOnly?: boolean } = {},
 ) {
   assertCoordinator(actor);
   return prisma.$transaction(async (tx) => {
@@ -36,6 +37,8 @@ export async function createTransactionFromIntake(
       );
     if (submission.processedAt)
       return { submission, matter, alreadyCreated: true };
+    if (options.resumeOnly)
+      throw new HttpError(409, "CREATION_REVIEW_REQUIRED", "Open the intake in the transaction creation review.");
     const previous = matter.details as Record<string, Prisma.InputJsonValue>;
     const contacts = Array.isArray(previous.contacts)
       ? [...previous.contacts]

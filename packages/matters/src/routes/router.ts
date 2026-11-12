@@ -7,10 +7,15 @@ import {
   asyncHandler,
   principal,
   assertCoordinator,
+  HttpError,
 } from "@weatherly/platform";
 import { requireMatter } from "../access";
 import { prisma } from "@weatherly/db";
-import { getFileReviewHandler, confirmFileHandler } from "./file-review";
+import {
+  getFileReviewHandler,
+  confirmFileHandler,
+  guardLegacyFileReview,
+} from "./file-review";
 import {
   createMatterHandler,
   registerFileLifecycleRoutes,
@@ -25,19 +30,38 @@ import {
 } from "./participants";
 import { reorderTasksHandler, registerChildRoutes } from "./children";
 
-export function createMattersRouter(effects?: FileLifecycleEffects) {
+export function createMattersRouter({
+  effects,
+  canonicalCreation = false,
+}: {
+  effects?: FileLifecycleEffects;
+  canonicalCreation?: boolean;
+} = {}) {
   const router = Router();
   router.use(checklistPrivacyHeaders);
-  router.get("/:id/file-review", getFileReviewHandler);
-  router.post("/:id/confirm-file", confirmFileHandler);
+  const reviewGuard = canonicalCreation ? [guardLegacyFileReview] : [];
+  router.get("/:id/file-review", ...reviewGuard, getFileReviewHandler);
+  router.post("/:id/confirm-file", ...reviewGuard, confirmFileHandler);
   registerChecklistShareRoutes(router);
   registerMatterPeopleRoutes(router);
   if (effects) registerFileLifecycleRoutes(router, effects);
   router.post("/:id/tasks/reorder", reorderTasksHandler);
   router.get("/", listMattersHandler);
-  router.post("/", createMatterHandler);
+  router.post(
+    "/",
+    canonicalCreation
+      ? asyncHandler(async (req) => {
+          assertCoordinator(principal(req));
+          throw new HttpError(
+            409,
+            "CREATION_REVIEW_REQUIRED",
+            "Open a transaction creation review before creating a file.",
+          );
+        })
+      : createMatterHandler,
+  );
   router.get("/:id", getMatterHandler);
-  router.patch("/:id", updateMatterHandler);
+  router.patch("/:id", updateMatterHandler(Boolean(effects)));
   registerChildRoutes(router);
   router.post("/:id/participants", grantParticipantHandler);
   router.delete("/:id/participants/:participantId", revokeParticipantHandler);

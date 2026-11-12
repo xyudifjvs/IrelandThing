@@ -1,4 +1,4 @@
-import { Review } from "../_components/Operations";
+import { redirect } from "next/navigation";
 export default function Page() {
-  return <Review />;
+  redirect("/workspace");
 }

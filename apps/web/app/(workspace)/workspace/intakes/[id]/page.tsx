@@ -38,7 +38,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         {intake.processedAt ? (
           <Link
             className={s.button}
-            href={`/workspace/transactions/${intake.matterId}/setup`}
+            href={`/workspace/transactions/${intake.matterId}`}
           >
             Open transaction & date review
           </Link>

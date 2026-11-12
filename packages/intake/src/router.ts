@@ -8,7 +8,10 @@ import { createTransactionFromIntake } from "./legacy-creation";
 import { deleteIntake, type BeforeIntakeDelete } from "./delete-intake";
 import { draftFor, permitted, saveIntakeDraft, submitIntake } from "./submission";
 
-export function createIntakeRouter(beforeDelete?: BeforeIntakeDelete) {
+export function createIntakeRouter({ beforeDelete, canonicalCreation = false }: {
+  beforeDelete?: BeforeIntakeDelete;
+  canonicalCreation?: boolean;
+} = {}) {
   const r = Router();
   if (beforeDelete)
     r.delete(
@@ -26,7 +29,7 @@ export function createIntakeRouter(beforeDelete?: BeforeIntakeDelete) {
   }));
   r.get("/submissions", asyncHandler(async (req, res) => res.json(await listIntakeSubmissions(principal(req), req.query))));
   r.get("/submissions/:id", asyncHandler(async (req, res) => res.json(await getIntakeSubmission(principal(req), String(req.params.id)))));
-  r.post("/submissions/:id/create-transaction", asyncHandler(async (req, res) => res.json(await createTransactionFromIntake(principal(req), String(req.params.id)))));
+  r.post("/submissions/:id/create-transaction", asyncHandler(async (req, res) => res.json(await createTransactionFromIntake(principal(req), String(req.params.id), { resumeOnly: canonicalCreation }))));
 
   r.get(
     "/drafts",

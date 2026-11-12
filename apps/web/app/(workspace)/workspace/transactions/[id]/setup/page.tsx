@@ -1,6 +1,7 @@
 "use client";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useData,
   mutate,
@@ -20,11 +21,48 @@ type Contract = {
 };
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  return <Setup key={id} id={id} />;
+  return <SetupRoute key={id} id={id} />;
 }
-function Setup({ id }: { id: string }) {
-  const matter = useData<Matter>(`/api/v1/matters/${id}`),
-    session = useData<Session>("/api/v1/session");
+function SetupRoute({ id }: { id: string }) {
+  const router = useRouter();
+  const matter = useData<Matter & { checklistVersion?: number | null }>(
+    `/api/v1/matters/${id}`,
+  );
+  const legacyPending =
+    matter.data?.stage === "pending_review" &&
+    matter.data.checklistVersion == null;
+  const intake = useData<{ id: string; processedAt: string | null } | null>(
+    legacyPending ? `/api/v1/creation-reviews/matter/${id}/intake` : null,
+  );
+  const destination =
+    matter.data && !legacyPending
+      ? `/workspace/transactions/${id}`
+      : intake.data && !intake.data.processedAt
+        ? `/workspace/intakes/${intake.data.id}`
+        : null;
+  useEffect(() => {
+    if (destination) router.replace(destination);
+  }, [destination, router]);
+  if (destination || matter.loading || (legacyPending && intake.loading))
+    return <p role="status">Opening transaction…</p>;
+  const error = matter.error || intake.error;
+  if (error || !matter.data)
+    return (
+      <p role="alert" className={s.error}>
+        {error || "Transaction unavailable."}
+      </p>
+    );
+  return <Setup id={id} matter={matter} />;
+}
+
+function Setup({
+  id,
+  matter,
+}: {
+  id: string;
+  matter: ReturnType<typeof useData<Matter>>;
+}) {
+  const session = useData<Session>("/api/v1/session");
   const docs = useData<Contract[]>(`/api/v1/documents?matterId=${id}`);
   const [selected, setSelected] = useState(""),
     [busy, setBusy] = useState(false),

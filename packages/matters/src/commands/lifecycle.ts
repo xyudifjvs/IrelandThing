@@ -68,6 +68,7 @@ export async function updateMatter(
   actor: Principal,
   id: string,
   input: unknown,
+  options: { explicitLifecycle?: boolean } = {},
 ) {
   assertCoordinator(actor);
   const data = z
@@ -93,7 +94,7 @@ export async function updateMatter(
       archived: [],
     };
     const changesStage = data.stage !== undefined && data.stage !== old.stage;
-    if (old.checklistVersion !== null) {
+    if (old.checklistVersion !== null || options.explicitLifecycle) {
       const terminal = ["closed", "terminated", "archived"];
       if (
         terminal.includes(old.stage) ||

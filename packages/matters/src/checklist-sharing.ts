@@ -28,6 +28,7 @@ import {
   portalDocumentSelect,
 } from "./projections/document-audience";
 import { peopleAudienceWhere, portalPersonSelect } from "./people/projection";
+import { portalClosedDate, portalDocument } from "./projections/portal-fields";
 
 /** Apply before authentication/rate limiting as well when mounting these routes. */
 export const checklistPrivacyHeaders: RequestHandler = (_req, res, next) => {
@@ -327,6 +328,7 @@ export async function getPublicChecklist(token: string) {
               status: true,
               dueDate: true,
               dueAt: true,
+              actualDate: true,
               stepKey: true,
               kind: true,
               visibility: true,
@@ -345,7 +347,7 @@ export async function getPublicChecklist(token: string) {
           },
           documents: {
             where: documentAudienceWhere("client"),
-            select: portalDocumentSelect,
+            select: { ...portalDocumentSelect, shareWithClient: true },
             orderBy: { createdAt: "desc" },
           },
           contacts: {
@@ -366,18 +368,27 @@ export async function getPublicChecklist(token: string) {
         contacts,
         ...summary
       } = matter;
+      const portalMatter = {
+        ...summary,
+        side,
+        closedOn: portalClosedDate(matter, tasks),
+      };
       if (checklistVersion !== null)
         return {
-          matter: { ...summary, side },
+          matter: portalMatter,
           tasks: canonicalPortalTimeline(tasks, "client"),
           clientRequests: [],
           deadlines: [],
-          documents,
+          documents: documents.map(portalDocument),
           people: contacts,
         };
       const dates = deadlineProjection(deadlines, tasks, details, "client");
       const approvedTasks = approvedWorkflowTaskDates(tasks, deadlines, details)
-        .filter((task) => audienceAllows(task.visibility, "client"))
+        .filter(
+          (task) =>
+            task.status !== "not_applicable" &&
+            audienceAllows(task.visibility, "client"),
+        )
         .map(dates.task);
       const sharedTasks = approvedTasks.map(
         (
@@ -386,6 +397,7 @@ export async function getPublicChecklist(token: string) {
             visibility: _visibility,
             details: _details,
             dueAt: _dueAt,
+            actualDate: _actualDate,
             stepKey: _key,
             ...task
           },
@@ -402,7 +414,7 @@ export async function getPublicChecklist(token: string) {
       );
       // Do not expose gaps from private tasks in the canonical ordering.
       return {
-        matter: summary,
+        matter: portalMatter,
         tasks: sharedTasks,
         clientRequests: sharedTasks.filter((task) => requestIds.has(task.id)),
         deadlines: dates.deadlines
@@ -410,6 +422,10 @@ export async function getPublicChecklist(token: string) {
             (deadline) => deadline.status === "confirmed" && deadline.date,
           )
           .map(({ id, label, date }) => ({ id, label, date })),
+        documents: documents
+          .filter(({ shareWithClient }) => shareWithClient === true)
+          .map(portalDocument),
+        people: contacts,
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
@@ -447,6 +463,7 @@ async function publicDocumentVersion(token: string, documentId: string) {
         select: {
           name: true,
           mimeType: true,
+          shareWithClient: true,
           matter: {
             select: { stage: true, details: true, checklistVersion: true },
           },
@@ -464,7 +481,8 @@ async function publicDocumentVersion(token: string, documentId: string) {
       });
       if (
         !document?.matter ||
-        document.matter.checklistVersion === null ||
+        (document.matter.checklistVersion === null &&
+          document.shareWithClient !== true) ||
         fileReviewPending(document.matter)
       )
         throw unavailable();

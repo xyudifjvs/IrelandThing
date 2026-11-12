@@ -9,6 +9,12 @@ import { projectTaskFields, agentMatterDetails } from "./task-fields";
 import { canonicalPortalTimeline } from "./canonical-timeline";
 import { documentAudienceWhere } from "./document-audience";
 import { peopleAudienceWhere, portalPersonSelect } from "../people/projection";
+import {
+  portalClientNames,
+  portalClientRoles,
+  portalClosedDate,
+  portalDocument,
+} from "./portal-fields";
 
 function portalMatterSummary(matter: Prisma.MatterGetPayload<object>) {
   const {
@@ -31,6 +37,14 @@ function portalMatterSummary(matter: Prisma.MatterGetPayload<object>) {
     createdAt,
     updatedAt,
   };
+}
+
+function legacyAgentTask<T extends { details: Prisma.JsonValue }>(
+  task: T,
+  position: number,
+) {
+  const { details: _, ...rest } = task;
+  return { ...rest, position };
 }
 
 export async function listMatters(
@@ -70,6 +84,22 @@ export async function listMatters(
               OR: [
                 { title: { contains: query.q, mode: "insensitive" } },
                 { propertyAddress: { contains: query.q, mode: "insensitive" } },
+                ...(actor.role === "agent"
+                  ? [
+                      {
+                        contacts: {
+                          some: {
+                            ...peopleAudienceWhere("agent"),
+                            role: { in: portalClientRoles },
+                            name: {
+                              contains: query.q,
+                              mode: "insensitive" as const,
+                            },
+                          },
+                        },
+                      },
+                    ]
+                  : []),
               ],
             }
           : {},
@@ -89,6 +119,14 @@ export async function listMatters(
         orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       },
       deadlines: true,
+      contacts:
+        actor.role === "agent"
+          ? {
+              where: peopleAudienceWhere("agent"),
+              select: portalPersonSelect,
+              orderBy: { createdAt: "asc" },
+            }
+          : false,
     },
   });
   const projected = rows.map((matter) => {
@@ -133,23 +171,25 @@ export async function listMatters(
           tasks:
             m.checklistVersion !== null
               ? canonicalPortalTimeline(m.tasks, "client")
-              : m.tasks.map(({ details: _, note: _note, ...t }, position) => ({
-                  ...t,
-                  position,
-                })),
+              : m.tasks
+                  .filter(({ status }) => status !== "not_applicable")
+                  .map(({ details: _, note: _note, ...t }, position) => ({
+                    ...t,
+                    position,
+                  })),
           deadlines: m.deadlines.map(
             ({ details: _, sourceDocumentId: __, ...d }) => d,
           ),
         }))
     : actor.role === "agent"
       ? projected.map((matter) => ({
-          ...(matter.checklistVersion !== null
-            ? {
-                ...portalMatterSummary(matter),
-                business: matter.business,
-                packageCode: matter.packageCode,
-              }
-            : matter),
+          ...portalMatterSummary(matter),
+          business: matter.business,
+          packageCode: matter.packageCode,
+          clientNames: fileReviewPending(matter)
+            ? []
+            : portalClientNames(matter.contacts),
+          closedOn: portalClosedDate(matter, matter.tasks),
           details:
             matter.checklistVersion !== null
               ? {}
@@ -157,10 +197,7 @@ export async function listMatters(
           tasks:
             matter.checklistVersion !== null
               ? canonicalPortalTimeline(matter.tasks, "agent")
-              : matter.tasks.map(({ details: _, ...task }, position) => ({
-                  ...task,
-                  position,
-                })),
+              : matter.tasks.map(legacyAgentTask),
           deadlines: matter.deadlines.map(
             ({ details: _, sourceDocumentId: __, ...deadline }) => deadline,
           ),
@@ -171,9 +208,9 @@ export async function listMatters(
 export async function getMatter(actor: Principal, id: string) {
   const v =
     actor.role === "coordinator" ? {} : documentAudienceWhere(actor.role);
-  const matter = await prisma.$transaction(
-    (tx) =>
-      tx.matter.findFirst({
+  const { matter, ownPendingIntake } = await prisma.$transaction(
+    async (tx) => {
+      const matter = await tx.matter.findFirst({
         where: { id, ...matterScope(actor) },
         include: {
           tasks: {
@@ -206,7 +243,19 @@ export async function getMatter(actor: Principal, id: string) {
             select: { id: true, userId: true, role: true },
           },
         },
-      }),
+      });
+      const ownPendingIntake =
+        actor.role === "agent" &&
+        matter &&
+        fileReviewPending(matter) &&
+        Boolean(
+          await tx.intakeSubmission.findFirst({
+            where: { matterId: matter.id, userId: actor.id, deletedAt: null },
+            select: { id: true },
+          }),
+        );
+      return { matter, ownPendingIntake: !!ownPendingIntake };
+    },
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
   );
   if (!matter || (actor.role === "client" && fileReviewPending(matter)))
@@ -222,6 +271,7 @@ export async function getMatter(actor: Principal, id: string) {
       };
     const summary = {
       ...portalMatterSummary(matter),
+      closedOn: portalClosedDate(matter, matter.tasks),
       tasks: canonicalPortalTimeline(matter.tasks, actor.role),
       deadlines: [],
       notes: [],
@@ -247,6 +297,7 @@ export async function getMatter(actor: Principal, id: string) {
           ...summary,
           business: matter.business,
           packageCode: matter.packageCode,
+          clientNames: portalClientNames(matter.contacts),
           details: {},
           participants: [],
         }
@@ -282,27 +333,40 @@ export async function getMatter(actor: Principal, id: string) {
       revision: matter.revision,
       createdAt: matter.createdAt,
       updatedAt: matter.updatedAt,
-      tasks: matter.tasks.map((task, position) => {
-        const { details: _, note: _note, ...t } = projectTaskFields(task);
-        return {
-          ...t,
-          position,
-        };
-      }),
+      closedOn: portalClosedDate(matter, matter.tasks),
+      tasks: matter.tasks
+        .filter(({ status }) => status !== "not_applicable")
+        .map((task, position) => {
+          const { details: _, note: _note, ...t } = projectTaskFields(task);
+          return {
+            ...t,
+            position,
+          };
+        }),
       deadlines: matter.deadlines
         .filter((d) => d.status === "confirmed")
         .map(({ details: _, sourceDocumentId: __, ...d }) => d),
       notes: [],
-      documents: matter.documents,
+      documents: matter.documents
+        .filter(({ shareWithClient }) => shareWithClient === true)
+        .map(portalDocument),
+      people: matter.contacts,
     };
   return actor.role === "agent"
     ? {
-        ...matter,
-        details: agentMatterDetails(matter.details),
-        tasks: matter.tasks.map(({ details: _, ...task }, position) => ({
-          ...task,
-          position,
-        })),
+        ...portalMatterSummary(matter),
+        business: matter.business,
+        packageCode: matter.packageCode,
+        details: agentMatterDetails(matter.details, ownPendingIntake),
+        clientNames: fileReviewPending(matter)
+          ? []
+          : portalClientNames(matter.contacts),
+        closedOn: portalClosedDate(matter, matter.tasks),
+        documents: matter.documents.map(portalDocument),
+        people: fileReviewPending(matter) ? [] : matter.contacts,
+        notes: [],
+        participants: [],
+        tasks: matter.tasks.map(legacyAgentTask),
         deadlines: matter.deadlines.map(
           ({ details: _, sourceDocumentId: __, ...deadline }) => deadline,
         ),

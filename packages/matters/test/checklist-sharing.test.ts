@@ -423,12 +423,16 @@ describe("canonical client checklist sharing", () => {
     expect(Object.keys(result).sort()).toEqual([
       "clientRequests",
       "deadlines",
+      "documents",
       "matter",
+      "people",
       "tasks",
     ]);
     expect(Object.keys(result.matter).sort()).toEqual([
+      "closedOn",
       "id",
       "propertyAddress",
+      "side",
       "stage",
       "title",
     ]);
@@ -478,6 +482,97 @@ describe("canonical client checklist sharing", () => {
     expect(JSON.stringify(result)).not.toContain("SECRET_");
     expect(JSON.stringify(result)).not.toContain("private-client");
     expect(JSON.stringify(result)).not.toContain(other.id);
+  });
+
+  it("shows only explicitly published legacy portal documents and approved client names", async () => {
+    const matter = await fixture();
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: {
+        stage: "closed",
+        details: {
+          closeOut: { at: "2026-11-11T15:00:00.000Z", byId: actors.owner.id },
+          clients: [{ name: "RAW-PRIVATE-NAME" }],
+        },
+      },
+    });
+    await prisma.matterContact.createMany({
+      data: [
+        {
+          matterId: matter.id,
+          name: "Synthetic Shared Client",
+          role: "client",
+          shareWithAgent: true,
+        },
+        { matterId: matter.id, name: "PRIVATE-CLIENT", role: "client" },
+        {
+          matterId: matter.id,
+          name: "Synthetic Client Team",
+          role: "title_rep",
+          shareWithClient: true,
+        },
+      ],
+    });
+    const bytes = Buffer.from("Published legacy document");
+    const doc = await prisma.document.create({
+      data: {
+        matterId: matter.id,
+        name: "Published legacy.pdf",
+        mimeType: "application/pdf",
+        createdById: actors.owner.id,
+        visibility: "coordinator",
+        shareWithClient: true,
+        shareWithAgent: false,
+        versions: {
+          create: {
+            objectKey: "synthetic/" + randomUUID(),
+            version: 1,
+            size: bytes.length,
+            checksum: createHash("sha256").update(bytes).digest("hex"),
+          },
+        },
+      },
+    });
+    const share = tokenFrom(
+      await createChecklistShare(actors.owner, matter.id),
+    );
+    const bearer = await getPublicChecklist(share);
+    expect(bearer).toMatchObject({
+      matter: { side: "buyer", closedOn: "2026-11-11T15:00:00.000Z" },
+      people: [{ name: "Synthetic Client Team" }],
+      documents: [{ id: doc.id }],
+    });
+    const client = await getMatter(actors.client, matter.id);
+    expect(client).toMatchObject({
+      people: bearer.people,
+      documents: bearer.documents,
+    });
+    const agent = (
+      await listMatters(actors.agent, { q: "Shared Client" })
+    ).find(({ id }) => id === matter.id);
+    expect(agent).toMatchObject({
+      clientNames: ["Synthetic Shared Client"],
+      closedOn: "2026-11-11T15:00:00.000Z",
+    });
+    expect(await listMatters(actors.agent, { q: "PRIVATE-CLIENT" })).toEqual(
+      [],
+    );
+    const detail = await getMatter(actors.agent, matter.id);
+    expect(JSON.stringify(detail)).not.toMatch(
+      /PRIVATE-CLIENT|RAW-PRIVATE-NAME|SECRET_NOTE|Published legacy\.pdf/,
+    );
+    expect(JSON.stringify(bearer)).not.toMatch(
+      /SECRET_DOCUMENT|RAW-PRIVATE-NAME|objectKey/,
+    );
+    const server = express().use(
+      "/public",
+      createPublicChecklistRouter(async () => bytes),
+    );
+    const download = await request(server)
+      .get(`/public/documents/${doc.id}/download`)
+      .set("Authorization", `Bearer ${share}`);
+    expect(download.status).toBe(200);
+    expect(download.body).toEqual(bytes);
   });
 
   it("uses one canonical milestone for four visibility combinations and safe short notes/appointments, with all ongoing writes restricted to Ireland", async () => {

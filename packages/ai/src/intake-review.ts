@@ -1,6 +1,7 @@
 import { prisma, Prisma } from "@weatherly/db";
 import { HttpError } from "@weatherly/platform";
 import { aiConfigured } from "./gateway";
+import { hasCanonicalReview } from "./legacy-review/compatibility";
 /** Durable source preparation only. The outbox worker owns approved inference;
  * this helper never calls a model, fetches Dotloop, or invents extracted values. */
 export async function prepareIntakeReview(
@@ -23,6 +24,8 @@ export async function prepareIntakeReview(
         "SUBMISSION_NOT_FOUND",
         "Source preparation requires the saved intake receipt.",
       );
+    if (await hasCanonicalReview(tx, matter))
+      return { matterId, submissionId, proposals: [] };
     const details = matter.details as Record<string, Prisma.JsonValue>;
     const reference = details.referenceIntake as
       | {
@@ -44,7 +47,7 @@ export async function prepareIntakeReview(
     const candidates = await tx.user.findMany({
       where: {
         role: "coordinator",
-        ...((requestedById || process.env.AI_REVIEW_OWNER_ID)
+        ...(requestedById || process.env.AI_REVIEW_OWNER_ID
           ? { id: requestedById || process.env.AI_REVIEW_OWNER_ID }
           : {}),
       },

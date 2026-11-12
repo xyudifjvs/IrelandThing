@@ -3,13 +3,20 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@weatherly/db";
 import { type Principal } from "@weatherly/platform";
 import { createMatter } from "@weatherly/matters";
-import { processReview, listReviews, approveReview } from "../src/service";
+import {
+  processReview,
+  listReviews,
+  approveReview,
+  requestReview,
+  resolveReviewConflicts,
+} from "../src/service";
 import { generateStructured } from "../src/gateway";
 const suffix = randomUUID(),
   users: string[] = [],
   matters: string[] = [],
   documents: string[] = [],
   proposals: string[] = [];
+const intakes: string[] = [];
 let calls = 0;
 let duringGeneration: (() => Promise<void>) | undefined;
 const statement = "Closing date is October 30, 2026.";
@@ -116,6 +123,8 @@ beforeAll(() => {
   process.env.OPENROUTER_ACCOUNT_PRIVACY_VERIFIED = "true";
 });
 afterAll(async () => {
+  await prisma.creationReview.deleteMany({ where: { ownerId: { in: users } } });
+  await prisma.intakeSubmission.deleteMany({ where: { id: { in: intakes } } });
   await prisma.aIProposal.deleteMany({ where: { id: { in: proposals } } });
   await prisma.document.deleteMany({ where: { id: { in: documents } } });
   await prisma.auditEvent.deleteMany({ where: { actorId: { in: users } } });
@@ -124,6 +133,79 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 describe("document AI worker checks current owner access", () => {
+  it("defers legacy extraction to an open canonical intake review before dispatch", async () => {
+    const f = await fixture();
+    const intake = await prisma.intakeSubmission.create({
+      data: {
+        draftId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        matterId: f.matter.id,
+        userId: f.actor.id,
+        snapshot: {},
+      },
+    });
+    intakes.push(intake.id);
+    await prisma.creationReview.create({
+      data: {
+        ownerId: f.actor.id,
+        intakeId: intake.id,
+        startRequestId: randomUUID(),
+      },
+    });
+    const before = calls;
+    await expect(
+      requestReview(f.actor, {
+        matterId: f.matter.id,
+        documentId: f.document.id,
+      }),
+    ).rejects.toMatchObject({ status: 409, code: "CANONICAL_REVIEW_REQUIRED" });
+    await processReview(f.proposal.id, { generate: fake });
+    expect(calls).toBe(before);
+    expect(
+      await prisma.aIProposal.findUniqueOrThrow({
+        where: { id: f.proposal.id },
+      }),
+    ).toMatchObject({
+      status: "failed",
+      result: { errorCode: "CANONICAL_REVIEW_REQUIRED" },
+    });
+  });
+
+  it("discards a legacy result if the canonical file is published during inference", async () => {
+    const f = await fixture();
+    duringGeneration = async () => {
+      await prisma.matter.update({
+        where: { id: f.matter.id },
+        data: { checklistVersion: 1 },
+      });
+    };
+    try {
+      await processReview(f.proposal.id, { generate: fake });
+    } finally {
+      duringGeneration = undefined;
+    }
+    expect(
+      await prisma.aIProposal.findUniqueOrThrow({
+        where: { id: f.proposal.id },
+      }),
+    ).toMatchObject({
+      status: "failed",
+      result: { errorCode: "CANONICAL_REVIEW_REQUIRED" },
+    });
+    await prisma.aIProposal.update({
+      where: { id: f.proposal.id },
+      data: { status: "pending" },
+    });
+    await expect(
+      resolveReviewConflicts(f.actor, f.proposal.id, {
+        expectedRevision: f.matter.revision,
+        conflictResolutions: [
+          { key: "closing", value: "2026-10-30", reason: "Synthetic decision" },
+        ],
+      }),
+    ).rejects.toMatchObject({ status: 409, code: "CANONICAL_REVIEW_REQUIRED" });
+  });
+
   it("denies a coordinator with a revoked-access audit before invoking the gateway", async () => {
     const f = await fixture(true);
     await prisma.auditEvent.create({

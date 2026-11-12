@@ -166,7 +166,7 @@ export async function readMatterIntake(actor: Principal, matterId: string) {
       where: { matterId, deletedAt: null },
       orderBy: { createdAt: "desc" },
     });
-    return intake ? intakeSummary(tx, intake) : null;
+    return intake ? { ...(await intakeSummary(tx, intake)), processedAt: intake.processedAt } : null;
   });
 }
 

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { remediesAnchorKey } from "../../../../../../../packages/matters/src/checklist/templates";
 import { mutate } from "../../_components/data";
 import type { TransactionAction } from "../../_components/transaction-controls";
@@ -13,6 +13,7 @@ import {
   isChecklistTask,
   isComplete,
   type ChecklistMatter,
+  type ChecklistTaskRecord,
 } from "./canonical-checklist-model";
 import s from "./canonical-checklist.module.css";
 
@@ -20,10 +21,14 @@ export function CanonicalChecklistPanel({
   matter,
   busy,
   act,
+  onComplete,
+  renderAfterStep,
 }: {
   matter: ChecklistMatter;
   busy: boolean;
   act: TransactionAction;
+  onComplete?: (stepKey: string) => void;
+  renderAfterStep?: (task: ChecklistTaskRecord) => ReactNode;
 }) {
   const [hideCompleted, setHideCompleted] = useState(false);
   const [dateDraft, setDateDraft] = useState<DateEditorDraft | null>(null);
@@ -45,6 +50,14 @@ export function CanonicalChecklistPanel({
     ? { date: matter.acceptanceDate, instant: matter.acceptanceAt }
     : null;
   const base = `/api/v1/matters/${matter.id}/tasks`;
+  // Applying an actual delivery date can itself complete the HOA step.
+  const actualKey =
+    dateDraft?.kind === "set" && dateDraft.target.kind === "actual"
+      ? dateDraft.target.key
+      : null;
+  const completingByDate = actualKey
+    ? tasks.find((task) => task.stepKey === actualKey && !isComplete(task))
+    : undefined;
 
   function addStep(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -121,15 +134,25 @@ export function CanonicalChecklistPanel({
           revision={matter.revision}
           timeZone={matter.deadlineTimeZone}
           labels={labels}
-          act={act}
+          act={
+            completingByDate && onComplete
+              ? (key, save) =>
+                  act(key, async () => {
+                    await save();
+                    onComplete(completingByDate.stepKey);
+                  })
+              : act
+          }
           busy={busy}
           onClose={() => setDateDraft(null)}
         />
       )}
       <ol className={s.steps}>
         {tasks.map((task, index) => {
+          const afterStep = renderAfterStep?.(task);
           if (
             hideCompleted &&
+            !afterStep &&
             (isComplete(task) || task.status === "not_applicable")
           )
             return null;
@@ -144,6 +167,8 @@ export function CanonicalChecklistPanel({
               readOnly={readOnly}
               act={act}
               editDate={setDateDraft}
+              onComplete={onComplete}
+              afterStep={afterStep}
               editRemedies={
                 task.stepKey === "inspections" && remediesDate !== undefined
                   ? () =>

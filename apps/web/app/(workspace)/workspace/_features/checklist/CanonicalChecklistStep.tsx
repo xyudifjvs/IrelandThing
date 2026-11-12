@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { appointment, mutate } from "../../_components/data";
 import type { TransactionAction } from "../../_components/transaction-controls";
 import type { DateEditorDraft } from "./ChecklistDateEditor";
@@ -28,6 +28,8 @@ export function CanonicalChecklistStep({
   editRemedies,
   moveUp,
   moveDown,
+  onComplete,
+  afterStep,
 }: {
   task: ChecklistTaskRecord;
   matterId: string;
@@ -40,6 +42,8 @@ export function CanonicalChecklistStep({
   editRemedies?: () => void;
   moveUp?: () => Promise<unknown>;
   moveDown?: () => Promise<unknown>;
+  onComplete?: (stepKey: string) => void;
+  afterStep?: ReactNode;
 }) {
   const [editor, setEditor] = useState<StepEditorKind | null>(null);
   const done = isComplete(task);
@@ -53,13 +57,14 @@ export function CanonicalChecklistStep({
   const rule = ruleText(task.dateRule, labels);
 
   function updateStatus(status: string) {
-    void act(task.id, () =>
-      mutate(
+    void act(task.id, async () => {
+      await mutate(
         `/api/v1/matters/${matterId}/tasks/${task.id}`,
         { expectedRevision: task.revision, status },
         "PATCH",
-      ),
-    );
+      );
+      if (status === "completed" && !done) onComplete?.(task.stepKey);
+    });
   }
 
   function openActual() {
@@ -248,6 +253,7 @@ export function CanonicalChecklistStep({
           onClose={() => setEditor(null)}
         />
       )}
+      {afterStep}
     </li>
   );
 }

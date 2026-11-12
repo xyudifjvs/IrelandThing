@@ -1,283 +1,334 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import {
-  useData,
-  mutate,
-  address,
-  label,
-  serviceName,
-  progress,
-  type Matter,
-  type Session,
-} from "../../_components/data";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, LockKeyhole } from "lucide-react";
 import InitialFileReview from "../../_components/InitialFileReview";
-import DocumentFiles from "../../_components/DocumentFiles";
-import SavedIntakeDetails from "../../../../_components/SavedIntakeDetails";
-import { LiveStatus, useLiveData } from "../../../../_components/useLiveData";
-import { useTransactionDocumentUploads } from "../../../../_components/useTransactionDocumentUploads";
-import {
-  TransactionChecklistPanel,
-  useChecklistDraft,
-} from "../checklist/TransactionChecklistPanel";
-import { LegacyDatesPanel } from "../checklist/LegacyDatesPanel";
-import { LegacyTransactionEmailPanel } from "../emails/LegacyTransactionEmailPanel";
-import { LegacyFileNotesPanel } from "../private-notes/LegacyFileNotesPanel";
-import { LegacyFilePeoplePanel } from "../people/LegacyFilePeoplePanel";
-import { LegacyBrokerPanel } from "./LegacyBrokerPanel";
+import { useData, type Session } from "../../_components/data";
+import type { TransactionAction } from "../../_components/transaction-controls";
 import s from "../../_components/workspace.module.css";
+import { useLiveData } from "../../../../_components/useLiveData";
+import {
+  useTransactionDocumentUploads,
+  type TransactionDocumentUploads,
+} from "../../../../_components/useTransactionDocumentUploads";
+import { TransactionIntake } from "../creation/TransactionIntake";
+import type { Review } from "../creation/review-model";
+import { FileDocumentsPanel } from "../documents/FileDocumentsPanel";
+import { FileEmailWorkspace } from "../emails/FileEmailWorkspace";
+import { FileChecklist } from "./FileChecklist";
+import { FileHeader } from "./FileHeader";
+import { FileSidebar } from "./FileSidebar";
+import {
+  fileTabs,
+  isActiveFile,
+  isPendingFile,
+  selectedFileTab,
+  type FileTab,
+  type TransactionFile,
+} from "./file-model";
+import styles from "./file-workspace.module.css";
 
-export function TransactionDetail({ id }: { id: string }) {
-  const q = useLiveData<Matter>(`/api/v1/matters/${id}`, undefined, true);
-  const session = useData<Session>("/api/v1/session");
+function PendingFile({
+  file,
+  actorId,
+  refresh,
+  uploads,
+}: {
+  file: TransactionFile;
+  actorId: string;
+  refresh: () => Promise<void>;
+  uploads: TransactionDocumentUploads;
+}) {
+  const receipt = useData<Review["intake"]>(
+    `/api/v1/creation-reviews/matter/${encodeURIComponent(file.id)}/intake`,
+  );
+  if (receipt.loading)
+    return <p role="status">Opening the submitted intake…</p>;
+  if (receipt.error)
+    return (
+      <div role="alert" className={s.error}>
+        Could not open the submitted intake.{" "}
+        <button type="button" onClick={() => void receipt.refresh()}>
+          Try again
+        </button>
+      </div>
+    );
+  if (receipt.data)
+    return (
+      <section className={styles.fileActions} aria-label="Pending intake">
+        <p>This intake is waiting for confirmation.</p>
+        <Link
+          className={s.button}
+          href={`/workspace/new?intakeId=${encodeURIComponent(receipt.data.id)}`}
+        >
+          Review intake
+        </Link>
+      </section>
+    );
+  // An older, already-started file can have a pending review without an intake receipt.
+  return (
+    <InitialFileReview
+      matter={file}
+      actorId={actorId}
+      refresh={refresh}
+      uploads={uploads}
+    />
+  );
+}
+
+function FileNavigation({
+  tab,
+  select,
+}: {
+  tab: FileTab;
+  select: (next: FileTab) => void;
+}) {
+  return (
+    <div
+      className={styles.tabs}
+      role="tablist"
+      aria-label="Transaction sections"
+    >
+      {fileTabs.map(({ id, label }, index) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          id={`file-tab-${id}`}
+          aria-selected={id === tab}
+          aria-controls={`file-panel-${id}`}
+          tabIndex={id === tab ? 0 : -1}
+          onClick={() => select(id)}
+          onKeyDown={(event) => {
+            let next = index;
+            if (event.key === "ArrowRight")
+              next = (index + 1) % fileTabs.length;
+            else if (event.key === "ArrowLeft")
+              next = (index + fileTabs.length - 1) % fileTabs.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = fileTabs.length - 1;
+            else return;
+            event.preventDefault();
+            const target = fileTabs[next].id;
+            select(target);
+            document.getElementById(`file-tab-${target}`)?.focus();
+          }}
+        >
+          {id === "emails" && <LockKeyhole size={13} aria-hidden="true" />}
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FileWorkspace({ id, actorId }: { id: string; actorId: string }) {
+  const router = useRouter();
+  const search = useSearchParams();
+  const tab = selectedFileTab(search.get("tab"));
+  const query = useLiveData<TransactionFile>(
+    `/api/v1/matters/${encodeURIComponent(id)}`,
+    undefined,
+    true,
+  );
+  const file = query.data;
+  const pending = !!file && isPendingFile(file);
+  const loaded = !!file && !pending;
+  const active = loaded && isActiveFile(file);
   const documentUploads = useTransactionDocumentUploads({
     matterId: id,
     coordinator: true,
-    actorId: session.data?.user?.id,
-    authorized: !!q.data && session.data?.user?.role === "coordinator",
+    actorId,
+    authorized: active || pending,
   });
-  const [tab, setTab] = useState("Checklist");
-  const [error, setError] = useState("");
+  const [template, setTemplate] = useState<string>();
   const [busy, setBusy] = useState("");
-  const [note, setNote] = useState("");
-  const checklistDraft = useChecklistDraft();
-  const [person, setPerson] = useState({ userId: "", role: "client" });
-  const [notice, setNotice] = useState("");
-  async function act(key: string, fn: () => Promise<unknown>) {
+  const [error, setError] = useState<{ key: string; message: string } | null>(
+    null,
+  );
+  const writeLock = useRef(false);
+
+  useEffect(() => {
+    if (loaded && tab === "checklist" && window.location.hash === "#dates")
+      document.getElementById("dates")?.scrollIntoView();
+  }, [loaded, tab]);
+
+  const refresh = useCallback(async () => {
+    // A polling read already in flight may have started before the write.
+    await query.refresh();
+    await query.refresh();
+  }, [query.refresh]);
+
+  const act: TransactionAction = async (key, mutation) => {
+    if (writeLock.current) return;
+    writeLock.current = true;
     setBusy(key);
-    setError("");
-    setNotice("");
+    setError(null);
     try {
-      await fn();
-      await q.refresh();
-    } catch (e) {
-      setError((e as Error).message);
+      await mutation();
+      if (key === "lifecycle:delete") return;
+      await refresh();
+    } catch (failure) {
+      setError({
+        key,
+        message:
+          failure instanceof Error
+            ? failure.message
+            : "Could not save the file change.",
+      });
+      await refresh();
     } finally {
+      writeLock.current = false;
       setBusy("");
     }
+  };
+
+  function select(next: FileTab) {
+    if (next === tab) return;
+    if (next !== "emails") setTemplate(undefined);
+    const url = new URL(window.location.href);
+    if (next === "checklist") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", next);
+    if (url.hash === "#dates") url.hash = "";
+    window.history.pushState(null, "", url.pathname + url.search + url.hash);
+    if (next === "documents") void query.refresh();
   }
-  if (q.loading && !q.data)
-    return <div className={s.loading}>Opening your transaction…</div>;
-  if (!q.data)
+
+  if (query.loading && !file)
     return (
-      <div className={s.error}>
-        {q.error || "Transaction not found."}
-        <LiveStatus query={q} />
+      <p className={s.loading} role="status">
+        Opening your transaction…
+      </p>
+    );
+  if (!file)
+    return (
+      <div className={s.error} role="alert">
+        This transaction is unavailable.{" "}
+        <button type="button" onClick={() => void query.refresh()}>
+          Try again
+        </button>
         <p>
-          <Link href="/workspace">Return to workspace</Link>
+          <Link href="/workspace/transactions">Back to transactions</Link>
         </p>
       </div>
     );
-  const m = q.data;
+  const lifecycleError = error?.key.startsWith("lifecycle:");
   return (
-    <>
+    <div className={styles.workspace}>
       <Link className={s.backLink} href="/workspace/transactions">
-        <ArrowLeft />
+        <ArrowLeft aria-hidden="true" />
         All transactions
       </Link>
-      {m.stage === "terminated" && (
-        <p>
-          <Link
-            href={`/workspace/new?replaces=${m.id}&side=${m.side}&package=${m.packageCode === "complete" ? "complete" : "essentials"}`}
-          >
-            Start a linked replacement transaction
-          </Link>
+      <FileHeader
+        file={file}
+        canEdit={active && !!file.revision}
+        busy={!!busy}
+        act={act}
+      />
+      {error && !lifecycleError && (
+        <p role="alert" className={s.error}>
+          {error.message}
         </p>
       )}
-      <div className={s.detailHeader}>
-        <div className={s.split}>
-          <div>
-            <p className={s.eyebrow}>Your transaction file</p>
-            <h1>{m.title || address(m)}</h1>
-            <p>{address(m)}</p>
-          </div>
-          <span
-            className={`${s.pill} ${m.stage === "closed" ? s.pillGreen : ""}`}
-          >
-            {label(m.stage)}
-          </span>
-        </div>
-        <div className={s.chips}>
-          <label className={s.fieldHint}>
-            Stage{" "}
-            <select
-              className={s.select}
-              value={m.stage}
-              disabled={!!busy || m.stage === "pending_review"}
-              onChange={(e) =>
-                void act("stage", () =>
-                  mutate(
-                    `/api/v1/matters/${id}`,
-                    { expectedRevision: m.revision, stage: e.target.value },
-                    "PATCH",
-                  ),
-                )
-              }
-            >
-              {[
-                "pending_review",
-                "listing",
-                "under_contract",
-                "closing",
-                "closed",
-                "terminated",
-                "archived",
-              ].map((v) => (
-                <option value={v} key={v}>
-                  {label(v)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span className={s.pill}>{label(m.side)} side</span>
-          <span className={s.pill}>{serviceName(m)}</span>
-          {m.details?.cash === true && (
-            <span className={s.pill}>Cash purchase</span>
-          )}
-          <span className={s.pill}>{progress(m)}% of checklist complete</span>
-        </div>
-        <div className={s.progress} style={{ marginTop: 23 }}>
-          <span style={{ width: `${progress(m)}%` }} />
-        </div>
-      </div>
-      {error && (
-        <div className={s.error} role="alert">
-          {error}
-        </div>
-      )}
-      {notice && <div className={s.notice}>{notice}</div>}
-      <LiveStatus query={q} />
-      {m.stage === "pending_review" && (
-        <InitialFileReview
-          matter={m}
-          refresh={q.refresh}
+      {pending ? (
+        <PendingFile
+          file={file}
+          actorId={actorId}
+          refresh={refresh}
           uploads={documentUploads}
-          actorId={session.data?.user?.id}
         />
+      ) : (
+        <>
+          <FileNavigation tab={tab} select={select} />
+          <div className={styles.columns}>
+            <div className={styles.content}>
+              {fileTabs.map(({ id: panel }) => (
+                <div
+                  key={panel}
+                  role="tabpanel"
+                  id={`file-panel-${panel}`}
+                  aria-labelledby={`file-tab-${panel}`}
+                  tabIndex={0}
+                  hidden={tab !== panel}
+                >
+                  {tab === panel && (
+                    <>
+                      {panel === "checklist" && (
+                        <div id="dates">
+                          <FileChecklist
+                            file={file}
+                            readOnly={!active}
+                            busy={busy}
+                            act={act}
+                            actionError={
+                              lifecycleError ? error?.message : undefined
+                            }
+                            openTemplate={(templateId) => {
+                              setTemplate(templateId);
+                              select("emails");
+                            }}
+                            onDeleted={() =>
+                              router.replace("/workspace/transactions")
+                            }
+                          />
+                        </div>
+                      )}
+                      {panel === "emails" && (
+                        <FileEmailWorkspace
+                          matterId={id}
+                          side={file.side ?? ""}
+                          packageCode={file.packageCode ?? ""}
+                          contacts={file.contacts}
+                          directContact={file.details?.directContact}
+                          readOnly={!active}
+                          initialTemplateId={template}
+                        />
+                      )}
+                      {panel === "documents" && (
+                        <FileDocumentsPanel
+                          matterId={id}
+                          documents={file.documents ?? []}
+                          role="coordinator"
+                          stage={file.stage ?? ""}
+                          uploads={documentUploads}
+                          refresh={refresh}
+                        />
+                      )}
+                      {panel === "intake" && (
+                        <TransactionIntake matterId={id} />
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <FileSidebar file={file} readOnly={!active} refresh={refresh} />
+          </div>
+        </>
       )}
-      {m.stage !== "pending_review" && (
-        <SavedIntakeDetails value={m.details?.referenceIntake} />
-      )}
-      {Array.isArray(
-        (m.details?.fileReview as { unresolvedDates?: unknown[] } | undefined)
-          ?.unresolvedDates,
-      ) && (
-        <div className={s.notice}>
-          {(
-            m.details!.fileReview as {
-              unresolvedDates: {
-                deadlineId: string;
-                label: string;
-                reason: string;
-              }[];
-            }
-          ).unresolvedDates
-            .filter((item) =>
-              m.deadlines?.some(
-                (d) => d.id === item.deadlineId && d.status !== "confirmed",
-              ),
-            )
-            .map((item) => (
-              <p key={item.deadlineId}>
-                <strong>Unresolved: {item.label}</strong> · {item.reason}
-              </p>
-            ))}
-        </div>
-      )}
-      <div className={s.tabs} role="tablist" aria-label="Transaction sections">
-        {[
-          "Checklist",
-          "Documents",
-          "Emails",
-          "Broker file",
-          "My notes & to-do",
-        ].map((t, index, tabs) => (
-          <button
-            key={t}
-            role="tab"
-            id={`transaction-tab-${index}`}
-            aria-selected={tab === t}
-            aria-controls="transaction-panel"
-            tabIndex={tab === t ? 0 : -1}
-            onKeyDown={(event) => {
-              let next = index;
-              if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
-              else if (event.key === "ArrowLeft")
-                next = (index - 1 + tabs.length) % tabs.length;
-              else if (event.key === "Home") next = 0;
-              else if (event.key === "End") next = tabs.length - 1;
-              else return;
-              event.preventDefault();
-              setTab(tabs[next]);
-              document.getElementById(`transaction-tab-${next}`)?.focus();
-            }}
-            onClick={() => setTab(t)}
-            className={tab === t ? s.tabActive : ""}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-      <div
-        className={s.twoCol}
-        role="tabpanel"
-        id="transaction-panel"
-        tabIndex={0}
-        aria-labelledby={`transaction-tab-${["Checklist", "Documents", "Emails", "Broker file", "My notes & to-do"].indexOf(tab)}`}
-      >
-        <div>
-          {tab === "Checklist" && (
-            <>
-              <TransactionChecklistPanel
-                matter={m}
-                id={id}
-                busy={busy}
-                act={act}
-                draft={checklistDraft}
-              />
-              <LegacyDatesPanel
-                matter={m}
-                id={id}
-                busy={busy}
-                act={act}
-                setNotice={setNotice}
-              />
-            </>
-          )}
-          {tab === "Documents" && (
-            <DocumentFiles
-              matterId={id}
-              coordinator
-              uploads={documentUploads}
-            />
-          )}
-          {tab === "Emails" && <LegacyTransactionEmailPanel id={id} />}
-          {tab === "Broker file" && (
-            <LegacyBrokerPanel matter={m} id={id} busy={busy} act={act} />
-          )}
-          {tab === "My notes & to-do" && (
-            <LegacyFileNotesPanel
-              matter={m}
-              id={id}
-              busy={busy}
-              act={act}
-              note={note}
-              setNote={setNote}
-            />
-          )}
-        </div>
-        <LegacyFilePeoplePanel
-          matter={m}
-          id={id}
-          busy={busy}
-          act={act}
-          person={person}
-          setPerson={setPerson}
-          refresh={q.refresh}
-        />
-      </div>
-    </>
+    </div>
   );
+}
+
+export function TransactionDetail({ id }: { id: string }) {
+  const session = useLiveData<Session>("/api/v1/session", undefined, true);
+  const actor = session.data?.user;
+  if (session.loading && !actor)
+    return (
+      <p className={s.loading} role="status">
+        Checking your session…
+      </p>
+    );
+  if (!actor || actor.role !== "coordinator")
+    return (
+      <p className={s.error} role="alert">
+        Confirm your coordinator session to open this file.{" "}
+        <button type="button" onClick={() => void session.refresh()}>
+          Try again
+        </button>
+      </p>
+    );
+  return <FileWorkspace key={`${actor.id}:${id}`} id={id} actorId={actor.id} />;
 }

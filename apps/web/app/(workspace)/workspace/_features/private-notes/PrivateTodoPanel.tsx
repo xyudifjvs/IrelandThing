@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { LockKeyhole } from "lucide-react";
 import { useLiveData } from "../../../../_components/useLiveData";
 import { address, mutate, useAllMatters } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
@@ -21,9 +22,11 @@ type TodoPage = { items: Todo[]; total: number; nextCursor: string | null };
 export function PrivateTodoPanel({
   matterId,
   overview = false,
+  allowAdding = true,
 }: {
   matterId?: string;
   overview?: boolean;
+  allowAdding?: boolean;
 }) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -68,9 +71,10 @@ export function PrivateTodoPanel({
     >
       <div className={s.sectionHead}>
         <h2>{matterId ? "My notes & to-dos" : "Notes & to-dos"}</h2>
+        {matterId && <LockKeyhole aria-hidden="true" size={15} />}
       </div>
       <div className={s.sectionBody}>
-        {!overview && (
+        {!overview && allowAdding && (
           <form
             className={styles.form}
             onSubmit={(event) => {

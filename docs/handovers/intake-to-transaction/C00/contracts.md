@@ -55,3 +55,8 @@ Carson authorized the following implementation choices on November 11, 2026. Use
 | --- | --- | --- |
 | D2, signed dates | If the signed contract specifies a different Remedies or Title Commitment date, use the signed term in the proposal for Ireland's review. Keep the supplied prompt as the original source and version the working prompt accordingly. | Pending |
 | D4, only this date | Preserve and pin the affected downstream dates at their current values. A subsequent change to an anchor leaves them fixed until Ireland edits them. | Pending |
+| D5, terminal HTO corrections | Ireland can correct linked HTO row facts and the canonical checklist Closing date from Operations after close-out or termination. Preserve lifecycle status, completion and the recorded actual date. A Closed row uses recorded actual date when present and the checklist date otherwise. | Pending |
+| D5, HTO link lifetime | Keep a linked row dormant when its file leaves HTO, reuse it if the file returns to HTO, and remove the row on permanent file deletion with audit history retained. | Pending |
+| D5, FUB source fields | Preserve the canonical display address and contact name on linked rows. Export only explicitly confirmed address and name components. Ireland can fill missing components in Operations before exporting. | Pending |
+| D6, legacy documents | Require the explicit client document switch before adding a legacy file document to checklist-link and authenticated preview surfaces. | Pending |
+| D8, digest cutoff | Use 8 a.m. Eastern on weekdays. Start the first window at the previous scheduled weekday cutoff. Include receipts at the start and carry receipts at the end into the next window. Omit deleted intakes. | Pending |

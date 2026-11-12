@@ -376,13 +376,6 @@ export async function submitIntake(
         where: { id },
         data: { submittedMatterId: matter.id },
       });
-      await tx.outboxJob.create({
-        data: {
-          topic: "intake.received",
-          idempotencyKey: `intake-received:${submission.id}`,
-          payload: { submissionId: submission.id },
-        },
-      });
       await audit(
         tx,
         actor,

@@ -11,7 +11,13 @@ import {
 import { requireMatter } from "../access";
 import { prisma } from "@weatherly/db";
 import { getFileReviewHandler, confirmFileHandler } from "./file-review";
-import { createMatterHandler, updateMatterHandler } from "./lifecycle";
+import {
+  createMatterHandler,
+  registerFileLifecycleRoutes,
+  updateMatterHandler,
+} from "./lifecycle";
+import type { FileLifecycleEffects } from "../commands/file-actions";
+import { registerMatterPeopleRoutes } from "../people/router";
 import { listMattersHandler, getMatterHandler } from "./queries";
 import {
   grantParticipantHandler,
@@ -19,12 +25,14 @@ import {
 } from "./participants";
 import { reorderTasksHandler, registerChildRoutes } from "./children";
 
-export function createMattersRouter() {
+export function createMattersRouter(effects?: FileLifecycleEffects) {
   const router = Router();
   router.use(checklistPrivacyHeaders);
   router.get("/:id/file-review", getFileReviewHandler);
   router.post("/:id/confirm-file", confirmFileHandler);
   registerChecklistShareRoutes(router);
+  registerMatterPeopleRoutes(router);
+  if (effects) registerFileLifecycleRoutes(router, effects);
   router.post("/:id/tasks/reorder", reorderTasksHandler);
   router.get("/", listMattersHandler);
   router.post("/", createMatterHandler);

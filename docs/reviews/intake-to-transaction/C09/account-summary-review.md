@@ -1,0 +1,19 @@
+# C09 independent account summary review
+
+Changes requested on exact `ce98192e38d2852ac26b6b2b4f425f9489ad9ed2`. The candidate worktree was clean. The issues below affect the projected payment status. The checkout command continued to enforce its existing guards.
+
+## Findings
+
+1. **P2. A fully refunded historical order can mask a payable replacement.** The projection searches settled statuses first, including `refunded`. With a newer pending replacement on the same file, the payment writer returned the newer order and the agent resumed it successfully through the mock provider. The file summary still reported `refunded`. Select the retained current request before using a refunded historical order as a fallback. [File summary](/private/tmp/weatherly-handoff-c09-account-summary/packages/billing/src/file-summary.ts:124) [Order selection](/private/tmp/weatherly-handoff-c09-account-summary/packages/billing/src/order-requests.ts:120)
+2. **P2. An unresolved checkout appears due again.** The payment writer retains an older cancelled service order with no session ID and `terminationVoid.creationOutcomeUncertain: true`. The same file reported `due_at_closing` in the file summary and in Upcoming payments. Preserve the reconciliation state and omit the duplicate upcoming obligation while the retained order blocks replacement. [File summary](/private/tmp/weatherly-handoff-c09-account-summary/packages/billing/src/file-summary.ts:123) [Unresolved checkout guard](/private/tmp/weatherly-handoff-c09-account-summary/packages/billing/src/order-requests.ts:106)
+3. **P2. Mode filtering turns retained orders into new obligations.** With test mode selected, a file with an existing live paid service order showed `due_at_closing`. A gift linked to a live paid order showed `quoted`. Both also appeared under Upcoming payments. The payment writer returned their existing orders and the checkout path verifies mode before opening a URL. Identify retained order evidence before filtering financial display by mode. Keep the outstanding state accurate and avoid presenting another obligation in the current mode. [Mode filter](/private/tmp/weatherly-handoff-c09-account-summary/packages/billing/src/file-summary.ts:111) [Gift fallback](/private/tmp/weatherly-handoff-c09-account-summary/packages/billing/src/file-summary.ts:147) [Gift order retention](/private/tmp/weatherly-handoff-c09-account-summary/packages/billing/src/order-requests.ts:44)
+
+## Independent checks
+
+- The isolated billing suite passed 62 tests across eight files after applying all 19 migrations. Typecheck and `git diff --check` passed.
+- The real billing router returned 401 for anonymous requests, 403 for clients and 404 for unrelated agents and revoked grants. Coordinators, assigned agents and active grants received the authorized summary. Revoked grants also lost access through the obligations cursor.
+- The $390 stored terms were preserved. HTO showed the approved gift only even with a historical service order. Terminated service was suppressed. Agent-facing legacy gift and payment responses omitted private policy, address, approval identity, Stripe session ID and idempotency key.
+- The real SDK verified a synthetic webhook signature locally, rejected a bad signature and wrong payment mode, and persisted the genuine event timestamp once. Reconciliation and legacy payment rows kept the paid date blank when the evidence was missing. A represented paid fee stayed out of Upcoming payments.
+- A mocked Stripe adapter resumed an eligible saved request. The real checkout route rejected agent attempts to create payments and coordinator attempts to charge an HTO service fee. All tests used disposable PostgreSQL databases and synthetic fixtures. Ireland’s account and real Stripe traffic were outside this review.
+
+The [independent HTTP probe](/private/tmp/weatherly-r09-summary-probe.mts) preserves all three reproductions and the passing checks for the recheck.

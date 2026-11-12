@@ -65,3 +65,13 @@ The independent probes are `/private/tmp/weatherly-r05-ui-recheck-http.mts` and 
 The independent probe verified current revision checks, role denial, archived roster denial, Weatherly terminal denial, pending and archived file denial, and a valid terminated HTO correction. The correction preserved stage, business, intake snapshot, checklist, hidden date anchors, existing contact IDs and audiences, and unrelated people. Zero cents and its prior value were audited. A held transaction was invisible to an independent reader. The injected hook failure rolled back the contact, revision, audit and outbox, and two same-revision edits produced one commit and one 409. The agent assignment resolved the linked login or retained the roster-only entry as appropriate.
 
 The probe is `/private/tmp/weatherly-r05-file-facts.mts`. The decision to preserve a published checklist and its history when correcting the file's side is recorded for Ireland to confirm during integration.
+
+### File-facts correction recheck
+
+**Accepted at `c1bf5589a5587c2fe4aae4107f80cdf09800f3cf`.** TypeScript and `git diff --check` passed. All 113 tests across 19 intake, identity, extraction, and lifecycle suites passed after applying 19 migrations to a newly created disposable database.
+
+- The original contradictory address request returned 422 `INVALID_FILE_ADDRESS`. An empty structure also returned 422. The invalid request left the Matter, proposed contact, and audit unchanged. A structured-only request set the display address and structured fields, and a matching pair succeeded. Repeating the matching display address alone retained its structure. Changing a legacy display-only address cleared stale structure and kept unrelated details.
+- The independent probe exercised the integrated C06 detail and list queries from `16dd810fed7915aeee011065405a4966a069cbe0` with a test-only import redirect to the exact candidate projection helper. It asserted that the redirect ran. Both legacy and canonical agent detail and list omitted `structuredAddress` and `structuredClientNames`, omitted the private client name, and kept the display address. The coordinator still received the structures.
+- The probe also reran the C06 pending share gate, HTO terminal eligibility, coordinator and revision checks, one-winner concurrent correction, hook rollback, and preservation of the original receipt, checklist, assignment, contact identity and audiences. All five groups passed with no findings.
+
+The recheck probe is `/private/tmp/weatherly-r05-file-facts-recheck.mts`. C00 wiring and C11 end-to-end acceptance remain separate from this command review.

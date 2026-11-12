@@ -49,14 +49,16 @@ Extend retains a linked rule and adds an ordered adjustment to its result. A cal
 
 ## Decisions for Ireland to confirm
 
-Carson authorized the following implementation choices on November 11, 2026. Use them for development and have Ireland confirm each during the account setup on her laptop. C15 carries the full register into the laptop runbook and records Ireland's confirmation or correction. Add later decisions Carson makes to this register.
+Carson directed the signed-date and pinning behavior on November 11, 2026. The register also records implementation defaults. Ireland will confirm each entry during account setup on her laptop.
 
 | Decision | Build behavior | Ireland confirmation |
 | --- | --- | --- |
 | D2, signed dates | If the signed contract specifies a different Remedies or Title Commitment date, use the signed term in the proposal for Ireland's review. Keep the supplied prompt as the original source and version the working prompt accordingly. | Pending |
+| D3, business and package edits | Permit changes while the file is active. Retain valid frozen terms for the same package, including a direct return from HTO. A different package uses approved terms and checks retained payment orders. Moving to HTO cancels outstanding service requests and retains payment and audit history. | Pending |
 | D4, only this date | Preserve and pin the affected downstream dates at their current values. A subsequent change to an anchor leaves them fixed until Ireland edits them. | Pending |
 | D5, terminal HTO corrections | Ireland can correct linked HTO row facts and the canonical checklist Closing date from Operations after close-out or termination. Preserve lifecycle status, completion and the recorded actual date. A Closed row uses recorded actual date when present and the checklist date otherwise. | Pending |
 | D5, HTO link lifetime | Keep a linked row dormant when its file leaves HTO, reuse it if the file returns to HTO, and remove the row on permanent file deletion with audit history retained. | Pending |
 | D5, FUB source fields | Preserve the canonical display address and contact name on linked rows. Export only explicitly confirmed address and name components. Ireland can fill missing components in Operations before exporting. | Pending |
 | D6, legacy documents | Require the explicit client document switch before adding a legacy file document to checklist-link and authenticated preview surfaces. | Pending |
-| D8, digest cutoff | Use 8 a.m. Eastern on weekdays. Start the first window at the previous scheduled weekday cutoff. Include receipts at the start and carry receipts at the end into the next window. Omit deleted intakes. | Pending |
+| D7, saved Gmail drafts | Require a fresh save and approval for drafts created before recipient evidence was recorded. Preserve sent history. | Pending |
+| D8, digest cutoff | Use 8 a.m. Eastern on weekdays. Start the first window at the previous scheduled weekday cutoff. Include receipts at the start and carry receipts at the end into the next window. Omit deleted intakes. Hold uncertain delivery for reconciliation when safe retries are exhausted. | Pending |

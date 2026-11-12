@@ -17,3 +17,12 @@ Changes requested on exact `ce98192e38d2852ac26b6b2b4f425f9489ad9ed2`. The candi
 - A mocked Stripe adapter resumed an eligible saved request. The real checkout route rejected agent attempts to create payments and coordinator attempts to charge an HTO service fee. All tests used disposable PostgreSQL databases and synthetic fixtures. Ireland’s account and real Stripe traffic were outside this review.
 
 The [independent HTTP probe](/private/tmp/weatherly-r09-summary-probe.mts) preserves all three reproductions and the passing checks for the recheck.
+
+## Independent recheck
+
+Accepted exact `5f4715613d6342a822268e5fa109f24d8634244d` for local integration. All 63 billing tests passed across eight files after 19 migrations. Typecheck and `git diff --check` passed on the clean candidate.
+
+- The summary selected the newer pending service order after a full refund. The real order writer retained that same order, and the agent resumed it through the mock Checkout adapter.
+- The previously cancelled request with unresolved creation stayed bound to its original order. The file showed `requires_reconciliation`, and Upcoming payments omitted it.
+- A service order and gift order paid in the other mode remained bound to their saved records. The file showed `requires_reconciliation` with no paid date for either, and Upcoming payments omitted both.
+- The recheck also passed the earlier authorization, revoked grant, frozen terms, HTO gift-only, legacy projection privacy, signed webhook, replay and Checkout checks. [Independent recheck probe](/private/tmp/weatherly-r09-summary-recheck.mts)

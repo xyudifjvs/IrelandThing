@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import pg from "pg";
+import { checkCanonicalFile } from "./canonical-file-smoke";
 const execute = promisify(execFile);
 const checks: string[] = [];
 async function port() {
@@ -39,6 +40,7 @@ const env: NodeJS.ProcessEnv = {
   DATABASE_URL: source.href,
   APP_ENV: "local",
   NODE_ENV: "development",
+  DOTENV_CONFIG_PATH: "/dev/null",
   PORT: String(apiPort),
   WEB_ORIGIN: origin,
   BETTER_AUTH_URL: origin,
@@ -54,6 +56,9 @@ const env: NodeJS.ProcessEnv = {
   DOTLOOP_CLIENT_ID: "",
   DOTLOOP_CLIENT_SECRET: "",
   RESEND_API_KEY: "",
+  GMAIL_ENABLED: "false",
+  OUTBOUND_EMAIL_ENABLED: "false",
+  PRIVATE_REMINDERS_ENABLED: "false",
 };
 let server: ReturnType<typeof spawn> | undefined;
 async function request(
@@ -219,10 +224,28 @@ try {
   assert.ok(queue.data.items.some((item: { id: string; processedAt: string | null }) => item.id === submissionId && !item.processedAt));
   const portfolio = await request("/api/v1/matters", undefined, owner);
   assert.ok(!portfolio.data.some((item: { id: string }) => item.id === matterId));
-  const created = await request(`/api/v1/intakes/submissions/${submissionId}/create-transaction`, {}, owner);
+  const legacyPath = `/api/v1/intakes/submissions/${submissionId}/create-transaction`;
+  const bypass = await request(legacyPath, {}, owner);
+  assert.equal(bypass.res.status, 409);
+  assert.equal(bypass.data.error.code, "CREATION_REVIEW_REQUIRED");
+  // Populate the fixture through the old service so the mounted legacy replay
+  // and review still exercise real stored data from the preceding workflow.
+  await execute(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+    import { createTransactionFromIntake } from "@weatherly/intake";
+    import { prisma } from "@weatherly/db";
+    try {
+      await createTransactionFromIntake({ id: "owner-local", name: "Ireland", email: "ireland@example.test", role: "coordinator", sessionId: "legacy-acceptance" }, process.env.SYNTHETIC_INTAKE_ID);
+    } finally {
+      await prisma.$disconnect();
+    }
+  `], { env: { ...env, SYNTHETIC_INTAKE_ID: submissionId }, maxBuffer: 1024 * 1024 });
+  const created = await request(legacyPath, {}, owner);
   assert.equal(created.res.status, 200, JSON.stringify(created.data));
   assert.equal(created.data.matter.id, matterId);
-  assert.equal(created.data.alreadyCreated, false);
+  assert.equal(created.data.alreadyCreated, true);
+  const legacyReceipt = await request(`/api/v1/creation-reviews/matter/${matterId}/intake`, undefined, owner);
+  assert.equal(legacyReceipt.res.status, 200);
+  assert.equal(typeof legacyReceipt.data.processedAt, "string");
   assert.equal((await request(`/api/v1/intakes/submissions/${submissionId}/create-transaction`, {}, owner)).data.alreadyCreated, true);
   let matter = (await request(`/api/v1/matters/${matterId}`, undefined, owner))
     .data;
@@ -335,11 +358,7 @@ try {
         (n: { id: string }) => n.id === privateNote.data.id,
       ),
     );
-    assert.ok(
-      projected.data.notes.some(
-        (n: { id: string }) => n.id === visibleNote.data.id,
-      ),
-    );
+    assert.deepEqual(projected.data.notes, []);
   }
   assert.equal(
     (await request("/api/v1/intake/drafts", { payload }, client)).res.status,
@@ -370,6 +389,10 @@ try {
     200,
   );
   checks.push("real deadline create and correction");
+  const legacyFile = (await request(`/api/v1/matters/${matterId}`, undefined, owner)).data;
+  const legacyTerminalBypass = await request(`/api/v1/matters/${matterId}`, { expectedRevision: legacyFile.revision, stage: "terminated" }, owner, "PATCH");
+  assert.equal(legacyTerminalBypass.res.status, 409);
+  assert.equal(legacyTerminalBypass.data.error.code, "FILE_ACTION_REQUIRED");
   const inquiry = await request("/api/v1/onboarding/inquiries", {
     name: "Synthetic Inquiry",
     email: "inquiry@example.test",
@@ -416,6 +439,8 @@ try {
     503,
   );
   checks.push("approved catalog and unconfigured money/mail fail-closed gates");
+  await checkCanonicalFile({ request, owner, agent, client, intakePayload: payload, origin });
+  checks.push("canonical creation, role projections, business reassignment, email work cancellation and HTO cleanup");
   if (process.env.ACCEPTANCE_WEB_URL) {
     for (const route of [
       "/",

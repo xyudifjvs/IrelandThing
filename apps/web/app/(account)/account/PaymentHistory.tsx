@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, CreditCard } from "lucide-react";
 import { formatDate } from "@weatherly/ui";
@@ -135,7 +135,13 @@ function PaymentAction({ payment }: { payment: Payment }) {
   );
 }
 
-export function PaymentHistory({ coordinator }: { coordinator: boolean }) {
+export function PaymentHistory({
+  coordinator,
+  obligationsHistoryKey,
+}: {
+  coordinator: boolean;
+  obligationsHistoryKey?: string;
+}) {
   const emptyFilters = { q: "", status: "all", environment: "all" };
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
@@ -147,6 +153,13 @@ export function PaymentHistory({ coordinator }: { coordinator: boolean }) {
       cursors[cursors.length - 1],
     ),
   );
+  const lastObligations = useRef(obligationsHistoryKey);
+  const refresh = q.refresh;
+  useEffect(() => {
+    if (lastObligations.current === obligationsHistoryKey) return;
+    lastObligations.current = obligationsHistoryKey;
+    if (obligationsHistoryKey !== undefined) void refresh();
+  }, [obligationsHistoryKey, refresh]);
   const filtered = Boolean(
     filters.q || filters.status !== "all" || filters.environment !== "all",
   );

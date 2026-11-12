@@ -1,10 +1,10 @@
 import { Check } from "lucide-react";
 import {
   appointment,
+  clientStepDate,
   completed,
   nextDatedStep,
   notNeeded,
-  scheduledStep,
   shortDate,
   type PortalTask,
 } from "./portal-model";
@@ -35,14 +35,8 @@ export function PortalTimeline({
         const done = completed(task);
         const skipped = notNeeded(task);
         const upcoming = client && task.id === next?.id;
-        const time = appointment(task);
         const day = shortDate(task.dueDate);
-        const detail =
-          client && scheduledStep(task)
-            ? time || (day ? day + " · Details to come" : "Details to come")
-            : client
-              ? day
-              : time;
+        const detail = client ? clientStepDate(task) : appointment(task);
         return (
           <li key={task.id} className={s.timelineRow}>
             <span

@@ -17,3 +17,11 @@ C09 supplies `/api/v1/billing/account/file-summary?matterId=...` and `/api/v1/bi
 The focused 34-test account and checklist suite, TypeScript and the production Next Webpack build passed. Desktop and 390-pixel Chrome checks used synthetic Better Auth cookies for Weatherly, HTO, buyer, seller and coordinator. They exercised agent upload, closed ZIP, link copying, account phone and password changes, buyer and seller step filtering, bearer download headers, and withdrawal of documents, share links and authenticated grants. The local browser fixture supplied the agreed C09 summary shape. The integrated C06 projection and C09 fee endpoints require the final C15 journey on the composed branch.
 
 Ireland owns the final client wording and all real account connections and verification.
+
+## Independent review corrections
+
+Upcoming payments revalidates on focus and polls after the preceding scan finishes. Each scan has a deadline and reads all cursor pages before publishing. Lost access, failed reads and hidden pages clear the rendered obligations. When an issued order replaces an obligation, an open payment history refreshes.
+
+A known appointment place accompanies the contract date and “Details to come” until a time is available. The client timeline and next-step summary apply the same rule to Closing and Final Walkthrough.
+
+The corrected candidate passed 37 focused tests, TypeScript and a production Webpack build. A real-session Chrome probe with accepted C09 verified reassignment, failed refresh, polling recovery, no overlap across repeated focus events, and Checkout replacement in an already-open payment history. A separate coordinator and seller session verified the real appointment edit and both client views.

@@ -4,7 +4,7 @@ import { PortalDocuments } from "./PortalDocuments";
 import { PortalTimeline } from "./PortalTimeline";
 import { PortalPeople } from "./PortalPeople";
 import {
-  appointment,
+  clientStepDate,
   closingTask,
   completed,
   fileAddress,
@@ -110,7 +110,7 @@ export function ClientFile({
         >
           <p className={s.eyebrow}>What’s next</p>
           <h2>{next.title}</h2>
-          <p>{appointment(next) || shortDate(next.dueDate)}</p>
+          <p>{clientStepDate(next)}</p>
         </section>
       )}
       <section className={s.panel} aria-label="Your timeline">

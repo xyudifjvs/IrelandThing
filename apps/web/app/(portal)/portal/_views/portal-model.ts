@@ -111,18 +111,35 @@ export function shortDate(value?: string | null, year = false) {
   });
 }
 
+function appointmentTime(task: PortalTask) {
+  if (!task.appointmentAt) return "";
+  return dateTime(task.appointmentAt, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
 export function appointment(task: PortalTask) {
-  const time = task.appointmentAt
-    ? dateTime(task.appointmentAt, {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZoneName: "short",
-      })
-    : "";
-  return [time, task.appointmentPlace].filter(Boolean).join(" · ");
+  return [appointmentTime(task), task.appointmentPlace]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function clientStepDate(task: PortalTask) {
+  const day = shortDate(task.dueDate);
+  if (!scheduledStep(task)) return day;
+  const time = appointmentTime(task);
+  return (
+    time
+      ? [time, task.appointmentPlace]
+      : [day, "Details to come", task.appointmentPlace]
+  )
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function scheduledStep(task: PortalTask) {

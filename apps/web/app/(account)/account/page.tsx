@@ -110,7 +110,12 @@ function Account({ user }: { user: AccountUser }) {
         <AccountSecurity twoFactorEnabled={user.twoFactorEnabled} />
       </div>
       {agent && <FeeObligations {...obligations} />}
-      {showPayments && <PaymentHistory coordinator={coordinator} />}
+      {showPayments && (
+        <PaymentHistory
+          coordinator={coordinator}
+          obligationsHistoryKey={obligations.historyKey}
+        />
+      )}
       {(agent || coordinator) && (
         <TransactionHistory coordinator={coordinator} />
       )}

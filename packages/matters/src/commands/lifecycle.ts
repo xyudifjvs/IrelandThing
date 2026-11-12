@@ -1,4 +1,8 @@
-import { type Principal, assertCoordinator, HttpError } from "@weatherly/platform";
+import {
+  type Principal,
+  assertCoordinator,
+  HttpError,
+} from "@weatherly/platform";
 import { matterInput, stages } from "./lifecycle-input";
 import { prisma, type Prisma } from "@weatherly/db";
 import { applyInitialWorkflow } from "../rules";
@@ -88,6 +92,32 @@ export async function updateMatter(
       terminated: ["archived"],
       archived: [],
     };
+    const changesStage = data.stage !== undefined && data.stage !== old.stage;
+    if (old.checklistVersion !== null) {
+      const terminal = ["closed", "terminated", "archived"];
+      if (
+        terminal.includes(old.stage) ||
+        (changesStage && data.stage && terminal.includes(data.stage))
+      )
+        throw new HttpError(
+          409,
+          "FILE_ACTION_REQUIRED",
+          "Use the explicit file action to close out, terminate, or reopen this file.",
+        );
+    }
+    if (
+      changesStage &&
+      old.stage === "pending_review" &&
+      (await tx.creationReview.findFirst({
+        where: { state: "open", intake: { matterId: id } },
+        select: { id: true },
+      }))
+    )
+      throw new HttpError(
+        409,
+        "CREATION_REVIEW_REQUIRED",
+        "Continue this file in its creation review.",
+      );
     if (fileReviewPending(old) && data.stage === "under_contract")
       throw new HttpError(
         409,
@@ -116,9 +146,17 @@ export async function updateMatter(
         patch.details.serviceSnapshot = priorDetails.serviceSnapshot;
       else delete patch.details.serviceSnapshot;
       if (old.checklistVersion !== null) {
-        if (priorDetails.checklistDateAnchors !== undefined)
-          patch.details.checklistDateAnchors = priorDetails.checklistDateAnchors;
-        else delete patch.details.checklistDateAnchors;
+        for (const key of [
+          "checklistDateAnchors",
+          "fileReview",
+          "closeOut",
+          "reopened",
+          "purchaseType",
+        ]) {
+          if (priorDetails[key] !== undefined)
+            patch.details[key] = priorDetails[key];
+          else delete patch.details[key];
+        }
       }
     }
     if (data.stage === "terminated" && old.stage !== "terminated") {

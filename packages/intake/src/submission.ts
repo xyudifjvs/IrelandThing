@@ -66,6 +66,11 @@ export async function saveIntakeDraft(
     return tx.intakeDraft.findUniqueOrThrow({ where: { id } });
   });
 }
+function assertActiveReceipt(receipt: { deletedAt: Date | null }) {
+  if (receipt.deletedAt)
+    throw new HttpError(410, "INTAKE_DELETED", "This intake has been deleted.");
+}
+
 export async function submitIntake(
   actor: Principal,
   id: string,
@@ -86,6 +91,7 @@ export async function submitIntake(
         where: { draftId: id },
       });
       if (existing) {
+        assertActiveReceipt(existing);
         if (existing.idempotencyKey !== idempotencyKey)
           throw new HttpError(
             409,
@@ -383,15 +389,16 @@ export async function submitIntake(
       const existing = await prisma.intakeSubmission.findFirst({
         where: { draftId: id, userId: actor.id, idempotencyKey },
       });
-      if (existing)
+      if (existing) {
+        assertActiveReceipt(existing);
         return {
           submission: existing,
           matter: await prisma.matter.findUniqueOrThrow({
             where: { id: existing.matterId },
           }),
         };
+      }
     }
     throw error;
   }
 }
-

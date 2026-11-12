@@ -4,7 +4,13 @@ import { prisma } from "@weatherly/db";
 import type { Principal } from "@weatherly/platform";
 import { applyReviewedFacts } from "@weatherly/matters";
 import { confirmFile } from "../../matters/src/commands/file-review";
-import { createTransactionFromIntake } from "../src/index";
+import {
+  createTransactionFromIntake,
+  getIntakeSubmission,
+  listIntakeSubmissions,
+} from "../src/index";
+import { deleteIntake } from "../src/delete-intake";
+import { deleteFile } from "../../matters/src/commands/file-actions";
 import {
   confirmCreationReview,
   type CreationReviewDependencies,
@@ -438,5 +444,98 @@ describe("creation review", () => {
     await expect(
       applyReviewedFacts(owner, legacy.id, { expectedRevision: 2 }),
     ).rejects.toMatchObject({ code: "CANONICAL_REVIEW_REQUIRED" });
+  });
+  it("deletes an unprocessed intake separately and invalidates its open review", async () => {
+    const pending = await prisma.matter.create({
+      data: {
+        title: "Pending removal",
+        propertyAddress: "Pending removal",
+        side: "seller",
+        packageCode: "complete",
+        stage: "pending_review",
+        agentId: agent.id,
+      },
+    });
+    const receipt = await prisma.intakeSubmission.create({
+      data: {
+        userId: agent.id,
+        matterId: pending.id,
+        draftId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        snapshot: { origin: "agent" },
+      },
+    });
+    const open = await startCreationReview(owner, {
+      intakeId: receipt.id,
+      requestId: randomUUID(),
+    });
+    const staged = await document({
+      createdById: owner.id,
+      creationReviewId: open.id,
+    });
+    const effect = async () => {
+      throw new Error("test cleanup failed");
+    };
+    await expect(
+      deleteFile(
+        owner,
+        pending.id,
+        { expectedRevision: 1, confirmation: "DELETE" },
+        { beforeDelete: effect },
+      ),
+    ).rejects.toMatchObject({ code: "INTAKE_REVIEW_REQUIRED" });
+    await expect(
+      deleteIntake(agent, receipt.id, { confirm: true }, effect),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      deleteIntake(owner, receipt.id, { confirm: true }, effect),
+    ).rejects.toThrow("test cleanup failed");
+    expect(await prisma.matter.count({ where: { id: pending.id } })).toBe(1);
+    const deleted = await deleteIntake(
+      owner,
+      receipt.id,
+      { confirm: true },
+      async (tx, actor, event) => {
+        expect(event).toEqual({
+          intakeId: receipt.id,
+          pendingMatterId: pending.id,
+          reviewId: open.id,
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorId: actor.id,
+            action: "test.intake_deleted",
+            entityType: "IntakeSubmission",
+            entityId: receipt.id,
+          },
+        });
+      },
+    );
+    expect(deleted).toEqual({ intakeId: receipt.id, deleted: true });
+    expect(await prisma.matter.count({ where: { id: pending.id } })).toBe(0);
+    expect(
+      await prisma.document.count({ where: { id: staged.documentId } }),
+    ).toBe(0);
+    expect(
+      await prisma.intakeSubmission.findUnique({ where: { id: receipt.id } }),
+    ).toMatchObject({
+      deletedAt: expect.any(Date),
+      processedAt: null,
+      snapshot: { origin: "agent" },
+    });
+    expect(
+      (await listIntakeSubmissions(owner)).items.some(
+        ({ id }) => id === receipt.id,
+      ),
+    ).toBe(false);
+    await expect(getIntakeSubmission(agent, receipt.id)).rejects.toMatchObject({
+      status: 404,
+    });
+    await expect(readCreationReview(owner, open.id)).rejects.toMatchObject({
+      status: 410,
+    });
+    await expect(
+      confirmCreationReview(owner, open.id, confirmation(open.revision), hooks),
+    ).rejects.toMatchObject({ code: "CREATION_REVIEW_DELETED" });
   });
 });

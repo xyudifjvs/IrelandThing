@@ -11,3 +11,4 @@ export { createIntakeRouter } from "./router";
 export { notifyIntakeReceived } from "./notifications";
 export { createCreationReviewRouter } from "./creation-review/router";
 export { type CreationReviewDependencies } from "./creation-review/confirm";
+export type { BeforeIntakeDelete } from "./delete-intake";

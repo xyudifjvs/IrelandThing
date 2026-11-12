@@ -48,6 +48,12 @@ export function assertReviewRevision(
   review: StoredReview,
   expectedRevision: number,
 ) {
+  if (review.state === "deleted" || review.intake?.deletedAt)
+    throw new HttpError(
+      410,
+      "CREATION_REVIEW_DELETED",
+      "This creation review is no longer available.",
+    );
   if (review.state !== "open")
     throw new HttpError(
       409,
@@ -60,12 +66,15 @@ export function assertReviewRevision(
       "REVISION_CONFLICT",
       "The review changed. Refresh before editing or confirming.",
     );
-  if (review.intake?.deletedAt)
-    throw new HttpError(
-      409,
-      "INTAKE_DELETED",
-      "The intake is no longer available.",
-    );
+}
+
+// Intake starts and intake deletion share this transaction lock. It closes the
+// gap where no review row exists for deletion to lock yet.
+export async function lockIntakeReviewIdentity(
+  tx: Prisma.TransactionClient,
+  intakeId: string,
+) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`creation-intake:${intakeId}`}))`;
 }
 
 /** Preserve the existing Matter-before-Intake lock order used by legacy writes. */
@@ -105,6 +114,16 @@ async function projectReview(
   tx: Prisma.TransactionClient,
   review: StoredReview,
 ) {
+  if (
+    review.intake?.deletedAt ||
+    review.state === "deleted" ||
+    (review.state === "confirmed" && !review.confirmedMatterId)
+  )
+    throw new HttpError(
+      410,
+      "CREATION_REVIEW_DELETED",
+      "This creation review is no longer available.",
+    );
   const generation = review.extractionGeneration;
   const sources = sourcesSchema.parse(review.sourceRefs);
   const extraction =
@@ -181,6 +200,7 @@ export async function startCreationReview(actor: Principal, input: unknown) {
     let payload: Prisma.InputJsonValue = { facts: {}, people: [], dates: [] };
     let sources: Prisma.InputJsonValue = [];
     if (intakeId) {
+      await lockIntakeReviewIdentity(tx, intakeId);
       const { intake, matter } = await lockPendingIntake(tx, intakeId);
       const active = await tx.creationReview.findUnique({
         where: { intakeId },

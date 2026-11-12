@@ -4,10 +4,18 @@ import { prisma, type Prisma } from "@weatherly/db";
 import { asyncHandler, principal } from "@weatherly/platform";
 import { getIntakeSubmission, listIntakeSubmissions } from "./queries";
 import { createTransactionFromIntake } from "./legacy-creation";
+import { deleteIntake, type BeforeIntakeDelete } from "./delete-intake";
 import { draftFor, permitted, saveIntakeDraft, submitIntake } from "./submission";
 
-export function createIntakeRouter() {
+export function createIntakeRouter(beforeDelete?: BeforeIntakeDelete) {
   const r = Router();
+  if (beforeDelete)
+    r.delete(
+      "/submissions/:id",
+      asyncHandler(async (req, res) =>
+        res.json(await deleteIntake(principal(req), String(req.params.id), req.body, beforeDelete)),
+      ),
+    );
   r.get("/submissions", asyncHandler(async (req, res) => res.json(await listIntakeSubmissions(principal(req), req.query))));
   r.get("/submissions/:id", asyncHandler(async (req, res) => res.json(await getIntakeSubmission(principal(req), String(req.params.id)))));
   r.post("/submissions/:id/create-transaction", asyncHandler(async (req, res) => res.json(await createTransactionFromIntake(principal(req), String(req.params.id)))));

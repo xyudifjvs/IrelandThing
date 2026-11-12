@@ -20,7 +20,7 @@ export async function createTransactionFromIntake(
     await tx.$queryRaw`SELECT id FROM "Matter" WHERE id = ${receipt.matterId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM "IntakeSubmission" WHERE id = ${id} FOR UPDATE`;
     const submission = await tx.intakeSubmission.findUnique({ where: { id } });
-    if (!submission)
+    if (!submission || submission.deletedAt)
       throw new HttpError(404, "INTAKE_NOT_FOUND", "Intake not found.");
     const matter = await requireMatter(actor, submission.matterId, true, tx);
     if (

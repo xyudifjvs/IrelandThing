@@ -179,6 +179,103 @@ it("updates canonical HTO facts while preserving the intake, checklist, and clie
   });
 });
 
+it("preserves retained canonical names when split fields are omitted", async () => {
+  const coordinator = await user("coordinator");
+  const file = await matter({ stage: "under_contract", business: "hto" });
+  const contact = (name: string, email: string) =>
+    prisma.matterContact.create({
+      data: { matterId: file.id, role: "client", name, email },
+    });
+  const unstructured = await contact(
+    "Jordan de la Cruz",
+    "jordan@example.test",
+  );
+  const confirmed = await contact("Ari Example", "ari@example.test");
+  const stale = await contact("Current Fixture", "current@example.test");
+  const removed = await contact("Former Fixture", "former@example.test");
+  await prisma.matter.update({
+    where: { id: file.id },
+    data: {
+      details: {
+        structuredClientNames: {
+          [confirmed.id]: { firstName: "Ari", lastName: "Example" },
+          [stale.id]: { firstName: "Stale", lastName: "Fixture" },
+          [removed.id]: { firstName: "Former", lastName: "Fixture" },
+        },
+      },
+    },
+  });
+  const save = (input: Parameters<typeof updateFileFacts>[3]) =>
+    prisma.$transaction((tx) =>
+      updateFileFacts(tx, coordinator, file.id, input),
+    );
+
+  const result = await save({
+    expectedRevision: file.revision,
+    clients: [
+      {
+        id: unstructured.id,
+        firstName: "",
+        lastName: "",
+        email: "updated@example.test",
+        phone: "555-0100",
+      },
+      { id: confirmed.id, email: confirmed.email, phone: confirmed.phone },
+      { id: stale.id, email: stale.email, phone: stale.phone },
+      {
+        firstName: "Casey",
+        lastName: "New",
+        email: "new@example.test",
+        phone: "",
+      },
+    ],
+  });
+  const contacts = await prisma.matterContact.findMany({
+    where: { matterId: file.id },
+  });
+  const added = contacts.find(({ email }) => email === "new@example.test");
+  expect(added?.name).toBe("Casey New");
+  expect(contacts.find(({ id }) => id === unstructured.id)).toMatchObject({
+    name: unstructured.name,
+    email: "updated@example.test",
+    phone: "555-0100",
+    retiredAt: null,
+  });
+  expect(contacts.find(({ id }) => id === confirmed.id)).toMatchObject({
+    name: confirmed.name,
+    revision: confirmed.revision,
+    retiredAt: null,
+  });
+  expect(contacts.find(({ id }) => id === stale.id)?.name).toBe(stale.name);
+  expect(
+    contacts.find(({ id }) => id === removed.id)?.retiredAt,
+  ).toBeInstanceOf(Date);
+  const saved = await prisma.matter.findUniqueOrThrow({
+    where: { id: file.id },
+  });
+  expect(saved.details).toHaveProperty("structuredClientNames", {
+    [confirmed.id]: { firstName: "Ari", lastName: "Example" },
+    [added!.id]: { firstName: "Casey", lastName: "New" },
+  });
+  await expect(
+    save({
+      expectedRevision: result.revision,
+      clients: [
+        {
+          firstName: "",
+          lastName: "",
+          email: "missing-name@example.test",
+          phone: "",
+        },
+      ],
+    }),
+  ).rejects.toMatchObject({ name: "ZodError" });
+  expect(
+    (await prisma.matter.findUniqueOrThrow({ where: { id: file.id } }))
+      .revision,
+  ).toBe(result.revision);
+});
+
 it("rejects conflicting or empty structured addresses before changing facts", async () => {
   const coordinator = await user("coordinator");
   const file = await matter({ stage: "under_contract", business: "hto" });

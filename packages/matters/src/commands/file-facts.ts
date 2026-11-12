@@ -155,6 +155,7 @@ export async function updateFileFacts(
         tx,
         matterId,
         clients,
+        details.structuredClientNames,
       );
     data.details = details;
   }

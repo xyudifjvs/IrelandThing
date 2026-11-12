@@ -3,15 +3,19 @@ import { HttpError } from "@weatherly/platform";
 import { entityIdSchema } from "@weatherly/platform/handoff-contracts";
 import { z } from "zod";
 
-function fullName(person: { firstName: string; lastName: string }) {
+function fullName(person: { firstName?: string; lastName?: string }) {
   return [person.firstName, person.lastName].filter(Boolean).join(" ");
 }
 
-const clientInput = z
-  .object({
+const structuredName = z.object({
+  firstName: z.string().trim().max(200),
+  lastName: z.string().trim().max(200),
+});
+
+const clientInput = structuredName
+  .partial()
+  .extend({
     id: entityIdSchema.optional(),
-    firstName: z.string().trim().max(200),
-    lastName: z.string().trim().max(200),
     email: z
       .string()
       .trim()
@@ -19,10 +23,10 @@ const clientInput = z
     phone: z.string().trim().max(60),
   })
   .strict()
-  .refine(
-    (person) => fullName(person).length >= 1 && fullName(person).length <= 200,
-    "Enter a client name of at most 200 characters.",
-  );
+  .refine((person) => {
+    const length = fullName(person).length;
+    return length <= 200 && (length > 0 || Boolean(person.id));
+  }, "Enter a name of at most 200 characters for each new client.");
 
 export const fileClientsInput = z
   .array(clientInput)
@@ -36,6 +40,7 @@ export async function writeFileClients(
   tx: Prisma.TransactionClient,
   matterId: string,
   clients: z.infer<typeof fileClientsInput>,
+  structuredNames: unknown,
 ) {
   const existing = await tx.matterContact.findMany({
     where: {
@@ -53,24 +58,32 @@ export async function writeFileClients(
       "Select an active client from this transaction.",
     );
 
-  const kept = new Map<string, { firstName: string; lastName: string }>();
+  const savedNames =
+    z.record(z.string(), z.unknown()).safeParse(structuredNames).data ?? {};
+  const kept = new Set<string>();
+  const confirmedNames = new Map<string, z.infer<typeof structuredName>>();
   for (const client of clients) {
-    const { id, firstName, lastName, email, phone } = client;
-    const name = fullName(client);
+    const { id, firstName = "", lastName = "", email, phone } = client;
+    const suppliedName = fullName(client);
     const prior = id ? byId.get(id) : undefined;
     if (prior) {
+      const name = suppliedName || prior.name;
       if (name !== prior.name || email !== prior.email || phone !== prior.phone)
         await tx.matterContact.update({
           where: { id: prior.id },
           data: { name, email, phone, revision: { increment: 1 } },
         });
-      kept.set(prior.id, { firstName, lastName });
+      kept.add(prior.id);
+      const saved = structuredName.safeParse(savedNames[prior.id]).data;
+      if (suppliedName) confirmedNames.set(prior.id, { firstName, lastName });
+      else if (saved && fullName(saved) && fullName(saved) === prior.name)
+        confirmedNames.set(prior.id, saved);
     } else {
       const added = await tx.matterContact.create({
-        data: { matterId, role: "client", name, email, phone },
+        data: { matterId, role: "client", name: suppliedName, email, phone },
         select: { id: true },
       });
-      kept.set(added.id, { firstName, lastName });
+      confirmedNames.set(added.id, { firstName, lastName });
     }
   }
   const retired = existing
@@ -81,5 +94,5 @@ export async function writeFileClients(
       where: { matterId, id: { in: retired } },
       data: { retiredAt: new Date(), revision: { increment: 1 } },
     });
-  return Object.fromEntries(kept);
+  return Object.fromEntries(confirmedNames);
 }

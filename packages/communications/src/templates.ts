@@ -175,10 +175,11 @@ export async function archiveTemplate(
 
 export async function reorderTemplates(actor: Principal, raw: unknown) {
   assertCoordinator(actor);
-  const { side, recipientGroup, items } = z
+  const { side, recipientGroup, serviceGroup, items } = z
     .object({
       side: z.enum(["buyer", "seller", "both"]),
       recipientGroup: z.string().trim().min(1).max(100).nullable(),
+      serviceGroup: z.string().trim().min(1).max(100).nullable().optional(),
       items: z
         .array(
           z
@@ -194,8 +195,14 @@ export async function reorderTemplates(actor: Principal, raw: unknown) {
     )
     .parse(raw);
   return prisma.$transaction(async (tx) => {
+    const where = {
+      side,
+      recipientGroup,
+      active: true,
+      ...(serviceGroup !== undefined ? { serviceGroup } : {}),
+    };
     const group = await tx.communicationTemplate.findMany({
-      where: { side, recipientGroup, active: true },
+      where,
       select: { id: true, revision: true },
     });
     const revisions = new Map(group.map(({ id, revision }) => [id, revision]));
@@ -215,13 +222,7 @@ export async function reorderTemplates(actor: Principal, raw: unknown) {
       .map((item, position) => ({ ...item, position }))
       .sort((a, b) => a.id.localeCompare(b.id))) {
       const saved = await tx.communicationTemplate.updateMany({
-        where: {
-          id,
-          side,
-          recipientGroup,
-          active: true,
-          revision: expectedRevision,
-        },
+        where: { ...where, id, revision: expectedRevision },
         data: { position },
       });
       if (!saved.count)

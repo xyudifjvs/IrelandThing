@@ -1,0 +1,183 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useLiveData } from "../../../../_components/useLiveData";
+import { date, useData } from "../../_components/data";
+import s from "../../_components/workspace.module.css";
+import { Composer } from "./Composer";
+import type { Draft, EmailWork, Template } from "./email-model";
+import styles from "./file-email.module.css";
+
+type Selection = { templateId?: string; draftId?: string };
+type Recipient = { name: string; email: string; role: string };
+
+export function FileEmailWorkspace({
+  matterId,
+  side,
+  packageCode,
+  contacts = [],
+  readOnly,
+  initialTemplateId,
+}: {
+  matterId: string;
+  side: string;
+  packageCode: string;
+  contacts?: readonly Recipient[];
+  readOnly: boolean;
+  initialTemplateId?: string;
+}) {
+  const [selection, setSelection] = useState<Selection | null>(
+    initialTemplateId ? { templateId: initialTemplateId } : null,
+  );
+  const [editorGeneration, setEditorGeneration] = useState(0);
+  useEffect(() => {
+    if (!initialTemplateId) return;
+    setSelection({ templateId: initialTemplateId });
+    setEditorGeneration((generation) => generation + 1);
+  }, [initialTemplateId]);
+  const encoded = encodeURIComponent(matterId);
+  const templates = useData<Template[]>("/api/v1/communications/templates");
+  const work = useLiveData<EmailWork[]>(
+    `/api/v1/communications/work?matterId=${encoded}&view=all`,
+  );
+  const drafts = useLiveData<Draft[]>(
+    `/api/v1/communications/drafts?matterId=${encoded}`,
+  );
+  const group = `${side}_${packageCode === "complete" ? "compliance" : "ctc"}`;
+  const available = (templates.data || []).filter(
+    (entry) =>
+      (entry.side === side || entry.side === "both") &&
+      (!entry.serviceGroup || entry.serviceGroup === group),
+  );
+  const byGroup = new Map<string, Template[]>();
+  for (const entry of available) {
+    const name = entry.recipientGroup || "Other templates";
+    byGroup.set(name, [...(byGroup.get(name) ?? []), entry]);
+  }
+  const currentTemplate = available.find(
+    (entry) => entry.id === selection?.templateId,
+  );
+  const recipients = contacts.filter(
+    (person) =>
+      person.email && currentTemplate?.recipientRoles?.includes(person.role),
+  );
+  const sent = (drafts.data || []).filter((entry) => entry.status === "sent");
+  const toSend = (work.data || []).filter((entry) => entry.toSend);
+  async function refresh() {
+    await Promise.all([work.refresh(), drafts.refresh()]);
+  }
+  function open(next: Selection) {
+    setSelection(next);
+    setEditorGeneration((generation) => generation + 1);
+  }
+  function openWork(item: EmailWork) {
+    const draft = drafts.data?.find(
+      (entry) => entry.workItemId === item.id && entry.status === "draft",
+    );
+    open({ templateId: item.templateId ?? undefined, draftId: draft?.id });
+  }
+  return (
+    <div className={styles.workspace}>
+      <section className={s.section} aria-label="Email templates and reminders">
+        <div className={s.sectionHead}>
+          <h2>Emails</h2>
+          {!readOnly && (
+            <button
+              type="button"
+              className={s.buttonSmall}
+              onClick={() => open({})}
+            >
+              New email
+            </button>
+          )}
+        </div>
+        <div className={s.sectionBody}>
+          {(templates.error || work.error || drafts.error) && (
+            <p role="alert" className={s.error}>
+              Could not load file email.
+            </p>
+          )}
+          {!readOnly && toSend.length > 0 && (
+            <div className={styles.group}>
+              <h3>To send</h3>
+              {toSend.map((item) => (
+                <button
+                  type="button"
+                  className={styles.entry}
+                  key={item.id}
+                  onClick={() => openWork(item)}
+                >
+                  <strong>{item.title}</strong>
+                  <span>
+                    {item.remindOn
+                      ? `Reminder ${date(item.remindOn)}`
+                      : "Saved for later"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          {!readOnly &&
+            [...byGroup.entries()].map(([recipient, entries]) => (
+              <div className={styles.group} key={recipient}>
+                <h3>{recipient}</h3>
+                {entries.map((entry) => {
+                  const status = work.data?.find(
+                    (item) => item.templateId === entry.id,
+                  );
+                  return (
+                    <button
+                      type="button"
+                      className={styles.entry}
+                      key={entry.id}
+                      onClick={() => {
+                        const existing = drafts.data?.find(
+                          (draft) =>
+                            draft.details?.templateId === entry.id &&
+                            draft.status === "draft",
+                        );
+                        open({ templateId: entry.id, draftId: existing?.id });
+                      }}
+                    >
+                      <strong>{entry.name}</strong>
+                      {status?.sentAt ? (
+                        <span>Sent {date(status.sentAt)}</span>
+                      ) : status?.manualCompletedAt ? (
+                        <span>
+                          Checked off {date(status.manualCompletedAt)}
+                        </span>
+                      ) : entry.isPlaceholder ? (
+                        <span>Placeholder</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          <div className={styles.group}>
+            <h3>Sent emails</h3>
+            {!sent.length && <p className={s.muted}>No sent emails.</p>}
+            {sent.map((entry) => (
+              <details key={entry.id} className={styles.history}>
+                <summary>{entry.subject}</summary>
+                <p>To {entry.to.join(", ")}</p>
+                {entry.cc.length > 0 && <p>CC {entry.cc.join(", ")}</p>}
+                <p className={styles.message}>{entry.body}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+      {!readOnly && selection && (
+        <Composer
+          key={editorGeneration}
+          fixedMatterId={matterId}
+          initialTemplateId={selection.templateId}
+          initialDraftId={selection.draftId}
+          initialRecipient={recipients.length === 1 ? recipients[0] : undefined}
+          onWorkChanged={refresh}
+        />
+      )}
+    </div>
+  );
+}

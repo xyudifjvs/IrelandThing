@@ -1,6 +1,6 @@
 # Weatherly implementation checkpoint
 
-The [implementation plan](../../plans/INTAKE_TO_TRANSACTION_IMPLEMENTATION.md) is implemented on `codex/intake-to-transaction`. Product commit `d2ebea0625880a00afcb079d88b89ab6cc34b86d` contains the independently accepted C00–C14 changes. It matches the app, package and dependency files in the staged browser candidate `dbdfd4c`. The [release record](../../release/intake-to-transaction.md) tracks the final C15 acceptance and the [independent reviews](../../reviews/intake-to-transaction/) preserve each verdict.
+The [implementation plan](../../plans/INTAKE_TO_TRANSACTION_IMPLEMENTATION.md) is complete locally on `codex/intake-to-transaction`. Independent integrated acceptance passed at `8325b5f0e157f919fe9795279f7cdc62a3f34f3b`. The [release record](../../release/intake-to-transaction.md) and [independent reviews](../../reviews/intake-to-transaction/) contain the local evidence and remaining Ireland laptop checks.
 
 ## Execution environment
 

@@ -1,0 +1,23 @@
+# C15 independent integrated acceptance
+
+**Accepted for local handoff at `8325b5f0e157f919fe9795279f7cdc62a3f34f3b`** on `codex/intake-to-transaction`. No blocking finding reproduced.
+
+I independently ran the product from a clean archive of staged `dbdfd4c964c682a90485c8866232ebe9380198ed`. Its complete Git tree matched integrated `d2ebea0625880a00afcb079d88b89ab6cc34b86d`. I checked the exact successor diff through `8325b5f`. The product delta removes one terminal blank line each from the intake query, router and validation files. The three acceptance scripts in my archive match the committed copies byte for byte. I also checked the coordinator's passing suite, contract smoke and production build logs on the frozen candidate. The full branch diff against `2177674` passes the whitespace check.
+
+## Independent evidence
+
+| Check | Result |
+| --- | --- |
+| Fresh database and full suite | Applied all 20 migrations to an isolated PostgreSQL database. All 456 tests across 69 files passed. TypeScript and the optimized Next.js Webpack production build passed separately. |
+| Populated migration and recovery | Seeded synthetic pre-handoff rows at migration 18 in eight tables, including a closed file, task, participant, receipt, document and version with legacy upload replay metadata. Compared every existing field after migration 19 and every full seeded row after migration 20. The previous paired-audience constraint rejected a single override and migration 20 allowed it while retaining generic visibility and the other nullable audience. Deploy replay was a no-op. A custom-format PostgreSQL backup restored to a second disposable database with identical rows and all 20 migration records. The application recovery suite separately exercised encrypted backups and object checksums. |
+| Real HTTP sessions | Started the composed API on loopback with Better Auth cookie sessions and disposable data. Verified legacy and canonical receipt paths, coordinator-only confirmation, idempotent replay, date correction, stale task writes, membership and audience scoping, private notes and receipt isolation, explicit lifecycle actions, payment and mail configuration gates, HTO linked-row identity across business changes, and cleanup after permanent delete. |
+| Independent concurrency probe | Issued termination and HTO-to-Weatherly reassignment concurrently with the same file revision. Termination committed with HTTP 200, reassignment returned HTTP 409 `REVISION_CONFLICT`, and the stored revision advanced once. Reopen retained cancellation of the obsolete email work. The HTO row retained its identity after a later successful round trip and was removed on delete. |
+| Real Chrome | Exercised the five coordinator file tabs at 1280 px and the agent, authenticated client and bearer experiences at 390 px against the composed loopback preview. Verified deep-linked Emails, the People rail, an explicitly client-published document, mobile fit, and publication withdrawal after close-out. Both open client views removed the withdrawn document and the bearer direct-byte request returned HTTP 404. Browser requests were restricted to loopback. |
+
+I reconciled the C00–C14 reviewer verdicts and their follow-ups. The C00 and C06 reviews cover independent same-file upload and terminal-write guards, legacy direct URLs, cross-session browser history, worker object cleanup and share revocation. C07 and C08 cover invitation and resend behavior with test transport. The full suite includes legacy upload and recovery cases and assistant access and record projections. Ireland’s authenticated provider and external assistant checks remain at the account gate.
+
+## Ireland laptop handoff
+
+The runbook keeps account setup and controlled provider verification on Ireland’s laptop. The decision register includes Carson’s signed-contract precedence for Remedies and Title Commitment and the choice to pin downstream dates after **Only this date**. It also tracks the other implementation defaults for Ireland’s confirmation. Final buyer and seller email text, client portal wording, the compliance list and `og-1-cream.png` remain open inputs. Hosted migration, deployment and provider acceptance remain pending. [Ireland laptop runbook](../../../runbooks/intake-to-transaction-ireland-laptop.md) · [Decision register](../../../handovers/intake-to-transaction/C00/contracts.md#decisions-for-ireland-to-confirm)
+
+Evidence logs are under `/private/tmp/weatherly-r15-{typecheck,suite,build,http,browser,populated,race}.log`. The migration probe is `/private/tmp/weatherly-r15-migrate.mjs`. The separate race probe is under `/private/tmp/weatherly-r15-independent/tests/acceptance/r15-contract-race.ts` and `r15-canonical-race.ts`.

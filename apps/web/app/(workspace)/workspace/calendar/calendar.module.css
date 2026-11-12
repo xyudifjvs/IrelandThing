@@ -4,12 +4,11 @@
   justify-content: space-between;
   gap: 20px;
   padding: 20px 23px;
-  border-bottom: 1px solid #e5dbcb;
+  border-bottom: 1px solid var(--weatherly-color-faint);
 }
 .toolbar h2 {
-  font:
-    24px Georgia,
-    serif;
+  font-family: var(--weatherly-font-heading);
+  font-size: 24px;
   font-weight: 400;
   margin: 0;
 }
@@ -27,22 +26,22 @@
   text-transform: uppercase;
   letter-spacing: 1px;
   font-size: 9px;
-  color: #aa9679;
+  color: var(--weatherly-color-secondary);
   padding: 14px 6px;
-  background: #f6f0e5;
+  background: var(--weatherly-color-background);
 }
 .day {
   min-height: 120px;
-  border-top: 1px solid #e7ddcc;
-  border-right: 1px solid #e7ddcc;
+  border-top: 1px solid var(--weatherly-color-faint);
+  border-right: 1px solid var(--weatherly-color-faint);
   padding: 10px 7px;
-  background: #fffbf4;
+  background: var(--weatherly-color-surface);
 }
 .day:nth-child(7n) {
   border-right: 0;
 }
 .outside {
-  background: #f5efe3;
+  background: var(--weatherly-color-background);
   color: #c5b69f;
 }
 .number {
@@ -62,7 +61,7 @@
   background: #eee5d2;
   border-left: 2px solid #b09770;
   border-radius: 3px;
-  color: #8c6d43;
+  color: var(--weatherly-color-text);
   margin-top: 7px;
   padding: 6px 7px;
   font-size: 9px;
@@ -71,15 +70,11 @@
 }
 .event small {
   display: block;
-  color: #ad9471;
+  color: var(--weatherly-color-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 8px;
-}
-.proposed {
-  background: #f8eadc;
-  border-left-color: #c19b70;
 }
 .complete {
   opacity: 0.5;
@@ -101,9 +96,8 @@
     border-bottom: 1px solid #e7dbca;
   }
   .listDay h3 {
-    font:
-      20px Georgia,
-      serif;
+    font-family: var(--weatherly-font-heading);
+    font-size: 20px;
     font-weight: 400;
     color: #987951;
     margin: 0 0 12px;

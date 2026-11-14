@@ -534,7 +534,12 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
       const retained = await prisma.emailDraft.findUniqueOrThrow({
         where: { id: draft.id },
       });
-      expect(retained.status).toBe("queued");
+      expect(retained.status).toBe("draft");
+      expect(retained.sendKey).toBeNull();
+      expect(retained.details).toMatchObject({
+        sendFailure: code,
+        reviewNeeded: true,
+      });
       expect(retained.details).not.toHaveProperty("attemptStartedAt");
     }
   });
@@ -597,8 +602,9 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
       ).revision,
       visibility: "client",
     });
+    expect(await service.listMessages(client, matterIds[0])).toEqual([]);
     expect(
-      (await service.listMessages(client, matterIds[0])).map((m) => m.id),
+      (await service.listMessages(owner, matterIds[0])).map((m) => m.id),
     ).toContain(thread.messages[0].id);
     paginatedHistory = true;
     const firstHistory = await jobs["gmail.sync"]({ ownerId });
@@ -678,7 +684,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     const projected = (await service.listThreads(client, first)).find(
       (t) => t.id === thread.id,
     );
-    expect(projected?.subject).toBe("Shared update only");
+    expect(projected).toBeUndefined();
     await prisma.matterParticipant.updateMany({
       where: { matterId: first, userId: clientId },
       data: { revokedAt: new Date() },
@@ -939,6 +945,45 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
       )?.status,
     ).toBe("ambiguous");
   });
+  it("records a confirmed outsider send in the owner's private directory once", async () => {
+    const matter = await prisma.matter.create({
+      data: {
+        title: "Synthetic address book send",
+        propertyAddress: "45 Synthetic Lane",
+        side: "buyer",
+        packageCode: "essentials",
+        checklistVersion: 1,
+        stage: "under_contract",
+      },
+    });
+    matterIds.push(matter.id);
+    const outside = `outside-${suffix}@example.org`;
+    const draft = await service.createDraft(owner, {
+      matterId: matter.id,
+      to: [outside],
+      subject: "Reviewed introduction",
+      body: "Synthetic message",
+    });
+    const queued = await service.queueSend(owner, draft.id, {
+      revision: draft.revision,
+      confirmed: true,
+    });
+    expect(
+      await prisma.businessContact.count({ where: { email: outside } }),
+    ).toBe(0);
+    const payload = { draftId: draft.id, ownerId, sendKey: queued.sendKey! };
+    await jobs["gmail.send"](payload);
+    await jobs["gmail.send"](payload);
+    expect(
+      await prisma.businessContact.findMany({
+        where: { email: outside },
+        select: { ownerId: true, usageCount: true },
+      }),
+    ).toEqual([{ ownerId, usageCount: 1 }]);
+    expect(
+      await prisma.matterContact.count({ where: { matterId: matter.id } }),
+    ).toBe(0);
+  });
   it("pages beyond 200 historical records with authorization applied before limits and denies revoked mailbox workers", async () => {
     const matter = await createMatter(owner, {
       title: `Pagination ${suffix}`,
@@ -1006,21 +1051,21 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     expect(
       (
         await collect((c) =>
-          service.listThreads(client, matter.id, { cursor: c, limit: 17 }),
+          service.listThreads(owner, matter.id, { cursor: c, limit: 17 }),
         )
       ).size,
-    ).toBe(210);
+    ).toBe(230);
     expect(
       (
         await collect((c) =>
-          service.listMessages(client, matter.id, {
+          service.listMessages(owner, matter.id, {
             cursor: c,
             limit: 19,
             q: "Historical pagination fixture",
           }),
         )
       ).size,
-    ).toBe(210);
+    ).toBe(230);
     expect(
       (
         await collect((c) =>
@@ -1040,13 +1085,13 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
         cursor: rows[229].id,
         limit: 1,
       }),
-    ).rejects.toMatchObject({ status: 404 });
+    ).resolves.toEqual([]);
     await expect(
       service.listMessages(client, matter.id, {
         cursor: `historical-message-${suffix}-229`,
         limit: 1,
       }),
-    ).rejects.toMatchObject({ status: 404 });
+    ).resolves.toEqual([]);
     await expect(
       service.listDrafts(client, matter.id, { limit: 1 }),
     ).rejects.toMatchObject({ status: 403 });

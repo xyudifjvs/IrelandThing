@@ -10,12 +10,18 @@ import {
   type Principal,
 } from "@weatherly/platform";
 import { CommunicationsService, createCommunicationsService } from "./service";
+import { registerEmailWorkRoutes } from "./email-work-routes";
+import { archiveTemplate, reorderTemplates } from "./templates";
 export * from "./service";
 export * from "./gateway";
 export * from "./jobs";
 export * from "./reminders";
 export * from "./policy";
 export * from "./merge-fields";
+export { listEmailWork } from "./email-work";
+export { invalidateFileEmailWork } from "./file-email-effects";
+export { queueAgentInvitation } from "./agent-invitation-email";
+export { seedPlaceholderEmailTemplates } from "./placeholder-templates";
 let shared: CommunicationsService | undefined;
 const current = () => shared || (shared = createCommunicationsService());
 export const listMessages = (
@@ -45,6 +51,7 @@ export const sendSystemEmail = (
 ) => current().sendSystemEmail(input);
 export function createCommunicationsRouter(service = current()) {
   const r = Router();
+  registerEmailWorkRoutes(r);
   const matterId = (v: unknown) => (typeof v === "string" ? v : undefined);
   const pageOptions = (req: import("express").Request) => ({
     cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
@@ -94,15 +101,19 @@ export function createCommunicationsRouter(service = current()) {
   );
   r.get(
     "/threads",
-    asyncHandler(async (req, res) =>
-      res.json(
-        await service.listThreads(
-          principal(req),
-          matterId(req.query.matterId),
-          pageOptions(req),
-        ),
-      ),
-    ),
+    asyncHandler(async (req, res) => {
+      const actor = principal(req);
+      assertCoordinator(actor);
+      res
+        .set("Cache-Control", "private, no-store")
+        .json(
+          await service.listThreads(
+            actor,
+            matterId(req.query.matterId),
+            pageOptions(req),
+          ),
+        );
+    }),
   );
   r.patch(
     "/threads/:id",
@@ -118,15 +129,19 @@ export function createCommunicationsRouter(service = current()) {
   );
   r.get(
     "/messages",
-    asyncHandler(async (req, res) =>
-      res.json(
-        await service.listMessages(
-          principal(req),
-          matterId(req.query.matterId),
-          pageOptions(req),
-        ),
-      ),
-    ),
+    asyncHandler(async (req, res) => {
+      const actor = principal(req);
+      assertCoordinator(actor);
+      res
+        .set("Cache-Control", "private, no-store")
+        .json(
+          await service.listMessages(
+            actor,
+            matterId(req.query.matterId),
+            pageOptions(req),
+          ),
+        );
+    }),
   );
   r.patch(
     "/messages/:id",
@@ -251,6 +266,20 @@ export function createCommunicationsRouter(service = current()) {
         .status(201)
         .json(await service.saveTemplate(principal(req), req.body)),
     ),
+  );
+  r.post(
+    "/templates/reorder",
+    asyncHandler(async (req, res) => {
+      res.json(await reorderTemplates(principal(req), req.body));
+    }),
+  );
+  r.delete(
+    "/templates/:id",
+    asyncHandler(async (req, res) => {
+      res.json(
+        await archiveTemplate(principal(req), String(req.params.id), req.body),
+      );
+    }),
   );
   r.patch(
     "/templates/:id",

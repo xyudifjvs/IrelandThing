@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
-import { prisma, Prisma } from "@weatherly/db";
+import { prisma } from "@weatherly/db";
 import { listMatters } from "@weatherly/matters";
 import {
   assertCoordinator,
@@ -11,6 +11,37 @@ import {
   validDate,
   type Principal,
 } from "@weatherly/platform";
+
+import {
+  finalizeDigestWindow,
+  listDigestIntakes,
+  openDigestRequest,
+  persistDigestRequest,
+  readDigestWindow,
+  replayable,
+  reserveDigestWindow,
+  sealDigestRequest,
+} from "./private-reminder/intake-window";
+
+import {
+  civilScheduleDate,
+  previousScheduledDate,
+  reminderScheduleDue,
+} from "./private-reminder/schedule";
+import {
+  collectReminderDates,
+  sourcesStillCurrent,
+} from "./private-reminder/deadline-collection";
+import { renderDigest } from "./private-reminder/content";
+import { intakeDatabaseClock } from "../../intake/src/receipt-clock";
+export {
+  reminderLocalClock,
+  reminderScheduleDue,
+} from "./private-reminder/schedule";
+export type {
+  ReminderSource,
+  ReminderItem,
+} from "./private-reminder/deadline-collection";
 
 const timeZone = z
   .string()
@@ -34,7 +65,6 @@ const settingsInput = previewInput
     weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
   })
   .strict();
-type Settings = z.infer<typeof settingsInput>;
 export const approvedReminderSchedule = {
   timeZone: "America/New_York",
   localTime: "08:00",
@@ -50,6 +80,13 @@ const digestPayload = z
     settingsFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strict();
+const dispatchSchema = z
+  .object({
+    attemptAt: z.iso.datetime(),
+    request: z.string().min(1),
+  })
+  .strict();
+const preparingPayload = digestPayload.extend({ dispatch: dispatchSchema });
 const finishedPayload = digestPayload
   .extend({
     redacted: z.literal(true),
@@ -61,60 +98,9 @@ const finishedPayload = digestPayload
   })
   .strict();
 type Payload = z.infer<typeof digestPayload>;
+
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
-const terminalTasks = new Set(["completed", "signed", "not_applicable"]);
-const inactiveMatters = new Set([
-  "pending_review",
-  "closed",
-  "terminated",
-  "archived",
-]);
-const record = (value: unknown): Record<string, unknown> =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-const clean = (value: string, length: number) =>
-  value
-    .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ")
-    .replace(/<[^>]*>/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, length);
-
-/** Local civil dates, independent of the host timezone and DST offset. */
-export function reminderLocalClock(at: Date, zone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: zone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(at);
-  const field = (name: string) =>
-    parts.find((part) => part.type === name)!.value;
-  const dateKey = `${field("year")}-${field("month")}-${field("day")}`;
-  return {
-    dateKey,
-    minute: Number(field("hour")) * 60 + Number(field("minute")),
-    weekday: new Date(`${dateKey}T12:00:00Z`).getUTCDay(),
-  };
-}
-export function reminderScheduleDue(
-  settings: Pick<Settings, "timeZone" | "localTime" | "weekdays">,
-  at: Date,
-) {
-  const clock = reminderLocalClock(at, settings.timeZone);
-  const [hour, minute] = settings.localTime.split(":").map(Number);
-  return {
-    ...clock,
-    due:
-      settings.weekdays.includes(clock.weekday) &&
-      clock.minute >= hour * 60 + minute,
-  };
-}
 function configuredSettings(env: Environment) {
   const weekdays = (
     env.REMINDER_WEEKDAYS ?? approvedReminderSchedule.weekdays.join(",")
@@ -182,20 +168,6 @@ function asActor(
     sessionId: "private-reminder-worker",
   };
 }
-export type ReminderSource = {
-  kind: "task" | "deadline";
-  id: string;
-  matterId: string;
-  date: string;
-};
-export type ReminderItem = {
-  matterId: string;
-  propertyAddress: string;
-  label: string;
-  date: string;
-  bucket: "overdue" | "upcoming";
-  sourceRefs: ReminderSource[];
-};
 type Dependencies = {
   env?: () => Environment;
   now?: () => Date;
@@ -208,6 +180,9 @@ type Dependencies = {
 export function createPrivateReminderService(dependencies: Dependencies = {}) {
   const env = dependencies.env || (() => process.env);
   const now = dependencies.now || (() => new Date());
+  // Production cutoff and receipt timestamps come from the same database clock.
+  const scheduleClock = async () =>
+    dependencies.now ? now() : intakeDatabaseClock(prisma);
   const send = dependencies.fetch || fetch;
   const readMatters = dependencies.listMatters || listMatters;
   const approvedEmail =
@@ -267,177 +242,16 @@ export function createPrivateReminderService(dependencies: Dependencies = {}) {
       apiKey: current.RESEND_API_KEY!,
     };
   }
-  async function collect(actor: Principal, input: unknown, at = now()) {
-    assertCoordinator(actor);
-    const settings = previewInput.parse(input);
-    const { dateKey } = reminderLocalClock(at, settings.timeZone);
-    const end = new Date(`${dateKey}T12:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + settings.leadDays);
-    const endKey = end.toISOString().slice(0, 10);
-    const items: ReminderItem[] = [];
-    const seenMatters = new Set<string>();
-    const revisions = new Map<string, number>();
-    const seenCursors = new Set<string>();
-    let cursor: string | undefined;
-    let mattersScanned = 0;
-    let cursorRestarts = 0;
-    while (true) {
-      let page: Awaited<ReturnType<typeof listMatters>>;
-      try {
-        page = await readMatters(actor, {
-          limit: 200,
-          order: "id",
-          ...(cursor ? { cursor } : {}),
-        });
-      } catch (error) {
-        if (
-          cursor &&
-          error instanceof HttpError &&
-          error.code === "MATTER_NOT_FOUND"
-        ) {
-          if (++cursorRestarts > 3)
-            throw new HttpError(
-              503,
-              "REMINDER_PAGINATION_CHANGED",
-              "Transaction records changed while preparing reminders; retry the complete preview.",
-            );
-          // Deletion of a cursor must not omit the rest of the portfolio or
-          // permanently fail a digest. Restart the full scan, never truncate it.
-          cursor = undefined;
-          items.length = 0;
-          mattersScanned = 0;
-          seenMatters.clear();
-          revisions.clear();
-          seenCursors.clear();
-          continue;
-        }
-        throw error;
-      }
-      for (const matter of page) {
-        if (seenMatters.has(matter.id)) continue;
-        seenMatters.add(matter.id);
-        revisions.set(matter.id, matter.revision);
-        mattersScanned++;
-        if (inactiveMatters.has(matter.stage)) continue;
-        const details = record(record(matter).details);
-        if (
-          record(details.fileReview).status === "pending" ||
-          (Array.isArray(details.sourceConflicts) &&
-            details.sourceConflicts.length)
-        )
-          continue;
-        const groups = new Map<string, ReminderItem>();
-        const tasks = matter.tasks;
-        const keyFor = (row: unknown) => {
-          const key = record(record(row).details).workflowKey;
-          return typeof key === "string" && key ? key : null;
-        };
-        const eligibleDate = (date: string | null) =>
-          Boolean(date && validDate(date) && date <= endKey);
-        const add = (
-          kind: "task" | "deadline",
-          id: string,
-          label: string,
-          date: string,
-          key: string | null,
-        ) => {
-          const group = key ? `workflow:${key}` : `${kind}:${id}`;
-          const source: ReminderSource = {
-            kind,
-            id,
-            matterId: matter.id,
-            date,
-          };
-          const previous = groups.get(group);
-          if (previous) {
-            previous.sourceRefs.push(source);
-            return;
-          }
-          groups.set(group, {
-            matterId: matter.id,
-            propertyAddress: clean(matter.propertyAddress, 300),
-            label: clean(label, 200),
-            date,
-            bucket: date < dateKey ? "overdue" : "upcoming",
-            sourceRefs: [source],
-          });
-        };
-        for (const deadline of matter.deadlines) {
-          if (deadline.status !== "confirmed" || !eligibleDate(deadline.date))
-            continue;
-          const key = keyFor(deadline);
-          const matches = key
-            ? tasks.filter((task) => keyFor(task) === key)
-            : [];
-          if (
-            matches.length &&
-            matches.every((task) => terminalTasks.has(task.status))
-          )
-            continue;
-          add("deadline", deadline.id, deadline.label, deadline.date!, key);
-        }
-        for (const task of tasks) {
-          if (
-            terminalTasks.has(task.status) ||
-            task.status === "proposed" ||
-            !eligibleDate(task.dueDate)
-          )
-            continue;
-          add("task", task.id, task.title, task.dueDate!, keyFor(task));
-        }
-        items.push(...groups.values());
-      }
-      if (page.length < 200) break;
-      cursor = page.at(-1)!.id;
-      if (seenCursors.has(cursor))
-        throw new HttpError(
-          503,
-          "REMINDER_PAGINATION_CHANGED",
-          "Transaction ordering changed while preparing reminders; preview again.",
-        );
-      seenCursors.add(cursor);
-    }
-    items.sort(
-      (a, b) =>
-        a.date.localeCompare(b.date) ||
-        a.propertyAddress.localeCompare(b.propertyAddress) ||
-        a.label.localeCompare(b.label),
+  function collect(actor: Principal, input: unknown, at = now()) {
+    return collectReminderDates(
+      actor,
+      previewInput.parse(input),
+      at,
+      readMatters,
     );
-    return {
-      revisions,
-      digest: {
-        generatedAt: at.toISOString(),
-        dateKey,
-        ...settings,
-        items,
-        counts: {
-          mattersScanned,
-          overdue: items.filter((item) => item.bucket === "overdue").length,
-          upcoming: items.filter((item) => item.bucket === "upcoming").length,
-        },
-      },
-    };
   }
   async function preview(actor: Principal, input: unknown, at = now()) {
     return (await collect(actor, input, at)).digest;
-  }
-  async function sourcesStillCurrent(revisions: Map<string, number>) {
-    // Canonical task/date edits increment the matter revision. Validate every
-    // scanned record, including previously empty/pending files, before dispatch.
-    if ((await prisma.matter.count()) !== revisions.size) return false;
-    const ids = [...revisions.keys()];
-    for (let index = 0; index < ids.length; index += 200) {
-      const rows = await prisma.matter.findMany({
-        where: { id: { in: ids.slice(index, index + 200) } },
-        select: { id: true, revision: true },
-      });
-      if (
-        rows.length !== Math.min(200, ids.length - index) ||
-        rows.some((row) => revisions.get(row.id) !== row.revision)
-      )
-        return false;
-    }
-    return true;
   }
   async function status(actor: Principal) {
     assertCoordinator(actor);
@@ -495,40 +309,39 @@ export function createPrivateReminderService(dependencies: Dependencies = {}) {
   }
   const jobKey = (input: Pick<Payload, "recipientUserId" | "dateKey">) =>
     `private-reminder:${input.recipientUserId}:${input.dateKey}`;
-  async function enqueueScheduled(at = now()) {
+  async function enqueueScheduled(at?: Date) {
     const ready = await readiness();
     if (!ready.ready) return { enqueued: false, reason: "NOT_DELIVERING" };
-    const clock = reminderScheduleDue(ready.settings, at);
+    const clock = reminderScheduleDue(
+      ready.settings,
+      at ?? (await scheduleClock()),
+    );
     if (!clock.due) return { enqueued: false, reason: "NOT_DUE" };
     const payload: Payload = {
       recipientUserId: ready.user.id,
       dateKey: clock.dateKey,
       settingsFingerprint: ready.fingerprint,
     };
-    try {
-      await prisma.outboxJob.create({
-        data: {
-          topic: "reminder.digest",
-          idempotencyKey: jobKey(payload),
-          payload,
-        },
-      });
-      return { enqueued: true, dateKey: clock.dateKey };
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      )
-        return { enqueued: false, reason: "ALREADY_SCHEDULED" };
-      throw error;
-    }
+    const reason = await reserveDigestWindow(
+      payload,
+      jobKey(payload),
+      previousScheduledDate(clock.dateKey, ready.settings),
+      civilScheduleDate(clock.dateKey, ready.settings),
+    );
+    return reason
+      ? { enqueued: false, reason }
+      : { enqueued: true, dateKey: clock.dateKey };
   }
   async function handleDigest(payload: unknown) {
     const finished = finishedPayload.safeParse(payload);
     if (finished.success) return { redacted: true };
-    const input = digestPayload.parse(payload);
+    const original = digestPayload.safeParse(payload);
+    const { dispatch: _incomingDispatch, ...input } = original.success
+      ? { ...original.data, dispatch: undefined }
+      : preparingPayload.parse(payload);
+    const key = jobKey(input);
     const stored = await prisma.outboxJob.findUnique({
-      where: { idempotencyKey: jobKey(input) },
+      where: { idempotencyKey: key },
       select: { topic: true, state: true, payload: true },
     });
     if (!stored || stored.topic !== "reminder.digest")
@@ -542,32 +355,39 @@ export function createPrivateReminderService(dependencies: Dependencies = {}) {
       stored.state === "complete"
     )
       return { redacted: true };
-    if (
-      JSON.stringify(stored.payload) !== JSON.stringify(input) &&
-      !digestPayload.safeParse(stored.payload).success
-    )
-      throw new HttpError(
-        409,
-        "REMINDER_JOB_MISMATCH",
-        "This private reminder job changed.",
-      );
-    const queued = digestPayload.parse(stored.payload);
+    const preparedPayload = preparingPayload.safeParse(stored.payload);
+    const queued = preparedPayload.success
+      ? preparedPayload.data
+      : digestPayload.parse(stored.payload);
     if (queued.settingsFingerprint !== input.settingsFingerprint)
       throw new HttpError(
         409,
         "REMINDER_JOB_MISMATCH",
         "This private reminder job changed.",
       );
-    const redact = async (result: {
-      skipped?: string;
-      providerMessageId?: string;
-    }) => {
-      await prisma.outboxJob.updateMany({
-        where: { topic: "reminder.digest", idempotencyKey: jobKey(input) },
-        data: { payload: { ...input, redacted: true, ...result } },
-      });
+    const window = await readDigestWindow(input.recipientUserId, key);
+    const dispatch = preparedPayload.success
+      ? preparedPayload.data.dispatch
+      : null;
+    const redact = async (
+      result: { skipped?: string; providerMessageId?: string },
+      advance = false,
+    ) => {
+      await finalizeDigestWindow(
+        input.recipientUserId,
+        key,
+        { ...input, redacted: true, ...result },
+        advance,
+      );
       return result;
     };
+    if (window === false) return redact({ skipped: "STALE_SCHEDULE" });
+    if (dispatch && !replayable(dispatch.attemptAt, now()))
+      throw new HttpError(
+        409,
+        "REMINDER_DELIVERY_UNCONFIRMED",
+        "Review the previous digest delivery before resuming the intake window.",
+      );
     const eligible = async () => {
       const current = await readiness();
       if (!current.ready) return { skipped: "NOT_DELIVERING" } as const;
@@ -576,56 +396,89 @@ export function createPrivateReminderService(dependencies: Dependencies = {}) {
         input.settingsFingerprint !== current.fingerprint
       )
         return { skipped: "SETTINGS_CHANGED" } as const;
-      const clock = reminderScheduleDue(current.settings, now());
-      if (!clock.due || clock.dateKey !== input.dateKey)
+      const at = await scheduleClock();
+      const clock = reminderScheduleDue(current.settings, at);
+      if (!dispatch && (!clock.due || clock.dateKey !== input.dateKey))
         return { skipped: "STALE_SCHEDULE" } as const;
-      return { current } as const;
+      return { current, at } as const;
     };
     let check = await eligible();
-    if ("skipped" in check) return redact({ skipped: check.skipped });
-    let prepared = await collect(asActor(check.current.user), {
-      timeZone: check.current.settings.timeZone,
-      leadDays: check.current.settings.leadDays,
-    });
-    for (let attempt = 0; ; attempt++) {
+    if ("skipped" in check) {
+      if (dispatch)
+        throw new HttpError(
+          409,
+          "REMINDER_DELIVERY_UNCONFIRMED",
+          "Digest delivery settings changed after dispatch.",
+        );
+      return redact({ skipped: check.skipped });
+    }
+    let request: string;
+    if (dispatch) {
+      request = openDigestRequest(dispatch.request, check.current.apiKey, key);
+    } else {
+      const collectCurrent = () =>
+        collect(
+          asActor(check.current!.user),
+          {
+            timeZone: check.current!.settings.timeZone,
+            leadDays: check.current!.settings.leadDays,
+          },
+          check.at,
+        );
+      let prepared = await collectCurrent();
+      const intakes = window ? await listDigestIntakes(window) : [];
+      for (let attempt = 0; ; attempt++) {
+        check = await eligible();
+        if ("skipped" in check) return redact({ skipped: check.skipped });
+        if (await sourcesStillCurrent(prepared.revisions)) break;
+        if (attempt >= 3)
+          throw new HttpError(
+            503,
+            "REMINDER_SOURCES_CHANGED",
+            "Transactions changed during digest preparation; the complete digest will retry.",
+          );
+        prepared = await collectCurrent();
+      }
+      const digest = prepared.digest;
       check = await eligible();
       if ("skipped" in check) return redact({ skipped: check.skipped });
-      if (await sourcesStillCurrent(prepared.revisions)) break;
-      if (attempt >= 3)
+      if (!digest.items.length && !intakes.length)
+        return redact({ skipped: "NO_DUE_ITEMS" }, true);
+      const text = renderDigest(digest, intakes);
+      if (text.length > 200000)
         throw new HttpError(
-          503,
-          "REMINDER_SOURCES_CHANGED",
-          "Transactions changed during digest preparation; the complete digest will retry.",
+          413,
+          "REMINDER_DIGEST_TOO_LARGE",
+          "The private digest exceeds the safe email size; review the complete preview instead.",
         );
-      prepared = await collect(asActor(check.current.user), {
-        timeZone: check.current.settings.timeZone,
-        leadDays: check.current.settings.leadDays,
+      const current = check.current;
+      request = JSON.stringify({
+        from: current.from,
+        to: [current.user.email],
+        subject: `Weatherly private reminders · ${digest.dateKey}`,
+        text,
       });
-    }
-    const digest = prepared.digest;
-    // Recheck the exact transport, recipient and local date after source validation.
-    check = await eligible();
-    if ("skipped" in check) return redact({ skipped: check.skipped });
-    const current = check.current;
-    if (!digest.items.length) return redact({ skipped: "NO_DUE_ITEMS" });
-    const text = [
-      `Weatherly private reminders — ${digest.dateKey}`,
-      `Only for your coordinator account. Dates use ${digest.timeZone}.`,
-      `Overdue: ${digest.counts.overdue}. Upcoming through ${digest.leadDays} calendar days: ${digest.counts.upcoming}.`,
-      "",
-      ...digest.items.map(
-        (item) =>
-          `${item.bucket === "overdue" ? "OVERDUE" : "UPCOMING"} ${item.date} — ${item.propertyAddress || `Transaction ${item.matterId}`} — ${item.label}\nSources: ${item.sourceRefs.map((source) => `${source.kind}:${source.id}`).join(", ")}`,
-      ),
-      "",
-      "Review the current transaction record before acting. No agent or client received this digest.",
-    ].join("\n");
-    if (text.length > 200000)
-      throw new HttpError(
-        413,
-        "REMINDER_DIGEST_TOO_LARGE",
-        "The private digest exceeds the safe email size; review the complete preview instead.",
+      const encrypted = {
+        attemptAt: now().toISOString(),
+        request: sealDigestRequest(request, current.apiKey, key),
+      };
+      const persisted = await persistDigestRequest(
+        input.recipientUserId,
+        key,
+        stored.payload,
+        {
+          ...input,
+          dispatch: encrypted,
+        },
       );
+      if (!persisted)
+        throw new HttpError(
+          409,
+          "REMINDER_JOB_MISMATCH",
+          "This private reminder job changed.",
+        );
+    }
+    const current = check.current;
     const response = await send("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -633,24 +486,28 @@ export function createPrivateReminderService(dependencies: Dependencies = {}) {
         "Content-Type": "application/json",
         "Idempotency-Key": `weatherly-private-reminder-${hash(jobKey(input))}`,
       },
-      body: JSON.stringify({
-        from: current.from,
-        to: [current.user.email],
-        subject: `Weatherly private reminders · ${digest.dateKey}`,
-        text,
-      }),
+      body: request,
       signal: AbortSignal.timeout(30000),
     });
-    if (!response.ok)
+    if (!response.ok) {
+      if (
+        response.status < 500 &&
+        response.status !== 409 &&
+        response.status !== 429
+      )
+        await redact({ skipped: "PROVIDER_REJECTED" });
       throw new HttpError(
-        response.status >= 500 || response.status === 429 ? 502 : 422,
+        response.status >= 500 || [409, 429].includes(response.status)
+          ? 502
+          : 422,
         "REMINDER_PROVIDER_FAILED",
         "Private reminder provider acceptance failed; no delivery is asserted.",
       );
+    }
     const result = z
       .object({ id: z.string().min(1).max(200) })
       .parse(await response.json());
-    await redact({ providerMessageId: result.id });
+    await redact({ providerMessageId: result.id }, true);
     return { providerAccepted: true };
   }
   return { status, preview, enqueueScheduled, handleDigest };

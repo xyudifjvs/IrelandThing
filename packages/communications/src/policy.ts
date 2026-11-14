@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma, type Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
 import { requireMatter } from "@weatherly/matters";
+import { placeholderBody, placeholderSubject } from "./placeholder-templates";
 export const email = z.email().transform((v) => v.trim().toLowerCase());
 export const recipientArray = z.array(email).max(40);
 export const draftInput = z
@@ -9,6 +11,7 @@ export const draftInput = z
     matterId: z.string(),
     to: recipientArray.min(1),
     cc: recipientArray.default([]),
+    enteredRecipients: z.array(email).max(80).optional(),
     subject: z
       .string()
       .trim()
@@ -33,21 +36,37 @@ export function textArray(value: unknown): string[] {
     ? value.filter((x): x is string => typeof x === "string")
     : [];
 }
+const isClientRole = (role: unknown) =>
+  ["client", "buyer", "seller", "buyer_client", "seller_client"].includes(
+    String(role)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_"),
+  );
+
 export async function recipientPolicy(
   actor: Principal,
   matterId: string,
   to: string[],
   cc: string[],
   db: Prisma.TransactionClient | typeof prisma = prisma,
+  formerRecipients: { entered?: string[]; saved?: unknown } = {},
 ) {
   const matter = await requireMatter(actor, matterId, false, db);
   const details = asRecord(matter.details);
-  const contacts = Array.isArray(details.contacts) ? details.contacts : [];
-  const clients = Array.isArray(details.clients) ? details.clients : [];
+  const canonical = matter.checklistVersion !== null;
+  const storedContacts = await db.matterContact.findMany({
+    where: { matterId },
+    select: { id: true, name: true, role: true, email: true, retiredAt: true },
+  });
+  const legacyContacts =
+    !canonical && Array.isArray(details.contacts) ? details.contacts : [];
+  const clients =
+    !canonical && Array.isArray(details.clients) ? details.clients : [];
   const agent = matter.agentId
     ? await db.user.findUnique({
         where: { id: matter.agentId },
-        select: { email: true },
+        select: { id: true, email: true, name: true },
       })
     : null;
   const normalize = (a: unknown) => {
@@ -55,23 +74,54 @@ export async function recipientPolicy(
     return p.success ? p.data : null;
   };
   const clientEmails = new Set<string>();
-  const allowed = new Set<string>(agent ? [agent.email.toLowerCase()] : []);
-  for (const contact of [...clients, ...contacts]) {
-    const item = asRecord(contact),
-      address = normalize(item.email);
-    if (address) {
-      allowed.add(address);
-      if (
-        clients.includes(contact) ||
-        ["client", "buyer", "seller"].includes(String(item.role))
-      )
-        clientEmails.add(address);
+  const retired = new Map<string, string[]>();
+  const associations = new Map<string, string[]>();
+  const addAssociation = (
+    address: string,
+    source: string,
+    item: Record<string, unknown>,
+  ) => {
+    const identity = JSON.stringify([
+      source,
+      item.id ?? null,
+      item.name ?? null,
+      item.role ?? null,
+    ]);
+    associations.set(address, [...(associations.get(address) ?? []), identity]);
+    if (source === "client" || isClientRole(item.role))
+      clientEmails.add(address);
+  };
+  if (agent) addAssociation(agent.email.toLowerCase(), "agent", agent);
+  for (const contact of storedContacts) {
+    const address = normalize(contact.email);
+    if (!address) continue;
+    if (contact.retiredAt) {
+      const retirement = JSON.stringify([
+        contact.id,
+        contact.retiredAt,
+        contact.role,
+      ]);
+      retired.set(address, [...(retired.get(address) ?? []), retirement]);
+      if (isClientRole(contact.role)) clientEmails.add(address);
+    } else {
+      addAssociation(address, "file", contact);
     }
+  }
+  for (const contact of [...clients, ...legacyContacts]) {
+    const item = asRecord(contact);
+    const address = normalize(item.email);
+    if (!address) continue;
+    const isClient = clients.includes(contact);
+    if (isClient || isClientRole(item.role)) clientEmails.add(address);
+    if (!retired.has(address))
+      addAssociation(address, isClient ? "client" : "legacy", item);
   }
   const normalizedTo = [...new Set(to.map((v) => email.parse(v)))];
   const normalizedCc = [...new Set(cc.map((v) => email.parse(v)))].filter(
     (v) => !normalizedTo.includes(v),
   );
+  const savedFormerEvidence = asRecord(formerRecipients.saved);
+  const formerRecipientEvidence: Record<string, string> = {};
   for (const address of [...normalizedTo, ...normalizedCc]) {
     if (address === "ireland@ireland.com")
       throw new HttpError(
@@ -79,17 +129,35 @@ export async function recipientPolicy(
         "PLACEHOLDER_EMAIL",
         "The preview address cannot receive external messages",
       );
-    if (!allowed.has(address))
-      throw new HttpError(
-        422,
-        "UNAPPROVED_RECIPIENT",
-        "Save the recipient as a matter contact before sending",
-      );
     if (details.directContact !== "copy_agent" && clientEmails.has(address))
       throw new HttpError(
         403,
         "CLIENT_CONTACT_RESTRICTED",
         "This matter permits client contact only through the agent",
+      );
+    const retirements = retired.get(address);
+    if (retirements && !associations.has(address)) {
+      const evidence = createHash("sha256")
+        .update(JSON.stringify(retirements.sort()))
+        .digest("hex");
+      if (
+        !canonical ||
+        clientEmails.has(address) ||
+        (savedFormerEvidence[address] !== evidence &&
+          !formerRecipients.entered?.includes(address))
+      )
+        throw new HttpError(
+          409,
+          "RECIPIENT_RETIRED",
+          "A file recipient was removed or replaced. Review the recipients and remove the old address.",
+        );
+      formerRecipientEvidence[address] = evidence;
+    }
+    if (!canonical && !associations.has(address))
+      throw new HttpError(
+        422,
+        "UNAPPROVED_RECIPIENT",
+        "Save the recipient as a matter contact before sending",
       );
   }
   if (
@@ -108,7 +176,48 @@ export async function recipientPolicy(
     )
       normalizedCc.push(agent.email.toLowerCase());
   }
-  return { matter, to: normalizedTo, cc: normalizedCc };
+  return {
+    matter,
+    to: normalizedTo,
+    cc: normalizedCc,
+    formerRecipientEvidence,
+    recipientEvidence: createHash("sha256")
+      .update(
+        JSON.stringify(
+          [...normalizedTo, ...normalizedCc].map((address) => [
+            address,
+            formerRecipientEvidence[address]
+              ? ["entered-former", formerRecipientEvidence[address]]
+              : (associations.get(address) ?? []).sort(),
+          ]),
+        ),
+      )
+      .digest("hex"),
+    knownRecipients: [...normalizedTo, ...normalizedCc].filter((address) =>
+      associations.has(address),
+    ),
+    directoryRecipients: canonical
+      ? [...normalizedTo, ...normalizedCc].filter(
+          (address) => !associations.has(address),
+        )
+      : [],
+  };
+}
+
+export function requireSameRecipients(
+  recipients: Awaited<ReturnType<typeof recipientPolicy>>,
+  previous: { to: unknown; cc: unknown; recipientEvidence?: unknown },
+) {
+  if (
+    JSON.stringify(recipients.to) !== JSON.stringify(previous.to) ||
+    JSON.stringify(recipients.cc) !== JSON.stringify(previous.cc) ||
+    recipients.recipientEvidence !== previous.recipientEvidence
+  )
+    throw new HttpError(
+      409,
+      "RECIPIENT_POLICY_CHANGED",
+      "Contact details changed. Review and save the current recipients before sending.",
+    );
 }
 export const templateKeys = new Set([
   "propertyAddress",
@@ -116,6 +225,9 @@ export const templateKeys = new Set([
   "agentEmail",
   "clientNames",
   "closingDate",
+  "acceptanceDate",
+  "closingAppointmentAt",
+  "closingAppointmentPlace",
   "packageName",
   "recipientName",
   "coordinatorName",
@@ -192,6 +304,16 @@ export function mergeText(template: string, values: Record<string, string>) {
   );
 }
 export function requireResolved(subject: string, body: string) {
+  if (
+    [placeholderSubject, placeholderBody].some(
+      (marker) => subject.includes(marker) || body.includes(marker),
+    )
+  )
+    throw new HttpError(
+      422,
+      "TEMPLATE_PLACEHOLDER",
+      "Add the template's approved content before sending.",
+    );
   if (/\{\{|\}\}/.test(subject + body))
     throw new HttpError(
       422,
@@ -213,15 +335,17 @@ export function assertNoSourceConflicts(details: unknown) {
 export function assertReviewedMatter(matter: {
   stage: string;
   details: unknown;
+  checklistVersion?: number | null;
 }) {
   if (
     matter.stage === "pending_review" ||
-    asRecord(asRecord(matter.details).fileReview).status === "pending"
+    (matter.checklistVersion == null &&
+      asRecord(asRecord(matter.details).fileReview).status === "pending")
   )
     throw new HttpError(
       409,
       "FILE_REVIEW_REQUIRED",
       "Confirm and create this file after reviewing its sources before preparing or sending transaction correspondence.",
     );
-  assertNoSourceConflicts(matter.details);
+  if (matter.checklistVersion == null) assertNoSourceConflicts(matter.details);
 }

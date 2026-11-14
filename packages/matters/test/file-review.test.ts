@@ -94,10 +94,12 @@ describe("Ireland confirms the initial file before activating its timeline", () 
     expect(
       (await listMatters(actors.client)).some((m) => m.id === matter.id),
     ).toBe(false);
-    for (const actor of [actors.coordinator, actors.agent])
-      await expect(
-        createChecklistShare(actor, matter.id),
-      ).rejects.toMatchObject({ code: "FILE_REVIEW_REQUIRED" });
+    await expect(
+      createChecklistShare(actors.coordinator, matter.id),
+    ).rejects.toMatchObject({ code: "FILE_REVIEW_REQUIRED" });
+    await expect(createChecklistShare(actors.agent, matter.id)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
     for (const actor of [actors.agent, actors.client])
       await expect(
         confirmFile(actor, matter.id, { expectedRevision: matter.revision }),

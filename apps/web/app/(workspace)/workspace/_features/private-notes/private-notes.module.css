@@ -1,0 +1,54 @@
+.form {
+  display: grid;
+  gap: 12px;
+}
+
+.form button {
+  justify-self: start;
+}
+
+.todos {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0;
+}
+
+.todo {
+  position: relative;
+  padding: 10px 36px 10px 0;
+  border-bottom: 1px solid var(--weatherly-color-border, var(--line));
+}
+
+.toggle {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.completed {
+  text-decoration: line-through;
+  color: var(--weatherly-color-secondary, var(--muted));
+}
+
+.fileLabel {
+  padding-left: 24px;
+  color: var(--weatherly-color-secondary, var(--muted));
+}
+
+.remove {
+  position: absolute;
+  inset: 4px 0 auto auto;
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -174,8 +174,10 @@ describe("canonical deadline audiences", () => {
         );
         if (who.role !== "coordinator") {
           expect(JSON.stringify(view)).not.toContain("SECRET_");
-          for (const row of view.tasks)
-            expect(row).toMatchObject({ note: "Shared short note" });
+          for (const row of view.tasks) {
+            if (who.role === "client") expect(row).not.toHaveProperty("note");
+            else expect(row).toMatchObject({ note: "Shared short note" });
+          }
         }
       }
     }

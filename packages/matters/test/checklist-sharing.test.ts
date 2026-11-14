@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import express from "express";
 import request from "supertest";
 import { ZodError } from "zod";
 import { prisma } from "@weatherly/db";
+import { createDocumentsRouter } from "@weatherly/documents";
 import {
   HttpError,
   hashToken,
+  newToken,
   sanitizeError,
   type Principal,
 } from "@weatherly/platform";
@@ -15,6 +17,7 @@ import {
   addDeadline,
   createChecklistShare,
   getChecklistShare,
+  copyChecklistShare,
   revokeChecklistShare,
   getPublicChecklist,
   createMattersRouter,
@@ -29,6 +32,8 @@ import {
   reorderTasks,
   createMatter,
 } from "../src/index";
+import { addMatterPerson, updateMatterPerson } from "../src/people/commands";
+import { seedMatterPeople } from "../src/people/seed";
 
 const run = randomUUID();
 const actors = Object.fromEntries(
@@ -49,7 +54,21 @@ const actors = Object.fromEntries(
   ]),
 ) as Record<string, Principal>;
 const matterIds: string[] = [];
+const previousEncryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY;
 const tokenFrom = (share: { url: string }) => new URL(share.url).hash.slice(1);
+
+async function legacyAgentLink(actor: Principal, matterId: string) {
+  const token = newToken();
+  await prisma.checklistShare.create({
+    data: {
+      tokenHash: hashToken(token),
+      matterId,
+      issuedById: actor.id,
+      expiresAt: new Date(Date.now() + 86_400_000),
+    },
+  });
+  return token;
+}
 
 async function fixture() {
   const matter = await prisma.matter.create({
@@ -168,6 +187,9 @@ app.use(
 );
 
 beforeAll(async () => {
+  process.env.CREDENTIAL_ENCRYPTION_KEY = Buffer.alloc(32, 29).toString(
+    "base64",
+  );
   await prisma.user.createMany({
     data: Object.values(actors).map(({ id, name, email, role }) => ({
       id,
@@ -190,6 +212,9 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => {
+  if (previousEncryptionKey === undefined)
+    delete process.env.CREDENTIAL_ENCRYPTION_KEY;
+  else process.env.CREDENTIAL_ENCRYPTION_KEY = previousEncryptionKey;
   await prisma.matter.deleteMany({ where: { id: { in: matterIds } } });
   await prisma.auditEvent.deleteMany({
     where: { actorId: { in: Object.values(actors).map((actor) => actor.id) } },
@@ -221,6 +246,7 @@ describe("canonical client checklist sharing", () => {
     expect(metadata.active).toBe(true);
     expect(Object.keys(metadata).sort()).toEqual([
       "active",
+      "canCopy",
       "createdAt",
       "expiresAt",
       "id",
@@ -237,11 +263,11 @@ describe("canonical client checklist sharing", () => {
     );
   });
 
-  it("allows coordinator and current agents to manage links while clients remain read-only", async () => {
+  it("lets Ireland rotate and authorized agents copy the same generation", async () => {
     const matter = await fixture();
     await expect(
       createChecklistShare(actors.other, matter.id),
-    ).rejects.toMatchObject({ status: 404 });
+    ).rejects.toMatchObject({ status: 403 });
     await expect(
       createChecklistShare(actors.client, matter.id),
     ).rejects.toMatchObject({ status: 403 });
@@ -250,8 +276,13 @@ describe("canonical client checklist sharing", () => {
     ).rejects.toMatchObject({ status: 403 });
     await expect(
       revokeChecklistShare(actors.other, matter.id),
-    ).rejects.toMatchObject({ status: 404 });
-    const share = await createChecklistShare(actors.participant, matter.id);
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      createChecklistShare(actors.participant, matter.id),
+    ).rejects.toMatchObject({ status: 403 });
+    const share = await createChecklistShare(actors.owner, matter.id);
+    const copied = await copyChecklistShare(actors.participant, matter.id);
+    expect(copied).toMatchObject({ url: share.url, id: share.id });
     expect((await getPublicChecklist(tokenFrom(share))).matter.id).toBe(
       matter.id,
     );
@@ -265,13 +296,124 @@ describe("canonical client checklist sharing", () => {
     await expect(
       getChecklistShare(actors.participant, matter.id),
     ).rejects.toMatchObject({ status: 404 });
-    await expect(getPublicChecklist(tokenFrom(share))).rejects.toMatchObject({
-      status: 404,
-      code: "CHECKLIST_UNAVAILABLE",
-    });
-    expect((await getChecklistShare(actors.owner, matter.id)).active).toBe(
-      false,
+    await expect(
+      copyChecklistShare(actors.participant, matter.id),
+    ).rejects.toMatchObject({ status: 404 });
+    expect((await getPublicChecklist(tokenFrom(share))).matter.id).toBe(
+      matter.id,
     );
+    expect((await getChecklistShare(actors.owner, matter.id)).active).toBe(
+      true,
+    );
+  });
+
+  it("uses current HTO membership when an agent copies a coordinator link", async () => {
+    const matter = await fixture();
+    const share = await createChecklistShare(actors.owner, matter.id);
+    const agent = actors.agent;
+    const roster = await prisma.rosterAgent.create({
+      data: { userId: agent.id, name: "Synthetic HTO Agent", business: "hto" },
+    });
+    await prisma.auditEvent.deleteMany({
+      where: { entityId: agent.id, action: "agent.access_override" },
+    });
+    try {
+      expect((await copyChecklistShare(agent, matter.id)).url).toBe(share.url);
+      await prisma.rosterAgent.update({
+        where: { id: roster.id },
+        data: { business: "weatherly" },
+      });
+      await expect(copyChecklistShare(agent, matter.id)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect((await getPublicChecklist(tokenFrom(share))).matter.id).toBe(
+        matter.id,
+      );
+    } finally {
+      await prisma.rosterAgent.delete({ where: { id: roster.id } });
+      await prisma.auditEvent.create({
+        data: {
+          actorId: actors.owner.id,
+          entityType: "User",
+          entityId: agent.id,
+          action: "agent.access_override",
+          details: {},
+        },
+      });
+    }
+  });
+
+  it("keeps directory edits and replacements out of saved deal snapshots", async () => {
+    const matter = await fixture();
+    await prisma.$transaction((tx) =>
+      seedMatterPeople(tx, actors.owner, matter.id, [
+        {
+          role: "lender",
+          name: "Intake lender",
+          email: "intake@example.test",
+          phone: "",
+        },
+        {
+          role: "co_op_agent",
+          name: "Intake other agent",
+          email: "",
+          phone: "",
+        },
+      ]),
+    );
+    const original = await prisma.matterContact.findMany({
+      where: { matterId: matter.id },
+    });
+    expect(original.find((person) => person.role === "lender")).toMatchObject({
+      shareWithAgent: true,
+      shareWithClient: true,
+    });
+    expect(
+      original.find((person) => person.role === "co_op_agent"),
+    ).toMatchObject({
+      shareWithAgent: true,
+      shareWithClient: false,
+    });
+    await expect(
+      addMatterPerson(actors.agent, matter.id, {
+        role: "title_rep",
+        name: "Denied",
+        email: "",
+        phone: "",
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    const added = await addMatterPerson(actors.owner, matter.id, {
+      role: "title_rep",
+      name: "Saved title rep",
+      email: "original@example.test",
+      phone: "",
+    });
+    expect(added).toMatchObject({
+      shareWithAgent: false,
+      shareWithClient: false,
+    });
+    await prisma.businessContact.update({
+      where: { id: added.directoryContactId! },
+      data: { email: "updated@example.test" },
+    });
+    const replacement = await addMatterPerson(actors.owner, matter.id, {
+      role: "title_rep",
+      name: "Replacement title rep",
+      email: "replacement@example.test",
+      phone: "",
+      replace: { id: added.id, expectedRevision: added.revision },
+    });
+    const retired = await prisma.matterContact.findUniqueOrThrow({
+      where: { id: added.id },
+    });
+    expect(retired.email).toBe("original@example.test");
+    expect(retired.retiredAt).toBeInstanceOf(Date);
+    await expect(
+      updateMatterPerson(actors.owner, matter.id, replacement.id, {
+        expectedRevision: replacement.revision + 1,
+        shareWithClient: true,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
   });
 
   it("projects only the intended matter, current client tasks and confirmed dated deadlines", async () => {
@@ -282,12 +424,16 @@ describe("canonical client checklist sharing", () => {
     expect(Object.keys(result).sort()).toEqual([
       "clientRequests",
       "deadlines",
+      "documents",
       "matter",
+      "people",
       "tasks",
     ]);
     expect(Object.keys(result.matter).sort()).toEqual([
+      "closedOn",
       "id",
       "propertyAddress",
+      "side",
       "stage",
       "title",
     ]);
@@ -337,6 +483,242 @@ describe("canonical client checklist sharing", () => {
     expect(JSON.stringify(result)).not.toContain("SECRET_");
     expect(JSON.stringify(result)).not.toContain("private-client");
     expect(JSON.stringify(result)).not.toContain(other.id);
+  });
+
+  it("shows only explicitly published legacy portal documents and approved client names", async () => {
+    const matter = await fixture();
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: {
+        stage: "closed",
+        details: {
+          closeOut: { at: "2026-11-11T15:00:00.000Z", byId: actors.owner.id },
+          clients: [{ name: "RAW-PRIVATE-NAME" }],
+        },
+      },
+    });
+    await prisma.matterContact.createMany({
+      data: [
+        {
+          matterId: matter.id,
+          name: "Synthetic Shared Client",
+          role: "client",
+          shareWithAgent: true,
+        },
+        { matterId: matter.id, name: "PRIVATE-CLIENT", role: "client" },
+        {
+          matterId: matter.id,
+          name: "Synthetic Client Team",
+          role: "title_rep",
+          shareWithClient: true,
+        },
+      ],
+    });
+    await prisma.task.create({
+      data: {
+        matterId: matter.id,
+        title: "Private Closing",
+        stepKey: "closing",
+        visibility: "coordinator",
+        actualDate: "2026-12-15",
+      },
+    });
+    const bytes = Buffer.from("Published legacy document");
+    const doc = await prisma.document.create({
+      data: {
+        matterId: matter.id,
+        name: "Published legacy.pdf",
+        mimeType: "application/pdf",
+        createdById: actors.owner.id,
+        visibility: "coordinator",
+        shareWithClient: true,
+        shareWithAgent: false,
+        versions: {
+          create: {
+            objectKey: "synthetic/" + randomUUID(),
+            version: 1,
+            size: bytes.length,
+            checksum: createHash("sha256").update(bytes).digest("hex"),
+          },
+        },
+      },
+    });
+    const share = tokenFrom(
+      await createChecklistShare(actors.owner, matter.id),
+    );
+    const bearer = await getPublicChecklist(share);
+    expect(bearer).toMatchObject({
+      matter: { side: "buyer", closedOn: "2026-11-11T15:00:00.000Z" },
+      people: [{ name: "Synthetic Client Team" }],
+      documents: [{ id: doc.id }],
+    });
+    const client = await getMatter(actors.client, matter.id);
+    expect(client).toMatchObject({
+      people: bearer.people,
+      documents: bearer.documents,
+    });
+    const agent = (
+      await listMatters(actors.agent, { q: "Shared Client" })
+    ).find(({ id }) => id === matter.id);
+    expect(agent).toMatchObject({
+      clientNames: ["Synthetic Shared Client"],
+      closedOn: "2026-11-11T15:00:00.000Z",
+    });
+    expect(await listMatters(actors.agent, { q: "PRIVATE-CLIENT" })).toEqual(
+      [],
+    );
+    const detail = await getMatter(actors.agent, matter.id);
+    expect(JSON.stringify(detail)).not.toMatch(
+      /PRIVATE-CLIENT|RAW-PRIVATE-NAME|SECRET_NOTE|Published legacy\.pdf/,
+    );
+    expect(JSON.stringify(bearer)).not.toMatch(
+      /SECRET_DOCUMENT|RAW-PRIVATE-NAME|objectKey/,
+    );
+    const server = express().use(
+      "/public",
+      createPublicChecklistRouter(async () => bytes),
+    );
+    const download = await request(server)
+      .get(`/public/documents/${doc.id}/download`)
+      .set("Authorization", `Bearer ${share}`);
+    expect(download.status).toBe(200);
+    expect(download.body).toEqual(bytes);
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: { checklistVersion: 1 },
+    });
+    await prisma.task.update({
+      where: { matterId_stepKey: { matterId: matter.id, stepKey: "closing" } },
+      data: { visibility: "client", status: "not_applicable" },
+    });
+    expect((await getPublicChecklist(share)).matter.closedOn).toBe(
+      "2026-11-11T15:00:00.000Z",
+    );
+    expect(await getMatter(actors.client, matter.id)).toMatchObject({
+      closedOn: "2026-11-11T15:00:00.000Z",
+    });
+  });
+
+  it("preserves the other legacy document grant without publishing it from an agent-only toggle", async () => {
+    const matter = await fixture();
+    const doc = await prisma.document.findFirstOrThrow({
+      where: { matterId: matter.id },
+    });
+    await prisma.documentVersion.createMany({
+      data: [1, 2].map((version) => ({
+        documentId: doc.id,
+        objectKey: "synthetic/" + randomUUID(),
+        checksum: "synthetic",
+        version,
+        size: 9,
+      })),
+    });
+    const token = tokenFrom(
+      await createChecklistShare(actors.owner, matter.id),
+    );
+    const server = express()
+      .use(express.json())
+      .use((req, _res, next) => {
+        req.principal = actors[req.get("x-synthetic-actor") || "owner"];
+        next();
+      })
+      .use("/documents", createDocumentsRouter());
+    const change = await request(server)
+      .patch(`/documents/${doc.id}`)
+      .send({ expectedRevision: doc.revision, shareWithAgent: false });
+    expect(change.status, change.text).toBe(200);
+    expect(change.body).toMatchObject({
+      visibility: "client",
+      shareWithAgent: false,
+      shareWithClient: null,
+    });
+    expect((await getPublicChecklist(token)).documents).toEqual([]);
+    const readClient = () =>
+      request(server)
+        .get(`/documents/${doc.id}`)
+        .set("x-synthetic-actor", "client");
+    const legacy = await readClient();
+    expect(legacy.status).toBe(200);
+    expect(
+      legacy.body.versions.map(({ version }: { version: number }) => version),
+    ).toEqual([2, 1]);
+    const generic = await request(server)
+      .patch(`/documents/${doc.id}`)
+      .send({ expectedRevision: change.body.revision, visibility: "client" });
+    expect(generic.status).toBe(200);
+    expect(generic.body.shareWithClient).toBeNull();
+    expect((await getPublicChecklist(token)).documents).toEqual([]);
+    const publish = await request(server)
+      .patch(`/documents/${doc.id}`)
+      .send({ expectedRevision: generic.body.revision, shareWithClient: true });
+    expect(publish.status).toBe(200);
+    expect((await getPublicChecklist(token)).documents).toEqual([
+      expect.objectContaining({ id: doc.id }),
+    ]);
+    expect(
+      (await readClient()).body.versions.map(
+        ({ version }: { version: number }) => version,
+      ),
+    ).toEqual([2]);
+    for (const stage of ["closed", "terminated"]) {
+      await prisma.matter.update({ where: { id: matter.id }, data: { stage } });
+      const current = await prisma.document.findUniqueOrThrow({
+        where: { id: doc.id },
+      });
+      const changeCategory = await request(server)
+        .patch(`/documents/${doc.id}`)
+        .send({ expectedRevision: current.revision, category: "contract" });
+      expect(changeCategory.status).toBe(409);
+      const withdraw = await request(server)
+        .patch(`/documents/${doc.id}`)
+        .send({ expectedRevision: current.revision, shareWithClient: false });
+      expect(withdraw.status, withdraw.text).toBe(200);
+      expect((await getPublicChecklist(token)).documents).toEqual([]);
+      const publishAgain = await request(server)
+        .patch(`/documents/${doc.id}`)
+        .send({
+          expectedRevision: withdraw.body.revision,
+          shareWithClient: true,
+        });
+      expect(publishAgain.status, publishAgain.text).toBe(200);
+      expect((await getPublicChecklist(token)).documents).toEqual([
+        expect.objectContaining({ id: doc.id }),
+      ]);
+    }
+  });
+
+  it("uses the original receipt for its submitting agent rather than later coordinator edits", async () => {
+    const matter = await fixture();
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: {
+        stage: "pending_review",
+        details: {
+          referenceIntake: { notes: "PRIVATE EDIT" },
+          fileReview: { status: "pending" },
+        },
+      },
+    });
+    const receipt = await prisma.intakeSubmission.create({
+      data: {
+        draftId: randomUUID(),
+        idempotencyKey: randomUUID(),
+        userId: actors.agent.id,
+        matterId: matter.id,
+        snapshot: { referenceIntake: { notes: "Original submission" } },
+      },
+    });
+    try {
+      expect(await getMatter(actors.agent, matter.id)).toMatchObject({
+        details: { referenceIntake: { notes: "Original submission" } },
+      });
+      const participant = await getMatter(actors.participant, matter.id);
+      expect(JSON.stringify(participant)).not.toMatch(
+        /PRIVATE EDIT|Original submission/,
+      );
+    } finally {
+      await prisma.intakeSubmission.delete({ where: { id: receipt.id } });
+    }
   });
 
   it("uses one canonical milestone for four visibility combinations and safe short notes/appointments, with all ongoing writes restricted to Ireland", async () => {
@@ -422,16 +804,16 @@ describe("canonical client checklist sharing", () => {
           (v) => `Milestone ${v}`,
         ),
       );
-      expect(
-        view.tasks.find(
-          (t) =>
-            t.title ===
-            `Milestone ${actor.role === "coordinator" ? "coordinator" : actor.role === "agent" ? "agent" : "client_only"}`,
-        ),
-      ).toMatchObject({
-        note: "Bring identification",
+      const task = view.tasks.find(
+        (t) =>
+          t.title ===
+          `Milestone ${actor.role === "coordinator" ? "coordinator" : actor.role === "agent" ? "agent" : "client_only"}`,
+      );
+      expect(task).toMatchObject({
         appointmentAt: "2026-11-06T10:00:00-05:00",
       });
+      if (actor.role === "client") expect(task).not.toHaveProperty("note");
+      else expect(task).toHaveProperty("note", "Bring identification");
     }
     const publicView = await getPublicChecklist(token);
     expect(
@@ -440,9 +822,9 @@ describe("canonical client checklist sharing", () => {
         .map((t) => t.title),
     ).toEqual(["Milestone client_only", "Milestone client"]);
     expect(publicView.tasks.at(-1)).toMatchObject({
-      note: "Bring identification",
       appointmentAt: "2026-11-06T10:00:00-05:00",
     });
+    expect(publicView.tasks.at(-1)).not.toHaveProperty("note");
     expect(JSON.stringify(publicView)).not.toContain("SECRET_INTERNAL_TASK");
     const task = created[3];
     for (const actor of [actors.agent, actors.client]) {
@@ -491,9 +873,11 @@ describe("canonical client checklist sharing", () => {
       (await getPublicChecklist(token)).tasks.find((t) => t.id === task.id),
     ).toMatchObject({
       status: "completed",
-      note: "Confirmed by Ireland",
       appointmentAt: null,
     });
+    expect(
+      (await getPublicChecklist(token)).tasks.find((t) => t.id === task.id),
+    ).not.toHaveProperty("note");
   });
 
   it("shares client requests only when both explicit kind and client visibility are selected, using the same live task records", async () => {
@@ -693,9 +1077,7 @@ describe("canonical client checklist sharing", () => {
 
   it("withdraws links when the issuer is reassigned, downgraded or account-revoked", async () => {
     const matter = await fixture();
-    const agentToken = tokenFrom(
-      await createChecklistShare(actors.agent, matter.id),
-    );
+    const agentToken = await legacyAgentLink(actors.agent, matter.id);
     await prisma.matter.update({
       where: { id: matter.id },
       data: { agentId: actors.other.id },
@@ -743,9 +1125,7 @@ describe("canonical client checklist sharing", () => {
 
   it("rechecks agent agreements and permits coordinators without MFA in production", async () => {
     const matter = await fixture();
-    const token = tokenFrom(
-      await createChecklistShare(actors.agent, matter.id),
-    );
+    const token = await legacyAgentLink(actors.agent, matter.id);
     try {
       vi.stubEnv("APP_ENV", "staging");
       vi.stubEnv("NODE_ENV", "test");
@@ -929,7 +1309,7 @@ describe("canonical client checklist sharing", () => {
     const matter = await fixture();
     const share = await request(app)
       .post(`/api/v1/matters/${matter.id}/checklist-share`)
-      .set("x-synthetic-actor", "agent")
+      .set("x-synthetic-actor", "owner")
       .send({});
     expect(share.status).toBe(201);
     const token = tokenFrom(share.body);
@@ -976,5 +1356,169 @@ describe("canonical client checklist sharing", () => {
       (await request(app).get(`/api/public/checklist/${token}`)).status,
     ).toBe(404);
     expect((await getPublicChecklist(token)).tasks[0].status).toBe("pending");
+  });
+
+  it("serves the same canonical client timeline and selected files to authenticated and bearer clients", async () => {
+    const matter = await fixture();
+    await prisma.document.updateMany({
+      where: { matterId: matter.id },
+      data: {
+        visibility: "coordinator",
+        shareWithAgent: false,
+        shareWithClient: false,
+      },
+    });
+    await prisma.matter.update({
+      where: { id: matter.id },
+      data: { checklistVersion: 1 },
+    });
+    await prisma.task.createMany({
+      data: [
+        {
+          matterId: matter.id,
+          stepKey: "closing",
+          title: "Closing",
+          visibility: "client",
+          dueDate: "2027-01-09",
+          position: 2,
+          details: {
+            scheduled: true,
+            appointmentPlace: "Synthetic title office",
+            note: "PRIVATE-CLOSING-NOTE",
+          },
+        },
+        {
+          matterId: matter.id,
+          stepKey: "inspections",
+          title: "Inspections",
+          visibility: "client",
+          position: 1,
+          details: {
+            scheduled: true,
+            appointmentPlace: "AGENT-INSPECTION-PLACE",
+            note: "AGENT-NOTE",
+            showNoteToAgent: true,
+          },
+        },
+        {
+          matterId: matter.id,
+          stepKey: "title_commitment",
+          title: "Not needed",
+          visibility: "client",
+          status: "not_applicable",
+          position: 0,
+          details: {},
+        },
+      ],
+    });
+    await prisma.matterContact.createMany({
+      data: [
+        {
+          matterId: matter.id,
+          role: "title_rep",
+          name: "Client-visible title rep",
+          shareWithClient: true,
+        },
+        {
+          matterId: matter.id,
+          role: "co_op_agent",
+          name: "AGENT-ONLY-CONTACT",
+          shareWithAgent: true,
+        },
+      ],
+    });
+    const bytes = Buffer.from("Synthetic document bytes");
+    const clientFile = await prisma.document.create({
+      data: {
+        matterId: matter.id,
+        name: "client-only.pdf",
+        createdById: actors.owner.id,
+        mimeType: "application/pdf",
+        shareWithAgent: false,
+        shareWithClient: true,
+        visibility: "coordinator",
+        versions: {
+          create: {
+            objectKey: "synthetic/" + randomUUID(),
+            version: 1,
+            size: bytes.length,
+            checksum: createHash("sha256").update(bytes).digest("hex"),
+          },
+        },
+      },
+    });
+    const agentFile = await prisma.document.create({
+      data: {
+        matterId: matter.id,
+        name: "AGENT-ONLY-FILE",
+        createdById: actors.owner.id,
+        mimeType: "application/pdf",
+        shareWithAgent: true,
+        shareWithClient: false,
+        visibility: "agent",
+      },
+    });
+    const share = await createChecklistShare(actors.owner, matter.id);
+    const token = tokenFrom(share);
+    const bearer = await getPublicChecklist(token);
+    const client = await getMatter(actors.client, matter.id);
+    const agent = await getMatter(actors.agent, matter.id);
+    expect(client.tasks).toEqual(bearer.tasks);
+    expect(client.documents).toEqual([
+      expect.objectContaining({ id: clientFile.id }),
+    ]);
+    expect(bearer).toMatchObject({
+      documents: [expect.objectContaining({ id: clientFile.id })],
+      people: [expect.objectContaining({ name: "Client-visible title rep" })],
+    });
+    expect(bearer.tasks.map((task) => task.title)).toEqual([
+      "Inspections",
+      "Closing",
+    ]);
+    expect(JSON.stringify(bearer)).not.toMatch(
+      /AGENT-|PRIVATE-CLOSING|objectKey/,
+    );
+    expect(agent.tasks.map((task) => task.title)).toEqual([
+      "Not needed",
+      "Inspections",
+      "Closing",
+    ]);
+    expect(agent.tasks[1]).toHaveProperty("note", "AGENT-NOTE");
+    expect(agent.tasks[2]).not.toHaveProperty("note");
+    expect(agent.documents).toEqual([
+      expect.objectContaining({ id: agentFile.id }),
+    ]);
+
+    let reads = 0;
+    const server = express();
+    server.use(
+      "/public",
+      createPublicChecklistRouter(async () => {
+        reads++;
+        if (reads === 2) await revokeChecklistShare(actors.owner, matter.id);
+        return bytes;
+      }),
+    );
+    server.use(
+      (
+        error: HttpError,
+        _req: express.Request,
+        res: express.Response,
+        _next: express.NextFunction,
+      ) => {
+        res.status(error.status || 500).json(sanitizeError(error));
+      },
+    );
+    const read = (id: string) =>
+      request(server)
+        .get(`/public/documents/${id}/download`)
+        .set("Authorization", `Bearer ${token}`);
+    expect((await read(agentFile.id)).status).toBe(404);
+    const shared = await read(clientFile.id);
+    expect(shared.status).toBe(200);
+    expect(shared.body).toEqual(bytes);
+    expect(shared.headers["cache-control"]).toContain("no-store");
+    expect((await read(clientFile.id)).status).toBe(404);
+    expect(reads).toBe(2);
   });
 });

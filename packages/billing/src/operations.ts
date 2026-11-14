@@ -9,6 +9,7 @@ import {
 } from "@weatherly/platform";
 import { requireMatter, audit } from "@weatherly/matters";
 import { verifiedStripe, applyStripeEvent } from "./service";
+import { paymentDetails, paymentOrderForRead } from "./checkout-policy";
 import {
   assertSavedPaymentEnvironment,
   paymentMode,
@@ -409,24 +410,41 @@ export async function reconcilePayment(
   actor: Principal,
   id: string,
   provider = verifiedStripe,
+  knownSessionId?: string,
 ) {
   assertCoordinator(actor);
   const order = await prisma.paymentOrder.findUnique({ where: { id } });
-  if (!order?.stripeSessionId)
+  const details = paymentDetails(order?.details);
+  const cancellation = paymentDetails(details.terminationVoid);
+  if (
+    !order ||
+    (!order.stripeSessionId &&
+      (!knownSessionId ||
+        (!details.checkoutCreationStartedAt &&
+          cancellation.creationOutcomeUncertain !== true)))
+  )
     throw new HttpError(
       404,
       "NOT_FOUND",
       "A Stripe checkout is required before reconciliation.",
     );
-  await requireMatter(actor, order.matterId);
+  if (
+    order.stripeSessionId &&
+    knownSessionId &&
+    order.stripeSessionId !== knownSessionId
+  )
+    throw new HttpError(
+      409,
+      "PAYMENT_MISMATCH",
+      "This request already has a different Stripe checkout.",
+    );
+  const sessionId = order.stripeSessionId ?? knownSessionId!;
   // Reconciliation only reads Stripe and may establish missing legacy provenance;
   // a known conflicting environment is never queried with the current credentials.
   assertSavedPaymentEnvironment(order.details, paymentMode());
   const stripe = await provider();
-  const session = await stripe.checkout.sessions.retrieve(
-    order.stripeSessionId,
-  );
-  if (session.metadata?.paymentOrderId !== id)
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+  if (session.id !== sessionId || session.metadata?.paymentOrderId !== id)
     throw new HttpError(
       409,
       "PAYMENT_MISMATCH",
@@ -547,5 +565,7 @@ export async function reconcilePayment(
     id,
     order.matterId,
   );
-  return prisma.paymentOrder.findUniqueOrThrow({ where: { id } });
+  return paymentOrderForRead(
+    await prisma.paymentOrder.findUniqueOrThrow({ where: { id } }),
+  );
 }

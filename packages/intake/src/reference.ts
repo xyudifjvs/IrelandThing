@@ -1,3 +1,4 @@
+import type { Business } from "@weatherly/platform/handoff-contracts";
 import { z } from "zod";
 import { dateOnly } from "@weatherly/matters";
 import { HttpError } from "@weatherly/platform";
@@ -104,7 +105,7 @@ function referenceFieldActive(name: string, value: ReferenceIntake) {
 }
 
 /** Only final submission calls this; draft storage keeps every partial answer. */
-export function referenceCompletionIssues(reference: ReferenceIntake) {
+export function referenceCompletionIssues(reference: ReferenceIntake, business: Business = "weatherly") {
   const f = reference.fields;
   const text = (name: string) =>
     typeof f[name] === "string" ? f[name].trim() : "";
@@ -127,7 +128,7 @@ export function referenceCompletionIssues(reference: ReferenceIntake) {
       }),
     ),
   ];
-  choice(
+  if (business === "weatherly") choice(
     "service",
     [reference.variant.endsWith("-compliance") ? "ctcc" : "ctc"],
     "Service selection",
@@ -301,8 +302,8 @@ export function referenceCompletionIssues(reference: ReferenceIntake) {
   }
   return issues;
 }
-export function assertReferenceComplete(reference: ReferenceIntake) {
-  const issues = referenceCompletionIssues(reference);
+export function assertReferenceComplete(reference: ReferenceIntake, business: Business = "weatherly") {
+  const issues = referenceCompletionIssues(reference, business);
   if (issues.length)
     throw new HttpError(
       422,

@@ -6,6 +6,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Business {
+  hto
+  weatherly
+}
+
 model User {
   id               String              @id
   name             String
@@ -24,6 +29,11 @@ model User {
   participations   MatterParticipant[]
   checklistShares  ChecklistShare[]
   businessContacts BusinessContact[]
+  rosterAgent       RosterAgent?
+  creationReviews   CreationReview[]
+  privateTodos      PrivateTodo[]
+  privateScratchpad PrivateScratchpad?
+  digestCursors     DigestCursor[]
 }
 
 // Private coordinator address book. Matters store copied snapshots, never a
@@ -44,6 +54,7 @@ model BusinessContact {
   lastUsedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  matterContacts MatterContact[]
 
   @@unique([ownerId, identityKey])
   @@index([ownerId, kind])
@@ -116,6 +127,10 @@ model Invitation {
   invitedById String
   matterId    String?
   createdAt   DateTime  @default(now())
+  rosterAgentId String?
+  rosterAgent   RosterAgent? @relation(fields: [rosterAgentId], references: [id], onDelete: SetNull)
+
+  @@index([rosterAgentId, createdAt])
 }
 
 model Matter {
@@ -137,8 +152,24 @@ model Matter {
   notes           Note[]
   documents       Document[]
   checklistShare  ChecklistShare?
+  business             Business?
+  checklistVersion     Int?
+  acceptanceDate       String?
+  acceptanceAt         DateTime?             @db.Timestamptz(3)
+  deadlineTimeZone     String?
+  purchasePriceCents   Decimal?              @db.Decimal(16, 0)
+  agentRosterId        String?
+  rosterAgent          RosterAgent?          @relation(fields: [agentRosterId], references: [id], onDelete: SetNull)
+  checklistShareSecret ChecklistShareSecret?
+  contacts             MatterContact[]
+  confirmedReview      CreationReview?
+  emailWork            EmailWork[]
+  privateTodos         PrivateTodo[]
+  htoClosing           HtoClosing?
 
   @@index([agentId, stage])
+  @@index([business, stage])
+  @@index([agentRosterId, stage])
 }
 
 model MatterParticipant {
@@ -167,12 +198,19 @@ model Task {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   matter     Matter   @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  stepKey     String?
+  dateCapable Boolean?
+  dueAt       DateTime? @db.Timestamptz(3)
+  actualDate  String?
+  actualAt    DateTime? @db.Timestamptz(3)
+  dateRule    Json?
 
+  @@unique([matterId, stepKey])
   @@index([matterId, status])
   @@index([matterId, position])
 }
 
-// A bearer secret is returned only at creation. Only its SHA-256 hash is stored.
+// Public lookup uses the bearer hash, including for existing hash-only links.
 // One row per matter makes replacement atomic and invalidates every prior link.
 model ChecklistShare {
   id         String    @id @default(cuid())
@@ -229,8 +267,16 @@ model Document {
   updatedAt   DateTime          @updatedAt
   matter      Matter?           @relation(fields: [matterId], references: [id], onDelete: Cascade)
   versions    DocumentVersion[]
+  shareWithAgent     Boolean?
+  shareWithClient    Boolean?
+  intakeSubmissionId String?
+  intakeSubmission   IntakeSubmission? @relation(fields: [intakeSubmissionId], references: [id], onDelete: SetNull)
+  creationReviewId   String?
+  creationReview     CreationReview?   @relation(fields: [creationReviewId], references: [id], onDelete: SetNull)
 
   @@index([matterId])
+  @@index([intakeSubmissionId])
+  @@index([creationReviewId])
 }
 
 model DocumentVersion {
@@ -279,8 +325,15 @@ model IntakeSubmission {
   processedAt    DateTime?
   processedById  String?
   createdAt      DateTime @default(now())
+  business       Business?
+  deletedAt      DateTime?
+  deletedById    String?
+  creationReview CreationReview?
+  documents      Document[]
 
   @@index([processedAt, createdAt, id])
+  @@index([createdAt, id])
+  @@index([userId, createdAt, id])
 }
 
 model Inquiry {
@@ -295,6 +348,10 @@ model Inquiry {
   submissionHash String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  rosterAgentId  String?
+  rosterAgent    RosterAgent? @relation(fields: [rosterAgentId], references: [id], onDelete: SetNull)
+
+  @@index([rosterAgentId, createdAt])
 }
 
 model Agreement {
@@ -309,6 +366,11 @@ model Agreement {
   revision   Int      @default(1)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  signedOn              String?
+  rosterAgentId         String?
+  rosterAgent           RosterAgent? @relation(fields: [rosterAgentId], references: [id], onDelete: SetNull)
+
+  @@index([rosterAgentId, createdAt])
 }
 
 model AuditEvent {
@@ -464,6 +526,10 @@ model EmailDraft {
   sentAt            DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  workItemId        String?
+  workItem          EmailWork? @relation(fields: [workItemId], references: [id], onDelete: SetNull)
+
+  @@index([workItemId])
 }
 
 model CommunicationTemplate {
@@ -477,6 +543,12 @@ model CommunicationTemplate {
   revision  Int      @default(1)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+  linkedStepKey  String?
+  recipientGroup String?
+  recipientRoles Json?
+  position       Int?
+  isPlaceholder  Boolean?
+  workItems      EmailWork[]
 }
 
 model AIProposal {
@@ -617,8 +689,12 @@ model SchedulingBooking {
   verifiedAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  rosterAgentId    String?
+  rosterAgent      RosterAgent? @relation(fields: [rosterAgentId], references: [id], onDelete: SetNull)
+
   @@index([startAt, status])
   @@index([oldInviteeUri])
+  @@index([rosterAgentId, startAt])
 }
 
 model SchedulingDelivery {
@@ -630,4 +706,194 @@ model SchedulingDelivery {
   payload Json
   receivedAt DateTime @default(now())
   @@index([inviteeUri, sourceAt])
+}
+
+// A roster entry can precede an account. Name-only team entries have no email key.
+model RosterAgent {
+  id              String              @id @default(cuid())
+  name            String
+  email           String?
+  normalizedEmail String?             @unique
+  phone           String?
+  brokerage       String?
+  userId          String?             @unique
+  business        Business?
+  agreementSentOn String?
+  archivedAt      DateTime?
+  revision        Int                 @default(1)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  user            User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  matters         Matter[]
+  inquiries       Inquiry[]
+  bookings        SchedulingBooking[]
+  invitations     Invitation[]
+  agreements      Agreement[]
+  htoClosings     HtoClosing[]
+
+  @@index([business, archivedAt, name])
+}
+
+// A review, including a manual review, can exist without a transaction file.
+model CreationReview {
+  id                      String               @id @default(cuid())
+  intakeId                String?              @unique
+  ownerId                 String
+  state                   String               @default("open")
+  revision                Int                  @default(1)
+  extractionGeneration    Int                  @default(0)
+  payload                 Json                 @default("{}")
+  sourceRefs              Json                 @default("[]")
+  startRequestId          String               @unique
+  confirmedMatterId       String?              @unique
+  confirmedAt             DateTime?
+  confirmationRequestId   String?              @unique
+  confirmationFingerprint String?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  intake                  IntakeSubmission?    @relation(fields: [intakeId], references: [id], onDelete: Restrict)
+  owner                   User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  confirmedMatter         Matter?              @relation(fields: [confirmedMatterId], references: [id], onDelete: SetNull)
+  extractions             CreationExtraction[]
+  documents               Document[]
+
+  @@index([ownerId, state, updatedAt])
+}
+
+model CreationExtraction {
+  id            String         @id @default(cuid())
+  reviewId      String
+  generation    Int
+  sourceRefs    Json
+  promptVersion String
+  status        String         @default("queued")
+  result        Json?
+  model         String?
+  provider      String?
+  errorCode     String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  review        CreationReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, generation])
+}
+
+model MatterContact {
+  id                 String           @id @default(cuid())
+  matterId           String
+  directoryContactId String?
+  role               String
+  name               String
+  email              String           @default("")
+  phone              String           @default("")
+  company            String?
+  shareWithAgent     Boolean          @default(false)
+  shareWithClient    Boolean          @default(false)
+  retiredAt          DateTime?
+  revision           Int              @default(1)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  matter             Matter           @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  directoryContact   BusinessContact? @relation(fields: [directoryContactId], references: [id], onDelete: SetNull)
+
+  @@index([matterId, retiredAt, role])
+  @@index([directoryContactId])
+}
+
+// shareId pins the encrypted token to the generation that created it. It must
+// never follow a legacy ChecklistShare ID update. Copy checks the current share.
+model ChecklistShareSecret {
+  matterId   String @id
+  shareId    String @unique
+  ciphertext String
+  matter     Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+}
+
+// Delivery is read from draft/send history independently of manual completion.
+model EmailWork {
+  id                  String                 @id @default(cuid())
+  matterId            String
+  templateId          String?
+  templateRevision    Int?
+  linkedStepKey       String?
+  laterAt             DateTime?
+  remindOn            String?
+  manualCompletedAt   DateTime?
+  manualCompletedById String?
+  revision            Int                    @default(1)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  matter              Matter                 @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  template            CommunicationTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  drafts              EmailDraft[]
+
+  @@unique([matterId, templateId])
+  @@index([templateId])
+  @@index([remindOn, matterId])
+}
+
+model PrivateTodo {
+  id          String    @id @default(cuid())
+  ownerId     String
+  matterId    String?
+  body        String
+  completedAt DateTime?
+  revision    Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  matter      Matter?   @relation(fields: [matterId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, createdAt, id])
+  @@index([ownerId, matterId, completedAt])
+  @@index([matterId])
+}
+
+model PrivateScratchpad {
+  ownerId   String   @id
+  body      String   @default("")
+  revision  Int      @default(1)
+  updatedAt DateTime @updatedAt
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}
+
+// Manual facts are read only for unlinked rows. A linked row projects Matter.
+model HtoClosing {
+  id                    String       @id @default(cuid())
+  matterId              String?      @unique
+  manualAgentRosterId   String?
+  manualPropertyAddress String?
+  manualAddress         Json?
+  manualClients         Json         @default("[]")
+  manualSide            String?
+  manualStatus          String?
+  manualCloseDate       String?
+  manualListedDate      String?
+  manualPriceCents      Decimal?     @db.Decimal(16, 0)
+  matchKey              String?
+  revision              Int          @default(1)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  matter                Matter?      @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  manualAgent           RosterAgent? @relation(fields: [manualAgentRosterId], references: [id], onDelete: SetNull)
+
+  @@index([matchKey, matterId])
+  @@index([manualAgentRosterId, manualCloseDate])
+  @@index([manualStatus, manualCloseDate])
+}
+
+model DigestCursor {
+  recipientId        String
+  stream             String
+  highWaterAt        DateTime? @db.Timestamptz(3)
+  pendingWindowStart DateTime? @db.Timestamptz(3)
+  pendingWindowEnd   DateTime? @db.Timestamptz(3)
+  pendingJobKey      String?   @unique
+  revision           Int       @default(1)
+  updatedAt          DateTime  @updatedAt
+  recipient          User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@id([recipientId, stream])
 }

@@ -86,6 +86,7 @@ export async function generateStructured<T>(
     data: unknown;
     schema: z.ZodType<T>;
     maxTokens?: number;
+    signal?: AbortSignal;
   },
   fetcher: typeof fetch = fetch,
 ) {
@@ -123,7 +124,9 @@ export async function generateStructured<T>(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
-        signal: AbortSignal.timeout(90000),
+        signal: input.signal
+          ? AbortSignal.any([input.signal, AbortSignal.timeout(90000)])
+          : AbortSignal.timeout(90000),
         headers: {
           Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
@@ -170,7 +173,15 @@ export async function generateStructured<T>(
         "AI_PROVIDER_UNAVAILABLE",
         "The approved AI route is unavailable. No alternate route was used.",
       );
-    const result = (await response.json()) as {
+    const envelope: unknown = await response.json().catch(() => null);
+    if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
+      throw new HttpError(
+        502,
+        "AI_INVALID_RESULT",
+        "AI returned an invalid structured result.",
+      );
+    }
+    const result = envelope as {
       choices?: { message?: { content?: string } }[];
       model?: string;
       provider?: string;
@@ -180,6 +191,16 @@ export async function generateStructured<T>(
         cost?: number;
       };
     };
+    if (
+      (result.model !== undefined && typeof result.model !== "string") ||
+      (result.provider !== undefined && typeof result.provider !== "string")
+    ) {
+      throw new HttpError(
+        502,
+        "AI_INVALID_RESULT",
+        "AI returned an invalid structured result.",
+      );
+    }
     const text = result.choices?.[0]?.message?.content;
     if (!text)
       throw new HttpError(

@@ -9,8 +9,8 @@ import {
   type Principal,
   validDate,
 } from "@weatherly/platform";
-import { requireMatter, audit } from "./index";
-import { taskVisibility } from "./task-fields";
+import { requireMatter, audit } from "./access";
+import { taskVisibility } from "./validation/task-fields";
 const stepSchema = z
   .object({
     key: z.string().regex(/^[a-z0-9_-]{1,80}$/),
@@ -190,6 +190,8 @@ export async function applyInitialWorkflow(
   matterId: string,
 ) {
   const matter = await tx.matter.findUniqueOrThrow({ where: { id: matterId } });
+  if (matter.checklistVersion !== null)
+    throw new HttpError(409, "CHECKLIST_VERSION", "This file uses its own checklist.");
   const details = matter.details as Record<string, Prisma.InputJsonValue>;
   if (details.workflow) return;
   const templates = await tx.workflowTemplate.findMany({
@@ -360,6 +362,8 @@ export async function recalculateWorkflow(
   options: { approvedDeadlineIds?: ReadonlySet<string> } = {},
 ) {
   const matter = await tx.matter.findUniqueOrThrow({ where: { id: matterId } });
+  if (matter.checklistVersion !== null)
+    throw new HttpError(409, "DATE_PREVIEW_REQUIRED", "Change due dates on the checklist.");
   const details = matter.details as Record<string, Prisma.JsonValue>;
   const workflow = details.workflow as { definition?: unknown } | undefined;
   if (!workflow?.definition) return [];

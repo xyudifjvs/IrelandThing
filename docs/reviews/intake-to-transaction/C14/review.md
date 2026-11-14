@@ -1,0 +1,28 @@
+# C14 independent review
+
+## Verdict
+
+Changes requested on `a197c909cab270943352556d3f39491efd616721`. The candidate was clean at review. The parent contains the C07 dependency and is excluded from the C14 diff.
+
+## Findings
+
+- **P2 · Existing private notes and to-dos disappear from the file workspace.** The parent’s `LegacyFileNotesPanel` displayed `Matter.notes` and `Task` records with coordinator visibility. `FileSidebar.tsx:62` mounts only `PrivateTodoPanel`, whose query reads the new `PrivateTodo` store. The active legacy checklist also excludes coordinator tasks, and the terminal fallback explicitly filters them at `FileChecklist.tsx:71`. A synthetic active legacy file with a saved note and a coordinator task in the authorized file response displayed neither on any of the five tabs. The two records remain stored. Make them accessible in the persistent coordinator rail through the existing file payload and preserve their identities. The new list can continue to use its own service for new items.
+- **P2 · Standalone legacy dates disappear from Checklist.** `FileChecklist.tsx:63–94` uses legacy task rows. `file-model.ts` reads confirmed legacy deadlines only for the Closing header. A file response containing the confirmed standalone date “Historical special contingency” showed its legacy shared task but omitted that date across every tab. The old Dates & deadlines surface displayed the row. Preserve approved standalone dates inside the legacy Checklist without restoring a separate date editor or duplicating task-linked values. The implementation plan preserves existing functionality and retained dates except where the handoff replaces a surface.
+- **C06 composition dependency · Document publication is unavailable after close or termination.** In the exact browser candidate both portal switches disappear on close, while the document remains downloadable. `FileDocumentsPanel` requires an active stage for the controls. `packages/documents/src/router.ts` uses `requireUploadMatter` for the metadata write, which rejects a terminal versioned matter. The written handoff lets Ireland change document publication at any time. C00 assigned the C06 follow-up for independent document publication on terminal files with terminal upload and category restrictions.
+
+## Verification
+
+- Independent typecheck, diff check, and Webpack production build passed at the exact candidate. All 24 upload/controller tests in four suites passed with synthetic inputs.
+- Chromium at 1280 px and 390 px passed five-tab navigation, sidebar and unsaved note persistence across tabs, read-only intake, empty Compliance, rejected then accepted checklist completion, Send now/Later/Skip, business change, stale close-out protection, termination, reopen, exact DELETE confirmation, legacy and pending URLs, mobile stacking, and removal of private UI after a synthetic role change. Browser requests were intercepted with synthetic responses.
+- Separate Chromium probe `/private/tmp/weatherly-r14-legacy-probe.mjs` reproduced the two legacy findings and the missing terminal publication switches. It also checked a concurrent file revision while the business form was open. The form displayed its stale state, disabled confirmation and produced zero writes.
+- Inspected the original transaction PDF and the rendered desktop and mobile workspace. The address and business header, five horizontal tabs, checklist, and persistent People/Share/private notes rail follow the handoff. The stacked mobile layout fit the 390 px viewport.
+- The C03 optional completion and inline render callbacks are gated on successful mutation and completed task state. The C10 `allowAdding` seam defaults to existing behavior and removes the add form on terminal files while preserving existing new-model to-dos. Composed HTTP is checked separately under C00/C15.
+
+## Follow-up verdict
+
+Accepted for C14 at `30ca89d87ff832c920485fffafd8c1d27324a555`. The exact clean worktree includes `d657485` and resolves both C14 findings above.
+
+- Chromium displayed the original note once in the persistent rail on each of the five tabs alongside the original coordinator task and a separate new-model to-do. Completing and editing the original task each sent one revision-checked PATCH to its original task ID. Editing preserved its coordinator audience and note. The draft survived a tab change. On both Closed and Terminated, the historical note and task stayed visible and the historical task had no edit or completion control. The rail's add form was absent. The new-model list retained its C10 behavior.
+- The legacy Checklist displayed one standalone confirmed date with its stored calendar date. The linked, unapproved and undated rows stayed absent. The legacy task, notes and date displayed at 390 px without horizontal overflow. Retired broker, compliance, unresolved date and document-review tasks and the review link were absent, and changing the synthetic actor to Agent removed the coordinator file contents.
+- Both Chromium fixture journeys passed, including the versioned completion-only email prompt, lifecycle and stale revision handling, business changes and legacy route navigation. The C03 completion and inline render callbacks remain optional and the C10 seam defaults to the established behavior at other call sites. Typecheck, Webpack production build and the full candidate diff check passed.
+- This browser evidence uses intercepted responses on loopback. Terminal document publication is supplied by C06 `c8af16c`. The isolated C14 fixture still exercises the earlier dependency, so verify the combined terminal publication and mutation guards on the exact integrated C00/C15 candidate.

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./workspace-theme.css";
 import { AssistantPanel } from "@weatherly/assistant-ui";
 import { sitePolicy } from "./_lib/seo";
 import localFont from "next/font/local";
@@ -15,6 +16,13 @@ const sans = localFont({
   display: "swap",
   variable: "--weatherly-sans",
 });
+const montserrat = localFont({
+  src: "../public/fonts/process-montserrat-latin.woff2",
+  weight: "400 600",
+  display: "swap",
+  preload: false,
+  variable: "--weatherly-montserrat",
+});
 export const metadata: Metadata = {
   title: { default: "Weatherly Transaction Co.", template: "%s · Weatherly" },
   description:
@@ -25,7 +33,10 @@ export const metadata: Metadata = {
 };
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${serif.variable} ${sans.variable}`}>
+    <html
+      lang="en"
+      className={`${serif.variable} ${sans.variable} ${montserrat.variable}`}
+    >
       <body>
         <a className="skip-link" href="#main-content">
           Skip to content

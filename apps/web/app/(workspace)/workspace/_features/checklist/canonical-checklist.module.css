@@ -1,0 +1,190 @@
+.panel {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--paper);
+}
+
+.heading,
+.acceptance,
+.stepLine {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.heading h2,
+.heading p,
+.subline,
+.note,
+.editor p {
+  margin: 0;
+}
+
+.heading p,
+.subline {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.acceptance {
+  align-items: center;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.check,
+.actions,
+.stepActions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.actions,
+.stepActions {
+  flex-wrap: wrap;
+}
+
+.steps {
+  padding: 0;
+  margin: 0.5rem 0 0.85rem;
+  list-style: none;
+}
+
+.step {
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.stepLine > input,
+.skippedCheck {
+  margin: 0.3rem 0 0;
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
+}
+
+.skippedCheck {
+  border: 1px dashed var(--muted);
+  border-radius: 0.15rem;
+}
+
+.stepBody {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.step[data-status="complete"] .stepTitle {
+  text-decoration: line-through;
+}
+
+.step[data-status="not-needed"] .stepTitle {
+  color: var(--muted);
+}
+
+.tag {
+  margin-inline-start: 0.5rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 1rem;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.note {
+  white-space: pre-wrap;
+}
+
+.textButton,
+.menu summary {
+  border: 0;
+  padding: 0.25rem 0.35rem;
+  background: transparent;
+  color: var(--accent);
+}
+
+.textButton:hover {
+  text-decoration: underline;
+}
+
+.dateButton,
+.actions button,
+.menuActions button {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: var(--paper);
+}
+
+.menu {
+  position: relative;
+}
+
+.menu summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.menuActions {
+  position: absolute;
+  inset-inline-end: 0;
+  z-index: 1;
+  display: grid;
+  gap: 0.25rem;
+  min-inline-size: max-content;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--paper);
+}
+
+.editor {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg);
+}
+
+.editor label:not(.check) {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.editor input:not([type="checkbox"]),
+.editor textarea,
+.editor select {
+  min-inline-size: 0;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: var(--paper);
+}
+
+.fields {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+}
+
+.moves {
+  padding-inline-start: 1.25rem;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .stepLine {
+    flex-wrap: wrap;
+  }
+
+  .stepBody {
+    flex: 1 0 80%;
+  }
+}

@@ -1,4 +1,5 @@
-import Dashboard from "./_components/Dashboard";
+import { Overview } from "./_features/portfolio/Overview";
+
 export default function Page() {
-  return <Dashboard />;
+  return <Overview />;
 }

@@ -1,5 +1,4 @@
 import "dotenv/config";
-import { notifyIntakeReceived } from "@weatherly/intake";
 import { createServer } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
@@ -14,6 +13,8 @@ import { registerMatterChangeHook } from "@weatherly/matters";
 import { syncDotloop } from "@weatherly/dotloop";
 import { processReview, prepareIntakeReview } from "@weatherly/ai";
 import { recordIntakeGift, queueTerminatedServiceCheckouts, expireTerminatedServiceCheckout } from "@weatherly/billing";
+import { createObjectStore } from "@weatherly/documents";
+import { createHandoffJobHandlers } from "./handoff-jobs";
 import {
   claimJob,
   executeJob,
@@ -31,15 +32,16 @@ let lastHeartbeat = 0;
 let lastCleanup = 0;
 let lastReminderCheck = 0;
 const privateReminders = createPrivateReminderService();
+const communicationsHandlers = createCommunicationJobHandlers(createCommunicationsService());
 const handlers: JobRegistry = {
-  "intake.received": notifyIntakeReceived,
+  ...communicationsHandlers,
+  ...createHandoffJobHandlers(createObjectStore(), communicationsHandlers["system.email"]),
   "billing.expire_checkout": (payload) => expireTerminatedServiceCheckout(payload),
   "reminder.digest": (payload) => privateReminders.handleDigest(payload),
   "dotloop.sync": async (payload) => {
     const { linkId } = z.object({ linkId: z.string() }).parse(payload);
     await syncDotloop(linkId);
   },
-  ...createCommunicationJobHandlers(createCommunicationsService()),
   "ai.extract": async (payload) => {
     const input = z.object({ proposalId: z.string() }).parse(payload);
     await processReview(input.proposalId);

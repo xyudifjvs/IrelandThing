@@ -46,17 +46,28 @@ const blank = (variant: ReferenceVariant): ReferenceIntake => ({
   fileNames: {},
 });
 export default function Intake() {
+  const membership = useData<{ business: "weatherly" | "hto" }>(
+    "/api/v1/intake/membership",
+  );
+  if (membership.loading) return <p role="status">Opening your intake…</p>;
+  if (!membership.data)
+    return (
+      <p role="alert">
+        {membership.error || "Your intake settings could not be loaded."}{" "}
+        <button type="button" onClick={() => void membership.refresh()}>Try again</button>
+      </p>
+    );
+  return <IntakeForm homeTeamOhio={membership.data.business === "hto"} />;
+}
+
+function IntakeForm({ homeTeamOhio }: { homeTeamOhio: boolean }) {
   const [legacy, setLegacy] = useState(false),
     [legacyDraft, setLegacyDraft] = useState<string>();
-  useEffect(() => {
-    const q = new URLSearchParams(location.search);
-    // Full Listing remains resumable through existing drafts, but is not a new order.
-    void q;
-  }, []);
   return legacy ? (
-    <LegacyIntake initialDraftId={legacyDraft} />
+    <LegacyIntake initialDraftId={legacyDraft} homeTeamOhio={homeTeamOhio} />
   ) : (
     <ReferenceForm
+      homeTeamOhio={homeTeamOhio}
       openLegacy={(id) => {
         setLegacyDraft(id);
         setLegacy(true);
@@ -64,7 +75,10 @@ export default function Intake() {
     />
   );
 }
-function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
+function ReferenceForm({ openLegacy, homeTeamOhio }: {
+  openLegacy: (id?: string) => void;
+  homeTeamOhio: boolean;
+}) {
   const session = useData<Session>("/api/v1/session");
   const actor = session.data?.user;
   const allowed =
@@ -108,7 +122,9 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
         ...ref.current,
         fields: { ...ref.current.fields, ...readFields(root.current) },
       };
-    return structuredClone(ref.current);
+    const current = structuredClone(ref.current);
+    if (homeTeamOhio) delete current.fields.service;
+    return current;
   }
   function changed() {
     changes.current++;
@@ -211,6 +227,16 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
   useEffect(() => {
     if (!allowed || !root.current) return;
     const el = root.current;
+    if (homeTeamOhio) {
+      const service = el.querySelector<HTMLElement>('[name="service"]')
+        ?.closest<HTMLElement>(".card");
+      const giftPayment = el.querySelector<HTMLElement>("#payBtn");
+      for (const control of [service, giftPayment]) {
+        if (!control) continue;
+        control.hidden = true;
+        control.style.display = "none";
+      }
+    }
     if (!Object.keys(ref.current.fields).length) {
       const q = new URLSearchParams(location.search);
       replacementRef.current=q.get("replaces")||undefined;
@@ -256,22 +282,22 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
         );
     }
     const contractCard = el.querySelector("#contractDocs")!.closest(".card")!;
-    if (variant.endsWith("compliance") && !contractCard.querySelector("[data-contract-location]")) {
+    if ((homeTeamOhio || variant.endsWith("compliance")) && !contractCard.querySelector("[data-contract-location]")) {
       const location = document.createElement("div");
       location.className = "field";
       location.dataset.contractLocation = "";
       location.innerHTML =
-        '<label class="lbl" for="contractLocation">Dotloop transaction name</label><input type="text" id="contractLocation" name="contractLocation" placeholder="If different from the property address"><p class="hint">For Compliance, upload the executed contract or identify the Dotloop transaction by name or property address. No document URL is needed. A Dotloop reference does not confirm retrieval.</p>';
+        '<label class="lbl" for="contractLocation">Dotloop transaction name</label><input type="text" id="contractLocation" name="contractLocation" placeholder="If different from the property address"><p class="hint">Upload the executed contract or identify the Dotloop transaction by name or property address. No document URL is needed. A Dotloop reference does not confirm retrieval.</p>';
       contractCard.append(location);
     }
     setFields(el, fields);
     syncConditions(el);
-    renderStep(el, step, ref.current);
+    renderStep(el, step, snapshot(), homeTeamOhio);
     // Initial browser defaults are also durable answers; no fabricated person data.
     ref.current.fields = { ...fields, ...readFields(el) };
-  }, [allowed, variant, generation, actor?.name, actor?.email]);
+  }, [allowed, variant, generation, actor?.name, actor?.email, homeTeamOhio]);
   useEffect(() => {
-    if (root.current) renderStep(root.current, step, snapshot());
+    if (root.current) renderStep(root.current, step, snapshot(), homeTeamOhio);
   }, [step, receipt]);
   useEffect(() => {
     const el = root.current;
@@ -389,7 +415,8 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
     const value = snapshot();
     const uploaded=Boolean(value.uploads.contractDocs?.length);
     const compliance=value.variant.endsWith('compliance');
-    if(!uploaded&&!compliance)throw Error('Contract to Close requires an uploaded executed contract. Save a draft at any point.');
+    if (!uploaded && !compliance && !homeTeamOhio)
+      throw Error("Contract to Close requires an uploaded executed contract. Save a draft at any point.");
     const current = await persist();
     const result = await mutate<{
       submission: { id: string };
@@ -443,10 +470,11 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
     changed();
     const value = snapshot();
     if (el.name === "service" || el.name === "side") {
+      const compliance = homeTeamOhio
+        ? variant.endsWith("-compliance")
+        : value.fields.service === "ctcc";
       value.variant = (String(value.fields.side) +
-        (value.fields.service === "ctcc"
-          ? "-compliance"
-          : "")) as ReferenceVariant;
+        (compliance ? "-compliance" : "")) as ReferenceVariant;
       ref.current = value;
       packageRef.current = value.variant.endsWith("compliance")
         ? "complete"
@@ -666,10 +694,10 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
           >
             Resume & preferences
           </button>
-          <span>
+          {homeTeamOhio ? <span>Home Team Ohio</span> : <span>
             {variant.endsWith("compliance") ? "$515" : "$425"} USD · Full
             Listing coming soon
-          </span>
+          </span>}
         </span>
       </div>
       {showDrafts && (
@@ -707,7 +735,7 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
                 if (busyRef.current || receipt) return;
                 ref.current.fields.directContact = e.target.value;
                 changed();
-                if (root.current) renderStep(root.current, step, snapshot());
+                if (root.current) renderStep(root.current, step, snapshot(), homeTeamOhio);
               }}
             >
               <option value="copy_agent">
@@ -716,10 +744,10 @@ function ReferenceForm({ openLegacy }: { openLegacy: (id?: string) => void }) {
               <option value="through_agent">Communicate through me only</option>
             </select>
           </label>
-          <p>
+          {!homeTeamOhio && <p>
             Contract to Close: $425. Contract to Close + Compliance: $515. Full
             Listing is coming soon.
-          </p>
+          </p>}
         </div>
       )}
       {error && (

@@ -2,6 +2,7 @@ import "dotenv/config";
 import { prisma } from "./index";
 import { approvedCatalog } from "../../billing/src/contracts";
 import { hashPassword } from "better-auth/crypto";
+import { seedPlaceholderEmailTemplates } from "@weatherly/communications";
 if (process.env.APP_ENV !== "local" || process.env.NODE_ENV === "production")
   throw new Error(
     "Synthetic seed is allowed only in a local development environment.",
@@ -176,4 +177,5 @@ await prisma.note.upsert({
 console.log(
   "Local synthetic accounts, approved catalog, and sample matters are ready.",
 );
+await seedPlaceholderEmailTemplates();
 await prisma.$disconnect();

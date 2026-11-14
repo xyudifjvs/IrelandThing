@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { z } from "zod";
+import { accountFileSummary, listAccountObligations } from "./file-summary";
 import { asyncHandler, principal, HttpError } from "@weatherly/platform";
 import {
   createCheckout,
@@ -21,6 +23,10 @@ import {
 } from "./account";
 export function createBillingRouter() {
   const router = Router();
+  router.use((_req, res, next) => {
+    res.set("Cache-Control", "private, no-store");
+    next();
+  });
   const historyQuery = (query: Record<string, unknown>) =>
     Object.fromEntries(
       Object.entries(query).map(([key, value]) => [
@@ -28,6 +34,18 @@ export function createBillingRouter() {
         key === "limit" && typeof value === "string" ? Number(value) : value,
       ]),
     );
+  router.get(
+    "/account/file-summary",
+    asyncHandler(async (req, res) =>
+      res.json(await accountFileSummary(principal(req), req.query)),
+    ),
+  );
+  router.get(
+    "/account/obligations",
+    asyncHandler(async (req, res) =>
+      res.json(await listAccountObligations(principal(req), req.query)),
+    ),
+  );
   router.get(
     "/account/transactions",
     asyncHandler(async (req, res) => {
@@ -81,9 +99,26 @@ export function createBillingRouter() {
   );
   router.post(
     "/payments/:id/reconcile",
-    asyncHandler(async (req, res) =>
-      res.json(await reconcilePayment(principal(req), String(req.params.id))),
-    ),
+    asyncHandler(async (req, res) => {
+      const { sessionId } = z
+        .object({
+          sessionId: z
+            .string()
+            .trim()
+            .max(200)
+            .regex(/^cs_[A-Za-z0-9_]+$/)
+            .optional(),
+        })
+        .parse(req.body ?? {});
+      res.json(
+        await reconcilePayment(
+          principal(req),
+          String(req.params.id),
+          undefined,
+          sessionId,
+        ),
+      );
+    }),
   );
   router.get(
     "/catalog",

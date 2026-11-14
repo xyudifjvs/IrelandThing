@@ -1,0 +1,32 @@
+# C11 independent review
+
+**Accepted for local integration** at `5a9cea6f3669d991d3c42cdd2e22fe36e220e4ac`, including the C05 contact writer correction at `c1f7d07582ab91c0f800c7275e4b760e2c410c70`. The exact candidate was clean. Both findings below were resolved.
+
+- The HTO editor and canonical writer now accept omitted or blank split fields for retained client IDs. The independent HTTP recheck corrected email and phone, mixed retained, added, and retired contacts, preserved canonical full names and matching confirmed split fields, and rejected a foreign client ID and a nameless new client without advancing the file revision. Chrome independently verified the request payload and showed the saved name with the corrected email.
+- An otherwise exact under-contract row with different known clients remained separate and displayed a specific match warning. The independent HTTP recheck verified the warning flag, no automatic link audit, authorization on the match command, and explicit coordinator linking with conflict recorded in audit. A separate compatible row sharing one email with different casing still auto-linked. Chrome verified the warning, candidate identity and explicit link payload.
+- TypeScript, the complete candidate diff check and 118 focused tests across 14 files passed against a fresh database with all 19 migrations. The independent HTTP probe passed nine groups, including canonical confirmation rollback, date preview and pinning, lifecycle transitions, filtered totals and exact CSV. Desktop and 375-pixel Chrome checks passed with synthetic network fixtures.
+
+The business-switch endpoint and mounted production-path composition remain C15 integration checks. Ireland's documented terminal-date, link and CSV component decisions remain for the laptop handoff. Evidence is in the local `weatherly-r11-recheck` fixture directory and logs. Verification used synthetic records and local endpoints.
+
+## Original candidate review
+
+**Changes requested** on `d062403d7696e30474b3f790dcfe50bc2d9f83fd`. The candidate worktree was clean. This review used the actual C05 and C03 adapters from integration checkpoint `68790df`, synthetic principals, a disposable PostgreSQL database, and local Chrome.
+
+## Findings
+
+1. **P2. The HTO editor blocks ordinary contact edits when saved clients lack split names.** The normal C05 creation flow saves a full display name for each client. The HTO editor intentionally leaves split fields blank until Ireland confirms the components. In Chrome, a linked row containing two such clients displayed both saved names, but changing the first client's email and saving produced “Enter a first or last name for each client.” No request reached the API. The same validation applies after adding or removing a client. The linked HTO schema and the canonical C05 writer also require a nonempty first or last name on every retained entry. Let a retained contact ID carry its canonical full name forward when split parts are absent. Continue to require a name for new contacts and export only confirmed split components. See `ClosingFactsForm.tsx:88`, `hto-operations/contracts.ts:69`, and `commands/file-fact-clients.ts:22`.
+2. **P2. Exact under-contract matching can absorb a manual row for different clients.** An independent C05 confirmation matched an existing manual seller row with the same complete address, agent, side, price, and close date. The manual client email and the two canonical client emails were distinct and disjoint. The automatic link consumed the manual row, replaced its displayed clients, and produced no coordinator match prompt. The original manual snapshot survived internally. Include conflicting known client identities in D5's automatic compatibility check and leave an explicit choice for a plausible same-property match. See `hto-operations/matching.ts:116`.
+
+## Verified locally
+
+- TypeScript, the exact candidate diff check, and 52 HTO and checklist tests passed after applying all 19 migrations.
+- Independent HTTP and database checks ran the actual C11 router with C05 creation, facts and lifecycle commands, and the accepted C03 date adapter. Concurrent confirmation linked one compatible exact listing once. A forced post-link failure rolled back the file, review and manual row claim. Unit separation, repeat-property separation and idempotent near-match dismissal passed.
+- Direct agent, client and anonymous reads, exports and facts changes were denied. Linked rows rejected manual status and forged facts status updates. The C05 writer persisted canonical price, address and clients while retaining price history and the co-op contact. Stale revisions were rejected.
+- A linked date preview showed the Title Commitment effect, rejected a digest replay for a different date, and honored **Only this date**. Marking Closing complete preserved the active file state. Explicit close-out, reopen and termination drove the HTO row. Closed projection used the recorded actual date and kept the checklist date separate across correction.
+- An independent CSV assertion checked the exact header and two person rows, selection over filter, UTF-8 name quoting, phone format, fixed decimal price, historical actual date, and exclusion of private and agent contacts. Closed totals and By agent matched independently calculated cents. The builder suite also exercised formula escaping and date range behavior.
+- In one DB transaction, switching a fixture to Weatherly hid its linked HTO row and denied selected export and edit. Returning to HTO restored the same row ID. Actual C05 permanent delete removed that row while retaining the HTO audit event.
+- Chrome on the local build verified file action controls, By agent filter, selected CSV and filename, displayed actual and checklist dates, the explicit date choice, 375-pixel form without page overflow, and the agent navigation gate. The contact-edit failure above was also reproduced in Chrome.
+
+## Remaining integration
+
+The business-switch probe used a transactional fixture because the current integration checkout has no revisioned business/package command exposed for the confirmed file. C05/C09/C14 and C00 must exercise the real command and hooks in C15. C15 also verifies the mounted API, authenticated sessions and end-to-end browser flows. Ireland's terminal-date correction, date fallback, dormant-link and unconfirmed CSV component decisions are recorded for her laptop handoff. This review exercised synthetic local data and made no provider calls.

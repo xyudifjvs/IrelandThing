@@ -106,6 +106,7 @@ export function renderStep(
   root: HTMLElement,
   step: number,
   ref: ReferenceIntake,
+  homeTeamOhio = false,
 ) {
   root
     .querySelectorAll<HTMLElement>(".step")
@@ -131,7 +132,7 @@ export function renderStep(
         })),
       ]),
     );
-    buildReferenceReview(root, ref.variant, files);
+    buildReferenceReview(root, ref.variant, files, homeTeamOhio);
     root
       .querySelector("#review")!
       .insertAdjacentHTML(

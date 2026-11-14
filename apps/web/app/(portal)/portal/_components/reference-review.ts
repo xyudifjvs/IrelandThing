@@ -1,5 +1,5 @@
 // Generated from inspected presentation-only review functions. No prototype runtime.
-export function buildReferenceReview(root: HTMLElement, variant: string, files: Record<string,{name:string}[]>) {
+export function buildReferenceReview(root: HTMLElement, variant: string, files: Record<string,{name:string}[]>, homeTeamOhio = false) {
 const form=root.querySelector("form")!;
 const val=(name:string):string=>{const el=form.elements.namedItem(name);if(!el)return "";if(el instanceof RadioNodeList)return el.value;const input=el as HTMLInputElement;return input.type==="checkbox"?(input.checked?"on":""):input.value;};
 const v=(id:string)=>val(id).trim();
@@ -12,7 +12,7 @@ if(variant==="buyer"){
   const add=(k:string,val:string,step:number)=>rows.push([k,val||blank,step]);
   const div=()=>rows.push(null);
 
-  add('Service',optText('service'),0);
+  if (!homeTeamOhio) add('Service',optText('service'),0);
   add('Representing',val('side')==='buyer'?'Buyer':'Seller',0);
   const addr=joinNz([joinNz([v('a_num'),v('a_street')],' '),v('a_city'),joinNz([v('a_state').toUpperCase(),v('a_zip')],' ')],', ');
   add('Property',esc(addr),0);
@@ -68,7 +68,7 @@ if(variant==="seller"){
   const add=(k:string,val:string,step:number)=>rows.push([k,val||blank,step]);
   const div=()=>rows.push(null);
 
-  add('Service',optText('service'),0);
+  if (!homeTeamOhio) add('Service',optText('service'),0);
   add('Representing',val('side')==='buyer'?'Buyer':'Seller',0);
   const addr=joinNz([joinNz([v('a_num'),v('a_street')],' '),v('a_city'),joinNz([v('a_state').toUpperCase(),v('a_zip')],' ')],', ');
   add('Property',esc(addr),0);
@@ -125,7 +125,7 @@ if(variant==="buyer-compliance"){
   const add=(k:string,val:string,step:number)=>rows.push([k,val||blank,step]);
   const div=()=>rows.push(null);
 
-  add('Service',optText('service'),0);
+  if (!homeTeamOhio) add('Service',optText('service'),0);
   add('Representing',val('side')==='buyer'?'Buyer':'Seller',0);
   const addr=joinNz([joinNz([v('a_num'),v('a_street')],' '),v('a_city'),joinNz([v('a_state').toUpperCase(),v('a_zip')],' ')],', ');
   add('Property',esc(addr),0);
@@ -181,7 +181,7 @@ if(variant==="seller-compliance"){
   const add=(k:string,val:string,step:number)=>rows.push([k,val||blank,step]);
   const div=()=>rows.push(null);
 
-  add('Service',optText('service'),0);
+  if (!homeTeamOhio) add('Service',optText('service'),0);
   add('Representing',val('side')==='buyer'?'Buyer':'Seller',0);
   const addr=joinNz([joinNz([v('a_num'),v('a_street')],' '),v('a_city'),joinNz([v('a_state').toUpperCase(),v('a_zip')],' ')],', ');
   add('Property',esc(addr),0);

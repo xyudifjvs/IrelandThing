@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@weatherly/db";
 import { listMatters, updateTask } from "@weatherly/matters";
 import { HttpError, type Principal } from "@weatherly/platform";
+import { intakeReceiptTime } from "../../intake/src/receipt-clock";
 import {
   createPrivateReminderService,
   reminderLocalClock,
@@ -28,7 +29,6 @@ const actor: Principal = {
   sessionId: run,
 };
 const matters: string[] = [];
-const recordIds: string[] = [];
 const defaultEnv = () =>
   ({
     PRIVATE_REMINDERS_ENABLED: "true",
@@ -119,6 +119,8 @@ beforeAll(async () => {
   });
 });
 afterEach(async () => {
+  await prisma.matter.deleteMany({ where: { id: { in: matters.splice(0) } } });
+  await prisma.digestCursor.deleteMany({ where: { recipientId: ownerId } });
   await prisma.outboxJob.deleteMany({
     where: {
       topic: "reminder.digest",
@@ -132,7 +134,6 @@ afterEach(async () => {
   });
 });
 afterAll(async () => {
-  await prisma.matter.deleteMany({ where: { id: { in: matters } } });
   await prisma.user.delete({ where: { id: ownerId } });
   await prisma.$disconnect();
 });
@@ -409,7 +410,6 @@ describe("private Ireland-only reminder digests", () => {
       }),
     ).toBe(0);
     expect(f.send).not.toHaveBeenCalled();
-    recordIds.push(special.id);
   });
 
   it("sends plaintext only to the pinned coordinator, keeps the payload free of PII and retains a redacted acceptance receipt", async () => {
@@ -577,6 +577,204 @@ describe("private Ireland-only reminder digests", () => {
         (request!.headers as Record<string, string>)["Idempotency-Key"],
     );
     expect(keys[0]).toBe(keys[1]);
+  });
+
+  it("includes a pre-cutoff receipt that commits after the digest begins exactly once", async () => {
+    const f = fixture({ date: "2027-03-15T12:01:00Z" });
+    const id = "cross-cutoff-" + run;
+    let markInserted!: () => void;
+    let releaseWriter!: () => void;
+    const inserted = new Promise<void>((resolve) => {
+      markInserted = resolve;
+    });
+    const canCommit = new Promise<void>((resolve) => {
+      releaseWriter = resolve;
+    });
+    const writer = prisma.$transaction(async (tx) => {
+      const [{ started }] = await tx.$queryRaw<
+        { started: Date }[]
+      >`SELECT transaction_timestamp() AS started`;
+      await tx.$executeRaw`SELECT pg_sleep(0.020)`;
+      const stamped = await intakeReceiptTime(tx);
+      // Verify the writer's shared seam samples the DB wall clock rather than
+      // its transaction timestamp. Use a synthetic cutoff date for this fixture.
+      expect(stamped.getTime()).toBeGreaterThan(started.getTime() + 10);
+      await tx.intakeSubmission.create({
+        data: {
+          id,
+          draftId: id,
+          idempotencyKey: id,
+          userId: ownerId,
+          matterId: id,
+          snapshot: { propertyAddress: "Across the cutoff", side: "buyer" },
+          createdAt: new Date("2027-03-15T11:59:59.999Z"),
+        },
+      });
+      markInserted();
+      await canCommit;
+    });
+
+    try {
+      await Promise.race([writer, inserted]);
+      await f.service.enqueueScheduled();
+      const { payload } = await queued();
+      const delivery = f.service.handleDigest(payload).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      );
+      try {
+        await expect
+          .poll(async () => {
+            const [{ blocked }] = await prisma.$queryRaw<
+              { blocked: boolean }[]
+            >`
+            SELECT EXISTS (
+              SELECT 1 FROM pg_locks WHERE locktype = 'advisory'
+              AND mode = 'ExclusiveLock' AND NOT granted
+              AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+            ) AS blocked
+          `;
+            return blocked;
+          })
+          .toBe(true);
+        expect(f.send).not.toHaveBeenCalled();
+      } finally {
+        releaseWriter();
+        await writer;
+        expect(await delivery).toEqual({ value: { providerAccepted: true } });
+      }
+      expect(JSON.parse(String(f.send.mock.calls[0][1]!.body)).text).toContain(
+        "Across the cutoff",
+      );
+      f.setClock("2027-03-16T12:01:00Z");
+      await f.service.enqueueScheduled();
+      expect(await f.service.handleDigest((await queued()).payload)).toEqual({
+        skipped: "NO_DUE_ITEMS",
+      });
+      expect(f.send).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseWriter();
+      await writer;
+      await prisma.intakeSubmission.deleteMany({ where: { id } });
+    }
+  });
+
+  it("freezes the Monday intake window over DST, includes processed intakes, and replays the same request", async () => {
+    const f = fixture({ date: "2027-03-15T12:00:00Z" }); // Monday 08:00 EDT, after the spring transition.
+    const receipt = (
+      key: string,
+      createdAt: string,
+      extra: Record<string, unknown> = {},
+    ) =>
+      prisma.intakeSubmission.create({
+        data: {
+          idempotencyKey: key + run,
+          draftId: key + run,
+          userId: ownerId,
+          matterId: "receipt-" + key + run,
+          createdAt: new Date(createdAt),
+          snapshot: {
+            propertyAddress: key,
+            side: "buyer",
+            submitter: {
+              name: "Submitted Agent",
+              email: "hidden@example.test",
+              brokerage: null,
+              phone: null,
+            },
+          },
+          ...extra,
+        },
+      });
+    try {
+      const pendingMatter = await dueMatter({ stage: "pending_review" });
+      await receipt("Before Friday cutoff", "2027-03-12T12:59:59.999Z");
+      await receipt("Friday after cutoff", "2027-03-12T13:00:00.000Z", {
+        processedAt: new Date("2027-03-12T17:00:00Z"),
+      });
+      await receipt("Sunday intake", "2027-03-14T19:00:00.000Z", {
+        matterId: pendingMatter.id,
+      });
+      await receipt("Deleted intake", "2027-03-14T19:01:00.000Z", {
+        deletedAt: new Date("2027-03-14T20:00:00Z"),
+      });
+      await receipt("At Monday cutoff", "2027-03-15T12:00:00.000Z");
+      const enqueues = await Promise.all([
+        f.service.enqueueScheduled(),
+        f.service.enqueueScheduled(),
+      ]);
+      expect(enqueues.filter(({ enqueued }) => enqueued)).toHaveLength(1);
+      const job = await queued();
+      f.send.mockResolvedValueOnce(new Response("try again", { status: 503 }));
+      await expect(f.service.handleDigest(job.payload)).rejects.toMatchObject({
+        code: "REMINDER_PROVIDER_FAILED",
+      });
+      const pending = await queued();
+      expect(JSON.stringify(pending.payload)).not.toContain("Sunday intake");
+      expect(JSON.stringify(pending.payload)).not.toContain(approvedEmail);
+      const cursor = () =>
+        prisma.digestCursor.findFirstOrThrow({
+          where: { recipientId: ownerId },
+        });
+      expect(await cursor()).toMatchObject({
+        highWaterAt: null,
+        pendingWindowStart: new Date("2027-03-12T13:00:00Z"),
+        pendingWindowEnd: new Date("2027-03-15T12:00:00Z"),
+      });
+      await receipt("Tuesday intake", "2027-03-16T11:00:00.000Z");
+      f.setClock("2027-03-15T15:05:00Z");
+      await f.service.handleDigest(pending.payload);
+      const first = f.send.mock.calls[0][1]!;
+      const replay = f.send.mock.calls[1][1]!;
+      expect(replay.body).toBe(first.body);
+      expect(replay.headers).toEqual(first.headers);
+      const content = JSON.parse(String(first.body));
+      expect(content.to).toEqual([approvedEmail]);
+      expect(content.text).toContain("New intakes");
+      expect(content.text).toContain("Overdue: 0.");
+      expect(content.text).not.toContain("Sources:");
+      expect(content.text).toContain(
+        "Submitted Agent · Friday after cutoff · buyer",
+      );
+      expect(content.text).toContain("Sunday intake");
+      for (const text of [
+        "Before Friday cutoff",
+        "Deleted intake",
+        "At Monday cutoff",
+        "hidden@example.test",
+      ])
+        expect(content.text).not.toContain(text);
+      expect(await cursor()).toMatchObject({
+        highWaterAt: new Date("2027-03-15T12:00:00Z"),
+        pendingJobKey: null,
+      });
+      f.setClock("2027-03-16T12:00:00Z");
+      await f.service.enqueueScheduled();
+      await f.service.handleDigest((await queued()).payload);
+      const next = JSON.parse(String(f.send.mock.calls[2][1]!.body));
+      expect(next.text).toContain("At Monday cutoff");
+      expect(next.text).toContain("Tuesday intake");
+      expect(next.text).not.toContain("Friday after cutoff");
+      await f.service.handleDigest(job.payload);
+      expect(f.send).toHaveBeenCalledTimes(3);
+      f.setClock("2027-03-17T12:00:00Z");
+      await f.service.enqueueScheduled();
+      const today = await prisma.outboxJob.findUniqueOrThrow({
+        where: {
+          idempotencyKey: "private-reminder:" + ownerId + ":2027-03-17",
+        },
+      });
+      await expect(f.service.handleDigest(today.payload)).resolves.toEqual({
+        skipped: "NO_DUE_ITEMS",
+      });
+      expect(await cursor()).toMatchObject({
+        highWaterAt: new Date("2027-03-17T12:00:00Z"),
+        pendingJobKey: null,
+      });
+      expect(f.send).toHaveBeenCalledTimes(3);
+    } finally {
+      await prisma.intakeSubmission.deleteMany({ where: { userId: ownerId } });
+    }
   });
 
   it("denies agent/client previews and validates timezone/window input", async () => {

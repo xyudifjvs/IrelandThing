@@ -85,9 +85,11 @@ const fresh: Payload = {
 export default function LegacyIntake({
   initialDraftId,
   forceFullListing,
+  homeTeamOhio = false,
 }: {
   initialDraftId?: string;
   forceFullListing?: boolean;
+  homeTeamOhio?: boolean;
 }) {
   const session = useData<Session>("/api/v1/session");
   const [d, setD] = useState<Payload>(fresh);
@@ -150,7 +152,7 @@ export default function LegacyIntake({
   const uploading = contracts.running || checklists.running;
   const unsaved = dirty || pendingUpload || uploading;
   const steps = [
-    "Service",
+    homeTeamOhio ? "Representation" : "Service",
     "The deal",
     "Your clients",
     "Title & documents",
@@ -461,13 +463,11 @@ export default function LegacyIntake({
         <div className={`${s.card} ${s.success}`}>
           <CheckCircle2 size={45} strokeWidth={1} />
           <p className={s.eyebrow}>Intake received</p>
-          <h1>Your transaction is submitted.</h1>
+          <h1>Your intake was received.</h1>
           <p>
             {submission.propertyAddress}
             <br />
-            The intake and follow-up tasks are saved in your transaction file.
-            <br />
-            Your coordinator can now review the information you provided.
+            Ireland can now review the information you provided.
           </p>
           <Link className={s.btn} href="/portal">
             Return to your portal <ArrowRight size={14} />
@@ -482,8 +482,8 @@ export default function LegacyIntake({
           <p className={s.eyebrow}>Weatherly Transaction Co.</p>
           <h1>New transaction</h1>
           <p>
-            Choose your service and enter the transaction details. You can save
-            a draft and finish later.
+            {homeTeamOhio ? "Enter the transaction details." : "Choose your service and enter the transaction details."}
+            {" "}You can save a draft and finish later.
           </p>
         </div>
         <Link className={s.secondary} href="/portal">
@@ -604,11 +604,10 @@ export default function LegacyIntake({
           {step === 0 && (
             <>
               <h2 ref={heading} tabIndex={-1}>
-                Choose a service
+                {homeTeamOhio ? "Buyer or seller representation" : "Choose a service"}
               </h2>
-              <p className={s.sub}>
-                Choose the service that fits this transaction.
-              </p>
+              {!homeTeamOhio && <>
+              <p className={s.sub}>Choose the service that fits this transaction.</p>
               <div className={s.choices}>
                 {[
                   {
@@ -666,6 +665,7 @@ export default function LegacyIntake({
                   </label>
                 ))}
               </div>
+              </>}
               <h3>Who do you represent?</h3>
               <div className={s.inline}>
                 {["buyer", "seller"].map((side) => (
@@ -1254,8 +1254,8 @@ export default function LegacyIntake({
               <dl>
                 {[
                   [
-                    "Service",
-                    `${d.packageCode === "essentials" ? "Contract to Close · $425" : d.packageCode === "complete" ? "Contract to Close + Compliance · $515" : "Full Listing · Coming soon"} · ${d.side} side`,
+                    homeTeamOhio ? "Business" : "Service",
+                    homeTeamOhio ? `Home Team Ohio · ${d.side} side` : `${d.packageCode === "essentials" ? "Contract to Close · $425" : d.packageCode === "complete" ? "Contract to Close + Compliance · $515" : "Full Listing · Coming soon"} · ${d.side} side`,
                   ],
                   ["Property", d.propertyAddress || "Not provided"],
                   ["Purchase", d.purchaseType],
@@ -1348,8 +1348,7 @@ export default function LegacyIntake({
               </dl>
               <div className={s.notice}>
                 <ShieldCheck size={16} /> After submitting, return to your
-                portal for updates. Ireland will confirm when the service fee is
-                due.
+                portal for updates.{!homeTeamOhio && " Ireland will confirm when the service fee is due."}
               </div>
             </>
           )}

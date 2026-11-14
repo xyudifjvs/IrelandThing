@@ -1,0 +1,234 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2.05fr) minmax(280px, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+.toolbar {
+  margin: 0 0 18px;
+  max-width: 390px;
+}
+.groups {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.group,
+.panel {
+  border: 1px solid var(--weatherly-color-border);
+  border-radius: var(--weatherly-radius-panel);
+  background: var(--weatherly-color-surface);
+  min-width: 0;
+  padding: 18px;
+}
+.signingUp {
+  border-color: var(--weatherly-color-border-strong);
+}
+.group h2,
+.panel h2 {
+  font-family: var(--weatherly-font-heading);
+  font-size: var(--weatherly-type-file-title);
+  line-height: 1.1;
+  margin: 0;
+}
+.group ul,
+.steps,
+.fileList {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.group li + li,
+.fileList li + li {
+  border-top: 1px solid var(--weatherly-color-border);
+}
+.row,
+.groupRow,
+.panelHeader,
+.fileList li {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.agent {
+  background: transparent;
+  border: 0;
+  border-radius: var(--weatherly-radius-control);
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  font: inherit;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 12px 7px;
+  text-align: left;
+}
+.agent:hover,
+.agent[aria-pressed="true"] {
+  background: var(--weatherly-color-background);
+}
+.groupRow {
+  width: 100%;
+}
+.agent strong {
+  font-weight: 600;
+}
+.agent small,
+.steps small {
+  color: var(--weatherly-color-secondary);
+  display: block;
+  font-size: var(--weatherly-type-label);
+  margin-top: 3px;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.quiet {
+  background: transparent;
+  border: 0;
+  color: var(--weatherly-color-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--weatherly-type-small);
+  padding: 4px 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.quiet:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.identity,
+.detailSection,
+.signupAction {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  overflow-wrap: anywhere;
+}
+.identity p,
+.detailSection p {
+  margin: 0;
+}
+.identity button,
+.detailSection button {
+  justify-self: start;
+}
+.business,
+.detailSection h3 {
+  color: var(--weatherly-color-secondary);
+  font-size: var(--weatherly-type-label);
+  font-weight: 600;
+  letter-spacing: var(--weatherly-letter-label);
+  margin: 0;
+  text-transform: uppercase;
+}
+.detailSection {
+  border-top: 1px solid var(--weatherly-color-border);
+  padding-top: 16px;
+}
+.steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.steps li {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+}
+.stepComplete,
+.stepPending {
+  align-items: center;
+  border: 1px solid var(--weatherly-color-border-strong);
+  border-radius: 50%;
+  display: flex;
+  font-size: 10px;
+  height: 18px;
+  justify-content: center;
+  width: 18px;
+}
+.stepComplete {
+  background: var(--weatherly-color-accent);
+  border-color: var(--weatherly-color-accent);
+  color: var(--weatherly-color-surface);
+}
+.evidence {
+  background: var(--weatherly-color-background);
+  border: 1px solid var(--weatherly-color-border);
+  border-radius: var(--weatherly-radius-control);
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+.fileList li {
+  padding: 8px 0;
+}
+.fileList li > span {
+  color: var(--weatherly-color-secondary);
+  font-size: var(--weatherly-type-label);
+}
+.form,
+.form fieldset {
+  display: grid;
+  gap: 12px;
+}
+.form fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+.form {
+  margin-top: 10px;
+}
+.pdf {
+  background: var(--weatherly-color-surface);
+  border: 1px solid var(--weatherly-color-border);
+  min-height: 320px;
+  width: 100%;
+}
+.extracted {
+  font: inherit;
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.empty {
+  color: var(--weatherly-color-secondary);
+  margin-bottom: 0;
+}
+.visuallyHidden {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+@media (max-width: 850px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 500px) {
+  .group,
+  .panel {
+    padding: 12px;
+  }
+  .row {
+    align-items: start;
+    flex-direction: column;
+    padding-bottom: 9px;
+  }
+  .groupRow {
+    justify-content: start;
+  }
+}

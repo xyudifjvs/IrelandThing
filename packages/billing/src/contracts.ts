@@ -6,6 +6,7 @@ export const checkoutInput = z
     giftOrderId: z.string().optional(),
     idempotencyKey: z.string().min(8).max(120),
     catalogRevision: z.number().int().positive().optional(),
+    closingPaymentConfirmed: z.literal(true).optional(),
   })
   .strict();
 export const approvedCatalog = [

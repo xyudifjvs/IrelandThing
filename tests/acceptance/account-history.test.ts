@@ -23,16 +23,19 @@ import { createElement, type ComponentType } from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import Link from "next/link";
+import Image from "next/image";
 import * as icons from "lucide-react";
 import * as weatherlyUi from "@weatherly/ui";
 import * as dataModule from "../../apps/web/app/(workspace)/workspace/_components/data";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import ts from "typescript";
+import type { PortalFile } from "../../apps/web/app/(portal)/portal/_views/portal-model";
 
 const ui = {
   responses: {} as Record<string, unknown>,
   paths: [] as string[],
+  obligations: [] as unknown[],
   fallback: {
     data: null,
     loading: false,
@@ -42,7 +45,8 @@ const ui = {
 };
 const dataAdapter = {
   ...dataModule,
-  useData: (path: string) => {
+  useData: (path: string | null) => {
+    if (!path) return ui.fallback;
     ui.paths.push(path);
     return ui.responses[path] || ui.fallback;
   },
@@ -51,7 +55,7 @@ const dataAdapter = {
 // The Next app intentionally preserves JSX in its nearest tsconfig. Compile
 // the actual view source for Node without changing that application setting.
 // Real React renders these views; only network data and stylesheet names differ.
-function loadView(path: string, history?: unknown) {
+function loadView(path: string): Record<string, unknown> {
   const compiled = ts.transpileModule(readFileSync(resolve(path), "utf8"), {
     compilerOptions: {
       target: ts.ScriptTarget.ES2022,
@@ -65,15 +69,34 @@ function loadView(path: string, history?: unknown) {
     if (name === "react") return React;
     if (name === "react/jsx-runtime") return jsxRuntime;
     if (name === "next/link") return { __esModule: true, default: Link };
+    if (name === "next/image") return { __esModule: true, default: Image };
     if (name === "lucide-react") return icons;
     if (name === "@weatherly/ui") return weatherlyUi;
     if (name.endsWith("/_components/data")) return dataAdapter;
-    if (name === "./AccountHistory") return history;
+    if (name.endsWith("/_components/useLiveData"))
+      return { useLiveData: dataAdapter.useData };
+    if (name === "./useFeeObligations")
+      return {
+        useFeeObligations(enabled: boolean) {
+          if (enabled) ui.paths.push("/api/v1/billing/account/obligations");
+          return {
+            data: enabled ? ui.obligations : [],
+            loading: false,
+            error: false,
+            retry() {},
+          };
+        },
+      };
     if (name.endsWith(".module.css"))
       return {
         __esModule: true,
         default: new Proxy({}, { get: (_target, key) => String(key) }),
       };
+    if (name.startsWith(".")) {
+      const source = resolve(dirname(path), name);
+      const target = [source + ".tsx", source + ".ts"].find(existsSync);
+      if (target) return loadView(target);
+    }
     throw new Error(`Unexpected account view dependency ${name}`);
   }, exports);
   return exports;
@@ -87,10 +110,14 @@ const PaymentHistory = historyViews.PaymentHistory as ComponentType<{
 const TransactionHistory = historyViews.TransactionHistory as ComponentType<{
   coordinator: boolean;
 }>;
-const AccountPage = loadView(
-  "apps/web/app/(account)/account/page.tsx",
-  historyViews,
-).default as ComponentType;
+const AccountPage = loadView("apps/web/app/(account)/account/page.tsx")
+  .default as ComponentType;
+const ClientFile = loadView(
+  "apps/web/app/(portal)/portal/_views/ClientFile.tsx",
+).ClientFile as ComponentType<{ file: PortalFile }>;
+const { readFeeObligations } = loadView(
+  "apps/web/app/(account)/account/useFeeObligations.ts",
+) as typeof import("../../apps/web/app/(account)/account/useFeeObligations");
 
 // This independent suite deliberately exceeds the old 200-row list cap. Vitest's
 // configuration refuses non-local databases and database names without _test.
@@ -851,6 +878,7 @@ describe("independent account view states", () => {
   function state(data: unknown = null, loading = false, error = "") {
     ui.paths = [];
     ui.responses = {};
+    ui.obligations = [];
     ui.fallback = { data, loading, error, refresh: async () => {} };
   }
   it("announces loading and errors and offers clear recovery and honest empty states", () => {
@@ -1007,4 +1035,138 @@ describe("independent account view states", () => {
       ),
     ).toBe(false);
   });
+  it("shows a quoted closing gift for HTO with no Weatherly service charge", () => {
+    state();
+    ui.responses = {
+      "/api/v1/session": {
+        ...ui.fallback,
+        data: {
+          user: {
+            id: "synthetic-hto",
+            role: "agent",
+            business: "hto",
+            name: "Synthetic HTO",
+          },
+        },
+      },
+      "/api/v1/profile": {
+        ...ui.fallback,
+        data: {
+          name: "Synthetic HTO",
+          email: "hto@example.test",
+          phone: "555-0102",
+        },
+      },
+    };
+    const empty = renderToStaticMarkup(createElement(AccountPage));
+    expect(empty).not.toContain("Upcoming payments");
+    expect(empty).not.toContain('href="#payments"');
+    ui.obligations = [
+      {
+        matterId: "synthetic-hto-file",
+        propertyAddress: "18 Synthetic Lane",
+        service: null,
+        gift: {
+          name: "Closing planter",
+          amountCents: 4500,
+          currency: "USD",
+          status: "quoted",
+          paidAt: null,
+        },
+      },
+    ];
+    const gift = renderToStaticMarkup(createElement(AccountPage));
+    expect(gift).toContain('href="#upcoming-payments"');
+    expect(gift).toContain("Closing gift");
+    expect(gift).toContain("Closing planter");
+    expect(gift).toContain("$45");
+    expect(gift).not.toContain("Due at closing");
+    expect(gift).toContain("555-0102");
+  });
+});
+
+describe("portal refresh and appointment regressions", () => {
+  it("completes pagination through an empty page and rejects a partially successful refresh", async () => {
+    const signal = new AbortController().signal;
+    const obligation = {
+      matterId: "synthetic-hto-file",
+      propertyAddress: "18 Synthetic Lane",
+      service: null,
+      gift: {
+        name: "Closing planter",
+        amountCents: 4500,
+        currency: "USD",
+        status: "quoted",
+        paidAt: null,
+      },
+    };
+    const fetchPage = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchPage);
+    try {
+      fetchPage
+        .mockResolvedValueOnce(Response.json({ items: [], nextCursor: "next" }))
+        .mockResolvedValueOnce(
+          Response.json({ items: [obligation], nextCursor: null }),
+        );
+      await expect(readFeeObligations(signal)).resolves.toEqual([obligation]);
+      expect(fetchPage).toHaveBeenNthCalledWith(
+        2,
+        "/api/v1/billing/account/obligations?limit=100&cursor=next",
+        { credentials: "include", cache: "no-store", signal },
+      );
+
+      fetchPage
+        .mockResolvedValueOnce(
+          Response.json({ items: [obligation], nextCursor: "next" }),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 403 }));
+      await expect(readFeeObligations(signal)).rejects.toThrow(
+        "Could not open payment obligations.",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    ["closing", "Closing"],
+    ["final_walkthrough", "Final Walkthrough"],
+  ])(
+    "keeps the contract date and details fallback for a place-only %s",
+    (stepKey, title) => {
+      const task = {
+        id: "appointment",
+        stepKey,
+        title,
+        status: "open",
+        dueDate: "2026-11-22",
+        scheduled: true,
+        appointmentAt: null,
+        appointmentPlace: "Synthetic Title Office",
+      };
+      const render = (appointmentAt: string | null) =>
+        renderToStaticMarkup(
+          createElement(ClientFile, {
+            file: {
+              id: "synthetic-sale",
+              propertyAddress: "18 Synthetic Lane",
+              stage: "under_contract",
+              tasks: [{ ...task, appointmentAt }],
+            },
+          }),
+        );
+      const fallback = render(null);
+      expect(
+        fallback.match(
+          /Sun, Nov 22 · Details to come · Synthetic Title Office/g,
+        ),
+      ).toHaveLength(2);
+
+      const scheduled = render("2026-11-23T16:00:00Z");
+      expect(scheduled).not.toContain("Details to come");
+      expect(
+        scheduled.match(/Mon, Nov 23, 11:00 AM EST · Synthetic Title Office/g),
+      ).toHaveLength(2);
+    },
+  );
 });

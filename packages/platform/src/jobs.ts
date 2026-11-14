@@ -46,6 +46,9 @@ export async function executeJob(
         "No handler is registered for this job.",
       );
     await handler(job.payload);
+    const payload = job.payload;
+    const systemPurpose = payload && typeof payload === "object" && !Array.isArray(payload) && payload.purpose === "intake_received"
+      ? "intake_received" : "password_reset";
     await prisma.outboxJob.updateMany({
       where: { id: job.id, state: "running", lockedBy: workerId },
       data: {
@@ -54,7 +57,7 @@ export async function executeJob(
         lockedBy: null,
         error: null,
         ...(job.topic === "system.email"
-          ? { payload: { redacted: true, purpose: "password_reset" } }
+          ? { payload: { redacted: true, purpose: systemPurpose } }
           : {}),
       },
     });

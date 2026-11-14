@@ -15,6 +15,10 @@ The original HTML mockups and supplied JPEG assets are preserved in the reposito
 
 Ireland’s November 4 Process page and four intake forms are implemented in the redesign candidate. Originals, hashes and visual evidence are in [design references](design-reference/2026-11-weatherly/README.md); [release notes](docs/release/weatherly-redesign.md) record verification, unresolved business inputs and deployment status.
 
+## Intake-to-transaction handoff
+
+Start with the [Ireland laptop handoff](docs/runbooks/intake-to-transaction-ireland-laptop.md) to sync the repository, confirm the workflow decisions, and verify the integrations from Ireland’s accounts. The [release record](docs/release/intake-to-transaction.md) contains the implementation and verification evidence.
+
 ## Run locally
 
 Requires Node 22 and PostgreSQL 17. `infra/compose.local.yml` can start a new disposable PostgreSQL instance on loopback port 55442. The existing preview uses its separate container on 55432; do not replace its volume.

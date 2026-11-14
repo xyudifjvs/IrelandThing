@@ -36,6 +36,7 @@ import {
   listMessages,
   connectionStatus,
   sendSystemEmail,
+  queueAgentInvitation,
   refreshTemplateDrafts,
 } from "@weatherly/communications";
 import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
@@ -47,16 +48,17 @@ import {
   createIdentityRouter,
 } from "@weatherly/identity";
 import {
-  createMattersRouter,
   createPublicChecklistRouter,
   checklistPrivacyHeaders,
   registerMatterChangeHook,
 } from "@weatherly/matters";
 import { createDotloopRouter, dotloopConfigured } from "@weatherly/dotloop";
-import { createDocumentsRouter } from "@weatherly/documents";
-import { createIntakeRouter } from "@weatherly/intake";
+import { createDocumentsRouter, createObjectStore } from "@weatherly/documents";
 import { createOnboardingRouter, calendlyWebhook } from "@weatherly/onboarding";
 import { createContactsRouter } from "../../../packages/contacts/src/index";
+import { createPrivateNotesRouter } from "../../../packages/matters/src/private-notes/router";
+import { syncHtoClosing } from "../../../packages/matters/src/hto-operations";
+import { mountFileWorkspace } from "./handoff";
 const app = express();
 configureNetworkBoundary(app);
 app.disable("x-powered-by");
@@ -76,10 +78,12 @@ app.get("/health", async (_req, res) => {
   }
 });
 const auth = createAuth({ sendSystemEmail });
+const documents = createObjectStore();
 registerAssistantMessages(listMessages);
 registerMatterChangeHook(async (tx, actor, matterId) => {
   await refreshTemplateDrafts(tx, actor, matterId);
   await queueTerminatedServiceCheckouts(tx, actor, matterId);
+  await syncHtoClosing(tx, actor, matterId);
 });
 app.post("/api/auth/sign-in/email", requestLimiter("sign-in", 5));
 app.post(
@@ -105,7 +109,7 @@ app.use(
   "/api/public/checklist",
   checklistPrivacyHeaders,
   requestLimiter("public-checklist", 600),
-  createPublicChecklistRouter(),
+  createPublicChecklistRouter(documents.get),
 );
 app.get("/authorize", sessionMiddleware(auth), (req, res, next) => {
   if (!req.principal) {
@@ -154,12 +158,11 @@ app.use(
   requestLimiter("assistant", 10, { authenticatedOnly: true }),
 );
 app.use("/api/v1/operations", createOperationsRouter());
-app.use("/api/v1", createIdentityRouter(auth));
-app.use("/api/v1/matters", createMattersRouter());
+app.use("/api/v1", createIdentityRouter(auth, { queueAgentInvitation }));
 app.use("/api/v1/contacts", createContactsRouter());
-app.use("/api/v1/documents", createDocumentsRouter());
-app.use("/api/v1/intakes", createIntakeRouter());
-app.use("/api/v1/intake", createIntakeRouter());
+app.use("/api/v1/documents", createDocumentsRouter(documents));
+app.use("/api/v1/private-notes", createPrivateNotesRouter());
+mountFileWorkspace(app);
 app.use("/api/v1/onboarding", createOnboardingRouter());
 app.use("/api/v1/billing", createBillingRouter());
 app.use("/api/v1/ai", createAIRouter());

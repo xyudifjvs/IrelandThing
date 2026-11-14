@@ -1,4 +1,5 @@
-import Dashboard from "../_components/Dashboard";
+import { TransactionList } from "../_features/portfolio/TransactionList";
+
 export default function Page() {
-  return <Dashboard transactions />;
+  return <TransactionList />;
 }

@@ -46,10 +46,14 @@ afterAll(async () => {
   });
   await prisma.matter.delete({ where: { id } });
 });
-const create = vi.fn(async () => ({
+const create = vi.fn(async (input: Stripe.Checkout.SessionCreateParams) => ({
   id: `cs_${id}`,
   url: "https://checkout.stripe.com/synthetic",
   status: "open",
+  metadata: input.metadata,
+  livemode: false,
+  amount_total: input.line_items?.[0]?.price_data?.unit_amount,
+  currency: input.line_items?.[0]?.price_data?.currency,
 }));
 const refunds = vi.fn(async () => ({ id: `re_${id}`, status: "succeeded" }));
 const provider = async () =>
@@ -57,11 +61,20 @@ const provider = async () =>
     checkout: {
       sessions: {
         create,
-        retrieve: async () => ({
-          id: `cs_${id}`,
-          url: "https://checkout.stripe.com/synthetic",
-          status: "open",
-        }),
+        retrieve: async (sessionId: string) => {
+          const order = await prisma.paymentOrder.findUniqueOrThrow({
+            where: { stripeSessionId: sessionId },
+          });
+          return {
+            id: sessionId,
+            url: "https://checkout.stripe.com/synthetic",
+            status: "open",
+            metadata: { paymentOrderId: order.id },
+            livemode: false,
+            amount_total: order.amountCents,
+            currency: order.currency.toLowerCase(),
+          };
+        },
       },
     },
     refunds: { create: refunds },
@@ -460,7 +473,13 @@ it("expires unpaid gift checkout before cancelling and refuses later URL reuse",
     ({
       checkout: {
         sessions: {
-          create: async () => session,
+          create: async (input: Stripe.Checkout.SessionCreateParams) => ({
+            ...session,
+            metadata: input.metadata,
+            livemode: false,
+            amount_total: 6500,
+            currency: "usd",
+          }),
           retrieve: async () => session,
           expire,
         },

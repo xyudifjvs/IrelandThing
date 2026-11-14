@@ -1,0 +1,112 @@
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(0, 2fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.group {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+.entry {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #dfd4c4);
+  border-radius: 7px;
+  background: var(--paper, #fff);
+  color: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.entry:hover,
+.entry:focus-visible {
+  border-color: var(--accent, #9b7955);
+}
+
+.entry span {
+  font-size: 0.83rem;
+}
+
+.history {
+  overflow-wrap: anywhere;
+}
+
+.message {
+  white-space: pre-wrap;
+}
+
+.recipients {
+  min-width: 0;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border, #dfd4c4);
+  border-radius: 7px;
+}
+
+.chips,
+.addressEntry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.chips {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.addressEntry input {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--border, #dfd4c4);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.chip button {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 920px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.threadMessage,
+.threadReply {
+  padding-block: 0.65rem;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.threadReply {
+  margin-inline-start: 1rem;
+}
+
+.contactSuggestions {
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}

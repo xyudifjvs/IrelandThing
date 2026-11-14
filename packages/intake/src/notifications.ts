@@ -12,6 +12,7 @@ export async function notifyIntakeReceived(
   const submission = await prisma.intakeSubmission.findUniqueOrThrow({
     where: { id: submissionId },
   });
+  if (submission.deletedAt) return { skipped: "deleted" };
   if (submission.processedAt) return { skipped: "already_processed" };
   if (
     !service.config.outboundEnabled ||

@@ -1,0 +1,64 @@
+# Intake to transaction contracts
+
+These interfaces govern the new workflow. Existing routes and record behavior remain in use until the feature that replaces them is connected and reviewed. The pure shared request schemas are exported by `@weatherly/platform/handoff-contracts`.
+
+## Persistence boundary for C01
+
+| Area | Storage decision |
+| --- | --- |
+| Business | Add nullable `Matter.business` with `hto` and `weatherly` values. Leave historical business unclassified unless supported by recorded evidence. An HTO file uses `hto_included` as a non-catalog package code and cannot create a service order. Roster membership is independent of file business. Preserve old file packages and payment snapshots. |
+| Contract facts | Add nullable acceptance civil date and instant, named deadline timezone when known, and exact integer purchase price cents stored in a decimal column with a safe-number ceiling at the API. Add a nullable roster agent reference without replacing authenticated agent assignment. |
+| Canonical checklist | New files set an explicit checklist version. For them `Task.dueDate` owns the civil date and `dueAt` holds an exact instant only when known. Add nullable stable `stepKey`, unique per matter, and nullable rule JSON validated by the shared contract. Keep actual date and instant distinct from the due date. Step note and appointment details remain in task metadata with a dedicated agent visibility flag and place field. Store extension history through audit records. Existing files keep their legacy projection until an individually reviewed conversion. |
+| Intake and review | Keep original `IntakeSubmission` IDs and immutable snapshots. Add deletion/disposition and business fields. Add independent `CreationReview` with owner, unique nullable intake ID, state, revision, extraction generation, reviewed payload, and unique nullable confirmed file ID. Store confirmation request ID and payload fingerprint. `CreationExtraction` uses unique `(reviewId, generation)`, pinned document/version references, prompt version and proposal status/result. Keep legacy `AIProposal` and its required Matter link. Add explicit nullable intake and review ownership on documents. |
+| Staged null support | The first migration keeps `IntakeSubmission.matterId` required. C05 prepares null-aware guards for legacy replay/detail/create, query filters, gift/AI jobs, receipt types and upload ownership. A second C01-owned migration widens the column at integration before new receipt writers are enabled. Rollback after new receipts exist requires a null-aware application. |
+| Contacts and documents | `MatterContact` stores stable snapshots and role, with optional directory provenance, retirement and separate agent/client flags. Keep contact data separate from accounts and invitations. Document agent/client flags are nullable as a pair for legacy fallback. Keep existing object keys, versions and upload replay checks. On the legacy path, client-visible documents are also agent-visible. A new client-only record has a coordinator-only legacy visibility value for safe rollback. |
+| Client links | Add a separate encrypted secret record keyed by Matter, bound to the exact share generation. Existing `ChecklistShare` hash lookup and expiry remain authoritative. Use the existing server AES-GCM credential helper. Decrypt only after copy authorization and verify the hash. Old hash-only links remain valid through expiry or revocation and have no recoverable copy until an explicit replacement. |
+| Roster | `RosterAgent` may exist before login. Use nullable unique normalized email for named HTO entries without confirmed contact information and nullable unique linked User ID. Track business, signup dates, archive and private agreement linkage. Preserve existing inquiry, booking, invitation and signed agreement records. |
+| Email work | Unique file/template work item when a template is present. Store linked task key, manual completion and reminder fields independently of delivery. Actual send results and recipients come from existing send and message history. |
+| Private notes | Coordinator-owned items with optional matter, completion and revision. One scratchpad per owner. Keep legacy private notes and checklist notes separate. |
+| HTO rows | Unique nullable linked Matter. Manual rows own their facts while unlinked. Linked values derive from the canonical matter and checklist, with previous price and linkage events in audit history. Use a nonunique match key including unit and resolve ambiguous matches explicitly. |
+| Daily digest | One persisted cursor per recipient and stream. Freeze the time window and job identity across retries. Advance the cursor only on an accepted delivery or an explicitly empty window. The exact cutoff rule remains D8. |
+
+The schema team records concrete Prisma fields, foreign keys and indexes before its review. A nullable field only grants behavior where its owning service verifies it. Before exposing any new contact, document, roster or link record, use explicit allowed fields in the API and assistant projections.
+
+## Service boundaries
+
+| Service | Request and result | Owner and access |
+| --- | --- | --- |
+| Start and read review | `POST /api/v1/creation-reviews` takes optional `intakeId` and an idempotency key. `GET /api/v1/creation-reviews/:id` returns review ID, revision, immutable intake details when present, editable facts, pinned source list and extraction status. Opening does not consume the intake. | C05 coordinator only. The agent receipt is a separate authorized projection. |
+| Source and extraction | `PATCH /api/v1/creation-reviews/:id` with revision changes review edits or pinned sources. `POST .../:id/extraction` starts or skips a generation. The worker receives only the review ID/generation and checks current state before reading and before writing. | C05 owns review storage and HTTP. C04 owns source preparation, model response validation and proposal generation. |
+| Confirm | `POST .../:id/confirm` accepts `CreationConfirm` and returns `{ matterId }`. Repeating a committed request with the same fingerprint returns the same file. A stale revision, different payload replay or source-generation conflict returns 409. Blank dates remain valid. | C05 coordinator only. C03 builds the checklist. C06 owns contact and document mutation helpers. C11 synchronizes the HTO row in the same DB transaction through the registered hook. |
+| Date preview and apply | `POST /api/v1/matters/:id/checklist/dates/preview` takes the revision and one set or extend command. Return date changes and a digest bound to that revision and input. `POST .../apply` recomputes the preview under lock, checks its digest and applies the selected mode. Return updated revision and changed keys. Stale input returns 409. | C03 coordinator only. C11 uses the same command from HTO. Completed and Not needed states are preserved. D1–D4 control affected rules and mode details. |
+| File actions | Explicit revision-checked close-out, terminate, reopen and delete commands. Keep existing stage values for compatible storage. New confirmations start under contract. Delete requires a current confirmation and follows D7 before activation. | C05 owns commands. C09, C11 and C07 register lifecycle effects through C00. |
+| People, documents and client links | Per-file contact and document commands enforce independent audiences. Retain existing bearer endpoint and add document access within the same share boundary. Client link copy returns only an authorized current link. Copy and rotation are distinct commands. | C06 owns API projections and authorization. C13 consumes them. Contacts have no portal permissions. |
+| Email work | File email work reads canonical facts and people, with explicit commands for Later, reminder, manual completion and Send. It publishes a safe coordinator-only summary of outstanding work keyed by work item and file. | C07 owns work and delivery, C12 consumes the summary. C06 owns recipient and document snapshots. |
+| Portfolio and digest | Coordinator-only paginated read models consume the same approved file, date, email work, signup and note records. The digest uses its own frozen time window and queued delivery record. | C12 owns portfolio and digest. C00 owns worker registration. |
+
+Every mutation checks current permission and revision at the authoritative record. The domain transaction writes internal data and outbox records together. Provider I/O runs after commit. Shared endpoint additions use existing session, origin, rate and privacy middleware. New user-facing statuses represent stored data or verified results.
+
+`DateValue.date` is the operational civil date in the file's deadline timezone. `instant` is optional exact time evidence. A request supplying both must resolve to the same civil date in that timezone, otherwise the coordinator receives a validation error. An AI proposal with conflicting values remains unresolved until reviewed. Hour offsets require an exact anchor instant and a known timezone. Business-hour offsets require an explicit hours calendar, which the present weekday calendar cannot represent, so those rules remain blank or manual. An appointment may be displayed separately and never substitutes for an actual event date or contract deadline.
+
+Extend retains a linked rule and adds an ordered adjustment to its result. A calendar-day adjustment shifts the civil date and preserves a known local clock where it resolves uniquely. An hours adjustment requires an exact instant and timezone. A direct date edit sets a fixed date. Each committed extension records its previous date, adjustment and result for the amendment email.
+
+## Decisions at this checkpoint
+
+- C00 uses versioned canonical task dates so deploying the schema by itself cannot rewrite a legacy deadline.
+- C00 selected encrypted recovery for future client links. It preserves the existing hash-only link's use and permits the coordinator to replace it explicitly for copy access.
+- C01 starts with additive columns and tables. Nullable legacy receipt writers wait until the existing callers are guarded.
+- D1, D3, D5, and D7–D10 remain as recorded in the implementation plan. They affect specific behaviors and do not prevent schema, theme or interface work. Account verification remains on Ireland's laptop.
+
+## Decisions for Ireland to confirm
+
+Carson directed the signed-date and pinning behavior on November 11, 2026. The register also records implementation defaults. Ireland will confirm each entry during account setup on her laptop.
+
+| Decision | Build behavior | Ireland confirmation |
+| --- | --- | --- |
+| D2, signed dates | If the signed contract specifies a different Remedies or Title Commitment date, use the signed term in the proposal for Ireland's review. Keep the supplied prompt as the original source and version the working prompt accordingly. | Pending |
+| D3, business and package edits | Permit changes while the file is active. Retain valid frozen terms for the same package, including a direct return from HTO. A different package uses approved terms and checks retained payment orders. Moving to HTO cancels outstanding service requests and retains payment and audit history. | Pending |
+| D4, only this date | Preserve and pin the affected downstream dates at their current values. A subsequent change to an anchor leaves them fixed until Ireland edits them. | Pending |
+| D5, terminal HTO corrections | Ireland can correct linked HTO row facts and the canonical checklist Closing date from Operations after close-out or termination. Preserve lifecycle status, completion and the recorded actual date. A Closed row uses recorded actual date when present and the checklist date otherwise. | Pending |
+| D5, HTO link lifetime | Keep a linked row dormant when its file leaves HTO, reuse it if the file returns to HTO, and remove the row on permanent file deletion with audit history retained. | Pending |
+| D5, FUB source fields | Preserve the canonical display address and contact name on linked rows. Export only explicitly confirmed address and name components. Ireland can fill missing components in Operations before exporting. | Pending |
+| D6, legacy documents | Require the explicit client document switch before adding a legacy file document to checklist-link and authenticated preview surfaces. | Pending |
+| D7, saved Gmail drafts | Require a fresh save and approval for drafts created before recipient evidence was recorded. Preserve sent history. | Pending |
+| D8, digest cutoff | Use 8 a.m. Eastern on weekdays. Start the first window at the previous scheduled weekday cutoff. Include receipts at the start and carry receipts at the end into the next window. Omit deleted intakes. Hold uncertain delivery for reconciliation when safe retries are exhausted. | Pending |

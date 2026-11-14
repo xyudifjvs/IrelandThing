@@ -1,5 +1,7 @@
 # Environment mapping
 
+For actual November 14 settings and deployment receipts, see the [current handoff progress](../handovers/intake-to-transaction/IRELAND_PROGRESS_2026-11-14.md). Historical blank-account statements below are setup guidance, not current provider status.
+
 This maps application code to deployment settings. It contains no credentials. Parent/B00 owns the root `.env.example` and package scripts. Keep secrets in the environment's approved secret storage; never pass them as Docker build arguments or `NEXT_PUBLIC_*` values.
 
 | Variable                                                                                 | Services                        | Purpose                                                                                                                      |
@@ -34,4 +36,4 @@ Railway bucket credentials supply these references, and current buckets use virt
 Use separate credentials for each environment. The placeholder `ireland@ireland.com` is never a sending or receiving account. No existing Carson Stripe account or connector credentials are reused. Provider activation checks are in `providers.md`.
 # Calendly account configuration
 
-The API reads `CALENDLY_EVENT_URL` for the public embed and `CALENDLY_EVENT_TYPE_URI` / `CALENDLY_WEBHOOK_SIGNING_KEY` for verified synchronization. `CALENDLY_API_TOKEN` is an optional older-payload read fallback. All values remain blank pending Ireland's account; never expose the signing key/token to the web app. See [calendly.md](calendly.md) for plan requirements, signed callbacks, rollout and native Calendly agreement-email setup.
+The API reads `CALENDLY_EVENT_URL` for the public embed and `CALENDLY_EVENT_TYPE_URI` / `CALENDLY_WEBHOOK_SIGNING_KEY` for verified synchronization. `CALENDLY_API_TOKEN` is an optional older-payload read fallback. Ireland’s approved event URL and event-type URI are installed on the API; signing key/subscription remain unconfigured. Never expose the signing key/token to the web app. See [calendly.md](calendly.md) for plan requirements, signed callbacks, rollout and native Calendly agreement-email setup.

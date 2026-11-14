@@ -11,6 +11,10 @@ import { stepKeySchema } from "@weatherly/platform/handoff-contracts";
 import { asRecord, assertReviewedMatter, validateMerge } from "./policy";
 import type { CommunicationsService } from "./service";
 import { ensureTemplateWork } from "./email-work";
+import {
+  listCustomMergeFields,
+  applyCustomMergeValues,
+} from "./custom-merge-fields";
 
 export async function listTemplates(actor: Principal, includeInactive = false) {
   assertCoordinator(actor);
@@ -70,8 +74,11 @@ export async function saveTemplate(
       "TEMPLATE_GROUP_SIDE_MISMATCH",
       "Select the buyer or seller group matching this template.",
     );
-  validateMerge(parsed.subject);
-  validateMerge(parsed.body);
+  const customKeys = new Set(
+    (await listCustomMergeFields(actor)).map(({ key }) => key),
+  );
+  validateMerge(parsed.subject, customKeys);
+  validateMerge(parsed.body, customKeys);
   return prisma.$transaction(async (tx) => {
     let next = 1;
     let previous: Awaited<
@@ -248,7 +255,18 @@ export async function reorderTemplates(actor: Principal, raw: unknown) {
 
 export async function availableMergeFields(actor: Principal, matterId: string) {
   assertCoordinator(actor);
-  return mergeFields(actor, matterId);
+  const fields = await mergeFields(actor, matterId);
+  const custom = await listCustomMergeFields(actor);
+  return [
+    ...fields,
+    ...custom.map((field) => ({
+      key: field.key,
+      label: field.label,
+      value: field.defaultValue || null,
+      status: field.defaultValue.trim() ? "confirmed" : "unknown",
+      sourceIds: [],
+    })),
+  ];
 }
 
 export async function renderInDb(
@@ -290,8 +308,11 @@ export async function renderInDb(
       "Select the template group matching this transaction’s side and designated package.",
     );
   const fields = await mergeFields(actor, matterId, db);
+  const custom = await listCustomMergeFields(actor, db);
+  const customKeys = new Set(custom.map(({ key }) => key));
   const computed: Record<string, string> = {};
   for (const f of fields) if (f.value !== null) computed[f.key] = f.value;
+  applyCustomMergeValues(computed, custom, values);
   for (const [key, value] of Object.entries(values)) {
     if (key !== "recipientName" && key !== "coordinatorName") continue;
     computed[key] = value;
@@ -300,7 +321,7 @@ export async function renderInDb(
   const missingSubjectFields = new Set<string>();
   const missingBodyFields = new Set<string>();
   const render = (source: string, missingPart: Set<string>) => {
-    validateMerge(source);
+    validateMerge(source, customKeys);
     return source.replace(
       /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
       (_all, key: string) => {

@@ -12,4 +12,21 @@ Independent integrated acceptance passed for local candidate `8325b5f0e157f919fe
 
 ## Ireland’s handoff
 
-All account connections and live provider checks remain for Ireland’s laptop. Final buyer and seller email wording, client copy, the compliance item list, and `og-1-cream.png` are still pending. The [decision register](../handovers/intake-to-transaction/C00/contracts.md#decisions-for-ireland-to-confirm) records the choices for Ireland to confirm. Hosted migration, deployment, and verification require the separate release handoff.
+The November 14 review has addressed all nine workflow decisions and configured several of Ireland’s own provider accounts. The [current progress record](../handovers/intake-to-transaction/IRELAND_PROGRESS_2026-11-14.md) is authoritative for setup, deployment receipts, deferred items and remaining acceptance. Contract-derived date defaults and FUB completeness still require code corrections. Templates/compliance, dual Gmail routing, the agreement link and Dotloop are deferred; current portal wording is provisionally retained. Full hosted acceptance and real-client launch approval remain incomplete.
+
+## November 14 laptop artwork update
+
+Ireland supplied and approved the 1200 × 630 `og-1-cream.png`. Its unchanged bytes are stored at `apps/web/public/brand/og-1-cream.png` (SHA-256 `29059c514e151c594116bc8f8e517ffbf12d84ce5983db25ffbfed002f1866d7`). Open Graph and Twitter metadata reference the static image, and the old `/opengraph-image` endpoint redirects to it.
+
+Targeted module execution verified image URLs for all seven public pages, dimensions, the absence of image URLs without a configured public origin, and the existing endpoint's redirect. Source and destination hashes match; `git diff --check` passed. A full application build was not run. This records a local source change, not a deployed preview update.
+
+
+## November 14 feature and hosted-configuration update
+
+This source update includes [custom email merge fields](custom-email-merge-fields.md), the supplied artwork, and consolidated handoff documentation. Apply the new additive migration `20261114010000_custom_email_merge_fields` before the updated API starts. Verify browser behavior and social previews after the new source deployment; the baseline’s 20 applied migrations do not include this 21st migration.
+
+Before publishing, repository TypeScript and diff checks pass. The standard focused Vitest command remains blocked at startup by the local missing Rolldown binding; prior targeted module checks are documented separately. No new full-suite or full production-build pass is claimed.
+
+The last verified hosted configuration deployments before publishing this source are API `5171d082-99d8-4362-9df2-09fb3b13acc9` and worker `adaa873e-7fce-4a83-97f1-780eb7978419`, both SUCCESS. Both confirmed the verified Ireland recipient and weekday 08:00 America/New_York digest readiness. A content-free Resend provider test was delivered; the first actual scheduled digest remains unverified. OpenRouter processing is explicitly authorized/configured; fresh inference acceptance remains pending. Stripe real-account configuration is installed with live-money gates closed. Calendly’s approved URL responds; signed synchronization is inactive. Private storage has only configuration/source inspection, not lifecycle/recovery acceptance.
+
+A push to the existing Railway source branch may start builds automatically. Capture the resulting source commit, migration and application acceptance separately; deployment alone is not a real-client launch decision.

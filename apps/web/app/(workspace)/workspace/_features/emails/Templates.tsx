@@ -6,6 +6,7 @@ import { useData, mutate, label } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import type { Template } from "./email-model";
 import { checklistTemplate } from "../../../../../../../packages/matters/src/checklist/templates";
+import { CustomMergeFields } from "./CustomMergeFields";
 
 const templateGroups = [
   ["buyer_ctc", "Buyer · Contract to Close"],
@@ -408,6 +409,7 @@ export function Templates() {
             </div>
           </form>
         ) : null}
+        <CustomMergeFields />
       </div>
     </section>
   );

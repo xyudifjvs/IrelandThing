@@ -1,6 +1,12 @@
 # Calendly scheduling and agreement delivery
 
-Prepared October 21, 2026. Ireland has not created a Calendly account yet, as confirmed by the user. Implementation is local/reviewed source, not an activated Calendly connection or hosted deployment. Use Ireland's account only. No live booking, provider notification or subscription has been created as a test.
+Prepared October 21; account status updated November 14, 2026. Use Ireland’s account only. No live booking, provider notification or subscription has been created as a test. See the [current handoff status](../handovers/intake-to-transaction/IRELAND_PROGRESS_2026-11-14.md).
+
+## November 14 account and booking-link update
+
+The connected account is Ireland Weatherly (`ireland@weatherlytc.com`), timezone `America/New_York`. Ireland approved the existing **30 Minute Meeting** at https://calendly.com/ireland-weatherlytc/30min. Its event URL and canonical event-type URI are saved on the API and deployed successfully. Public `GET /api/v1/onboarding/scheduling` returned HTTP 200, configured=true, the approved URL and syncConfigured=false. Signed booking/cancellation synchronization and subscription/plan acceptance are not activated.
+
+Ireland explicitly deferred the service-agreement/signing link and related booking-confirmation email wording. Keep the booking link active, do not publish placeholder signing links, and preserve the existing signed-evidence/access gate.
 
 ## Routes and durable records
 

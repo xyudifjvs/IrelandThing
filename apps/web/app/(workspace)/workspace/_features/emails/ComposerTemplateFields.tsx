@@ -3,6 +3,7 @@
 import { label, useData } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import type { Template } from "./email-model";
+import type { CustomField } from "./CustomMergeFields";
 
 export function ComposerTemplateFields({
   matter,
@@ -12,8 +13,11 @@ export function ComposerTemplateFields({
   chooseTemplate,
   recipientName,
   setRecipientName,
+  customValues,
+  setCustomValues,
   disabled,
   rebind,
+  replaceSavedWording,
   fill,
 }: {
   matter: string;
@@ -23,11 +27,31 @@ export function ComposerTemplateFields({
   chooseTemplate: (template: Template | undefined) => void;
   recipientName: string;
   setRecipientName: (value: string) => void;
+  customValues: Record<string, string>;
+  setCustomValues: (value: Record<string, string>) => void;
   disabled: boolean;
   rebind: boolean;
+  replaceSavedWording: boolean;
   fill: () => void;
 }) {
   const templates = useData<Template[]>("/api/v1/communications/templates");
+  const customFields = useData<CustomField[]>(
+    "/api/v1/communications/custom-merge-fields",
+  );
+  const selectedTemplate = templates.data?.find(
+    (entry) => entry.id === template,
+  );
+  const usedKeys = new Set(
+    [
+      ...(
+        (selectedTemplate?.subject ?? "") +
+        "\n" +
+        (selectedTemplate?.body ?? "")
+      ).matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g),
+    ].map((match) => match[1]),
+  );
+  const usedFields =
+    customFields.data?.filter((field) => usedKeys.has(field.key)) ?? [];
   const mergeFields = useData<
     { key: string; label: string; value: string | null; status: string }[]
   >(
@@ -80,15 +104,43 @@ export function ComposerTemplateFields({
               />
             </label>
           </div>
+          {customFields.error && (
+            <p className={s.error} role="alert">
+              {customFields.error}
+            </p>
+          )}
+          {usedFields.map((field) => (
+            <label
+              className={s.field}
+              style={{ marginTop: 12 }}
+              key={field.key}
+            >
+              {field.label}
+              <textarea
+                className={s.textarea}
+                maxLength={2000}
+                disabled={disabled}
+                value={customValues[field.key] ?? field.defaultValue}
+                onChange={(event) =>
+                  setCustomValues({
+                    ...customValues,
+                    [field.key]: event.target.value,
+                  })
+                }
+              />
+            </label>
+          ))}
           <button
             className={s.buttonSmall}
             disabled={!template || disabled}
             type="button"
             onClick={fill}
           >
-            {rebind
-              ? "Apply template and keep saved wording"
-              : "Fill template with confirmed details"}
+            {replaceSavedWording
+              ? "Refill template and replace saved wording"
+              : rebind
+                ? "Apply template and keep saved wording"
+                : "Fill template with confirmed details"}
           </button>
         </details>
       )}

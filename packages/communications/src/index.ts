@@ -12,6 +12,10 @@ import {
 import { CommunicationsService, createCommunicationsService } from "./service";
 import { registerEmailWorkRoutes } from "./email-work-routes";
 import { archiveTemplate, reorderTemplates } from "./templates";
+import {
+  listCustomMergeFields,
+  saveCustomMergeField,
+} from "./custom-merge-fields";
 export * from "./service";
 export * from "./gateway";
 export * from "./jobs";
@@ -52,6 +56,34 @@ export const sendSystemEmail = (
 export function createCommunicationsRouter(service = current()) {
   const r = Router();
   registerEmailWorkRoutes(r);
+  r.get(
+    "/custom-merge-fields",
+    asyncHandler(async (req, res) => {
+      res
+        .set("Cache-Control", "private, no-store")
+        .json(await listCustomMergeFields(principal(req)));
+    }),
+  );
+  r.post(
+    "/custom-merge-fields",
+    asyncHandler(async (req, res) => {
+      res
+        .status(201)
+        .json(await saveCustomMergeField(principal(req), req.body));
+    }),
+  );
+  r.patch(
+    "/custom-merge-fields/:key",
+    asyncHandler(async (req, res) => {
+      res.json(
+        await saveCustomMergeField(
+          principal(req),
+          req.body,
+          String(req.params.key),
+        ),
+      );
+    }),
+  );
   const matterId = (v: unknown) => (typeof v === "string" ? v : undefined);
   const pageOptions = (req: import("express").Request) => ({
     cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,

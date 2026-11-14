@@ -1,5 +1,7 @@
 # Weatherly implementation checkpoint
 
+Current owner review: [November 14 handoff progress](IRELAND_PROGRESS_2026-11-14.md). The implementation checkpoint below is historical; use that progress record for live configuration, deferred work and remaining corrections.
+
 The [implementation plan](../../plans/INTAKE_TO_TRANSACTION_IMPLEMENTATION.md) is complete. Independent integrated acceptance passed locally at `8325b5f0e157f919fe9795279f7cdc62a3f34f3b`. The [release record](../../release/intake-to-transaction.md) and [independent reviews](../../reviews/intake-to-transaction/) contain the local evidence and remaining Ireland laptop checks.
 
 ## Execution environment

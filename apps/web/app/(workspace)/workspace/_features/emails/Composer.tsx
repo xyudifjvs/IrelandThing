@@ -49,6 +49,7 @@ export function Composer({
     id: string;
     revision: number;
     recipientName: string;
+    customValues: Record<string, string>;
   } | null>(null);
   const [matter, setMatter] = useState(fixedMatterId || "");
   const detail = useData<
@@ -56,6 +57,7 @@ export function Composer({
   >(matter ? `/api/v1/matters/${encodeURIComponent(matter)}` : null);
   const currentMatter = useRef(matter);
   currentMatter.current = matter;
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [newPersonEmail, setNewPersonEmail] = useState("");
   const drafts = useData<Draft[]>(
     `/api/v1/communications/drafts${matter ? "?matterId=" + encodeURIComponent(matter) : ""}`,
@@ -80,6 +82,9 @@ export function Composer({
     [confirmed, setConfirmed] = useState(false),
     [template, setTemplate] = useState(initialTemplateId || ""),
     [recipientName, setRecipientName] = useState("");
+  const customValuesChanged =
+    !!binding &&
+    JSON.stringify(binding.customValues) !== JSON.stringify(customValues);
   const enteredRecipients = useRef<string[]>([]);
   const busyRef = useRef(false);
   function setBusy(value: boolean) {
@@ -150,6 +155,7 @@ export function Composer({
       setReplyToMessageId(undefined);
       setTemplate("");
       setBinding(null);
+      setCustomValues({});
       setRecipientName("");
       setNewPersonEmail("");
       setTo("");
@@ -187,6 +193,12 @@ export function Composer({
   function loadDraft(d: Draft) {
     enteredRecipients.current = [];
     setDraft(d);
+    const savedCustomValues = Object.fromEntries(
+      Object.entries(d.details?.templateValues ?? {}).filter(([key]) =>
+        key.startsWith("custom_"),
+      ),
+    );
+    setCustomValues(savedCustomValues);
     setReplyToMessageId(undefined);
     setMatter(d.matterId);
     setTo(d.to.join(", "));
@@ -203,6 +215,7 @@ export function Composer({
             id: d.details.templateId,
             revision: d.details.templateRevision,
             recipientName: d.details.templateValues?.recipientName || "",
+            customValues: savedCustomValues,
           }
         : null,
     );
@@ -262,6 +275,7 @@ export function Composer({
           id: rendered.templateId,
           revision: rendered.templateRevision,
           recipientName: defaultRecipientName,
+          customValues: {},
         });
         if (rendered.missingFields?.length)
           setMessage("Fill in or remove the blank fields before sending.");
@@ -288,6 +302,7 @@ export function Composer({
   function chooseTemplate(next: Template | undefined) {
     setTemplate(next?.id || "");
     setBinding(null);
+    setCustomValues({});
     if (!next || draft || to) return;
     const people = [
       ...suggestions,
@@ -313,8 +328,13 @@ export function Composer({
           `/api/v1/communications/drafts/${draft.id}/reset-template`,
           {
             expectedRevision: draft.revision,
-            templateId: template,
-            values: recipientName ? { recipientName } : {},
+            ...(customValuesChanged && template === draft.details?.templateId
+              ? {}
+              : { templateId: template }),
+            values: {
+              ...customValues,
+              ...(recipientName ? { recipientName } : {}),
+            },
           },
         );
         loadDraft(rebound);
@@ -333,7 +353,10 @@ export function Composer({
         missingFields: string[];
       }>(`/api/v1/communications/templates/${template}/render`, {
         matterId: matter,
-        values: recipientName ? { recipientName } : {},
+        values: {
+          ...customValues,
+          ...(recipientName ? { recipientName } : {}),
+        },
       });
       setSubject(result.subject);
       setBody(result.body);
@@ -341,6 +364,7 @@ export function Composer({
         id: result.templateId,
         revision: result.templateRevision,
         recipientName,
+        customValues: { ...customValues },
       });
       setMessage(
         result.missingFields?.length
@@ -358,6 +382,24 @@ export function Composer({
 
   async function save() {
     if (busyRef.current) return;
+    if (draft && customValuesChanged) {
+      setError(
+        "Apply the template again to include your current merge field values.",
+      );
+      return;
+    }
+    if (
+      !draft &&
+      template &&
+      (!binding ||
+        binding.recipientName !== recipientName ||
+        JSON.stringify(binding.customValues) !== JSON.stringify(customValues))
+    ) {
+      setError(
+        "Apply the template again to include your current merge field values.",
+      );
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
@@ -376,9 +418,12 @@ export function Composer({
           ? {
               templateId: binding.id,
               templateRevision: binding.revision,
-              templateValues: binding.recipientName
-                ? { recipientName: binding.recipientName }
-                : {},
+              templateValues: {
+                ...binding.customValues,
+                ...(binding.recipientName
+                  ? { recipientName: binding.recipientName }
+                  : {}),
+              },
             }
           : {}),
       };
@@ -431,6 +476,7 @@ export function Composer({
                   setNewPersonEmail("");
                   setTemplate("");
                   setBinding(null);
+                  setCustomValues({});
                   setDraft(null);
                   setReplyToMessageId(undefined);
                   setDirty(true);
@@ -454,6 +500,7 @@ export function Composer({
                     setReplyToMessageId(undefined);
                     setTemplate("");
                     setBinding(null);
+                    setCustomValues({});
                     setRecipientName("");
                     setTo("");
                     setCc("");
@@ -493,6 +540,11 @@ export function Composer({
               chooseTemplate={chooseTemplate}
               recipientName={recipientName}
               setRecipientName={setRecipientName}
+              customValues={customValues}
+              setCustomValues={(values) => {
+                setCustomValues(values);
+                setConfirmed(false);
+              }}
               disabled={
                 !!draft &&
                 (!draft.details?.templateId ||
@@ -500,6 +552,11 @@ export function Composer({
                   draft.status !== "draft")
               }
               rebind={!!draft}
+              replaceSavedWording={
+                !!draft &&
+                customValuesChanged &&
+                template === draft.details?.templateId
+              }
               fill={() => void fillTemplate()}
             />
           )}
@@ -669,10 +726,14 @@ export function Composer({
               disabled={
                 busy ||
                 !matter ||
+                (!!draft && customValuesChanged) ||
                 addresses(to).length === 0 ||
                 (!draft &&
                   !!template &&
-                  (!binding || binding.recipientName !== recipientName)) ||
+                  (!binding ||
+                    binding.recipientName !== recipientName ||
+                    JSON.stringify(binding.customValues) !==
+                      JSON.stringify(customValues))) ||
                 ["queued", "sent"].includes(draft?.status || "")
               }
             >
@@ -684,7 +745,7 @@ export function Composer({
             <DraftApproval
               draft={draft}
               matter={matter}
-              dirty={dirty}
+              dirty={dirty || customValuesChanged}
               confirmed={confirmed}
               connected={!!connected}
               busy={busy}

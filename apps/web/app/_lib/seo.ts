@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { socialImagePath } from "./social-image";
 
 export const publicPages = {
   "/": {
@@ -90,10 +91,10 @@ export function publicMetadata(path: keyof typeof publicPages): Metadata {
       images: origin
         ? [
             {
-              url: `${origin}/opengraph-image`,
+              url: `${origin}${socialImagePath}`,
               width: 1200,
               height: 630,
-              alt: "Weatherly Transaction Co. | Real estate transaction coordination",
+              alt: "Weatherly Transaction Co. logo on a cream background",
             },
           ]
         : undefined,
@@ -102,7 +103,7 @@ export function publicMetadata(path: keyof typeof publicPages): Metadata {
       card: "summary_large_image",
       title: page.title,
       description: page.description,
-      images: origin ? [`${origin}/opengraph-image`] : undefined,
+      images: origin ? [`${origin}${socialImagePath}`] : undefined,
     },
   };
 }

@@ -1,36 +1,52 @@
 # Ireland’s Weatherly handoff
 
-Use Ireland’s laptop and her own provider accounts for account configuration and provider acceptance. The [local release record](../release/intake-to-transaction.md) tracks the reviewed application commit and the local checks. The [environment map](environment.md) lists where deployment settings belong. Put secrets in the approved environment’s secret store.
+Current review: **November 14, 2026**. Start with the [dated progress and next-work record](../handovers/intake-to-transaction/IRELAND_PROGRESS_2026-11-14.md). It records Ireland’s decisions, actual provider configuration, deployment receipts, deferred items and unfinished acceptance. It supersedes earlier all-providers-pending descriptions. Keep secrets in Railway/provider secret stores.
 
-## Sync the repository
+## Repository and source update
 
-Open the existing `IrelandThing` checkout on Ireland’s laptop and run `git status --short --branch`. If it shows local changes, preserve them before switching branches. Then run:
+The primary checkout was synchronized to GitHub main `20d806d02485daae570322b4a7a4c5994936f2aa` after backing up local changes. The secondary linked checkout remains at that baseline in detached HEAD state. This update adds custom email merge fields and Ireland’s replacement social artwork; source deployment, the new migration and browser acceptance must be checked after publishing it.
+
+Before future synchronization, preserve local changes and use a fast-forward pull:
 
 ```sh
+git status --short --branch
 git switch main
 git pull --ff-only origin main
 git log -1 --oneline
 ```
 
-If there is no existing checkout, run `git clone https://github.com/xyudifjvs/IrelandThing.git` and open the `IrelandThing` folder. For local app setup, follow [Run locally](../../README.md#run-locally). Use the release and recovery runbooks below for any hosted database or deployment changes.
+Follow [Run locally](../../README.md#run-locally), the [environment map](environment.md), [release record](../release/intake-to-transaction.md), and [recovery runbook](recovery.md). The old full-suite results belong to the original candidate; they do not certify new changes.
 
 ## Decisions and content
 
-Review the [decision register](../handovers/intake-to-transaction/C00/contracts.md#decisions-for-ireland-to-confirm) and record a decision for each pending entry. Confirm the signed-contract precedence for Remedies and Title Commitment, **Only this date** pinning, HTO terminal corrections and recorded actual dates, dormant HTO rows, confirmed Follow Up Boss fields, the legacy document publication switch, business and package changes, and the weekday digest cutoff and wording.
+All nine workflow decisions were addressed with Ireland. Signed-contract dates are proposed for review; linked dates use **Update all** based on uploaded-contract rules; HTO corrections preserve lifecycle/actual dates; dormant HTO rows are reused; older document publication requires explicit sharing; older drafts require fresh recipient review/save/approval; private summaries use weekday 8 a.m. Eastern cutoffs.
 
-Supply the final buyer and seller email wording, client portal wording, compliance item list, and `og-1-cream.png`. The Compliance tab starts empty. To add starter email placeholders to an existing database, run `npm run db:seed-email-templates` against the approved environment after the database migrations. Edit the placeholders in Settings and preview the approved wording and recipients before using them.
+Two required corrections remain **unimplemented**: remove unsupported Remedies/Title Commitment fallback assumptions from new creation reviews, and require saved client name/phone before FUB export using a supported full Name column. See the [exact correction scope](../handovers/intake-to-transaction/IRELAND_PROGRESS_2026-11-14.md#required-corrections-not-yet-implemented).
 
-## Provider checks
+Ireland will add her buyer/seller templates and compliance items later. Keep current client-portal wording for now, with future copy changes expected. Do not invent substitute templates or compliance tasks. Service-agreement/signing link and Calendly confirmation wording, dual Gmail routing, and Dotloop are explicitly deferred.
 
-Use a controlled test recipient and synthetic transactions. Record the environment, date, feature checked, and provider receipt or redacted evidence. Keep contracts, tokens, keys, personal information, and email bodies out of test logs.
+Custom merge-field creation is implemented at the bottom of email-template settings. See [migration and validation](../release/custom-email-merge-fields.md). Ireland’s selected 1200 × 630 `og-1-cream.png` is stored unchanged in `apps/web/public/brand/og-1-cream.png`; social metadata and the older image route use it. Verify both features on the newly deployed source.
 
-| Provider | Setup on Ireland’s laptop | Verify |
+## Current provider status
+
+Use the existing **Weatherly** Railway project, environment named **staging**, serving **https://www.weatherlytc.com**, and Ireland’s real provider accounts. The environment name is not permission to substitute provider sandboxes. Exact resource/deployment identifiers and evidence are in the dated progress record.
+
+| Area | Current state | Remaining acceptance |
 | --- | --- | --- |
-| OpenRouter | Set `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and `OPENROUTER_APPROVED_PROVIDERS`. Verify account privacy and the approved zero-data-retention routes before setting `OPENROUTER_ZDR_APPROVED` and `OPENROUTER_ACCOUNT_PRIVACY_VERIFIED`. | Use a synthetic contract with and without explicit signed terms. Confirm the route and source evidence, then test the unavailable route. Creation should still permit manual dates. |
-| Gmail | Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_MAILBOX`, and `GMAIL_REDIRECT_URI` with the approved HTTPS origin and `/api/v1/communications/callback`. Configure the approved watch topic if used. Connect the actual Weatherly mailbox through Settings. | Use the controlled inbox to verify sync, reply threading, private attachments, explicit send approval, stale-recipient handling, and recovery of a delivery with an uncertain outcome. Enable outbound delivery for the controlled send after reviewing its recipients and contents. |
-| Stripe | Use Ireland’s test credentials and signing secret with `STRIPE_MODE=test`. Configure the signed callback at the approved HTTPS origin plus `/api/webhooks/stripe`. | Verify the Weatherly service fee, HTO gift-only behavior, termination cancellation, webhook replay, refunds, and reconciliation of uncertain Checkout creation. Review the [payment gates](providers.md) before any live-money approval. |
-| System mail | Set the approved `RESEND_API_KEY` and `SYSTEM_EMAIL_FROM`. Set `REMINDER_RECIPIENT_USER_ID` to Ireland’s verified coordinator account before enabling `PRIVATE_REMINDERS_ENABLED`. | Verify invitation, resend, password reset, and the intake-only digest using the controlled inbox. Check that duplicate jobs do not produce additional deliveries and that a processed intake still appears in its digest window. |
-| Calendly | Follow the [Calendly runbook](calendly.md) for Ireland’s event URL, approved event type, signing key, optional fallback token and the signed `/api/webhooks/calendly` callback. | Verify one authorized test event and its cancellation. Check the native agreement-link email and confirm that accepting an agreement still requires signed evidence. |
-| Dotloop and private storage | Confirm Ireland’s approved Dotloop account, redirect and access scopes if enabled. Set the private storage credentials and backend references from the [environment map](environment.md). | Use an authorized synthetic document to check access, share withdrawal, download, deletion cleanup and recovery. |
+| OpenRouter | Enabled with Ireland’s explicit contract-data processing approval. API owns the key; worker references API. Claude Sonnet 4.6, only Amazon Bedrock US; strict ZDR-only account settings, training/sharing/logging off, privacy flags enabled. | Fresh synthetic extraction/key-validity and route-failure checks. |
+| Gmail | Disabled; two-account implementation deferred. HTO sender `office@hometeamohio.com`; Weatherly sender `ireland@weatherlytc.com`. | Separate OAuth connections and business/mailbox-specific draft approval, sends, sync, replies and recovery. |
+| Stripe | Ireland’s real account, live webhook and live-mode configuration installed. Worker owns the key; API references worker. Live-money approval remains false and staging release gates remain closed. | Key/account match and billing/webhook/refund/reconciliation acceptance; separate real-money launch approval. No charges/refunds performed. |
+| Resend/system mail | Three DNS records verified; approved provider setup test delivered. API/worker sender, verified Ireland coordinator recipient and weekday 08:00 America/New_York summaries enabled; both final deployments succeeded and readiness reports scheduled. Worker references API’s domain-restricted sending key. Gmail remains disabled. | First scheduled digest (Nov 16 at 8 a.m. Eastern), digest wording, invitation/resend/reset and duplicate-job acceptance. Scheduled is not delivered. |
+| Calendly | Approved 30-minute booking link configured: https://calendly.com/ireland-weatherlytc/30min. Public scheduling endpoint verified configured=true, syncConfigured=false. | Signed booking/cancel subscription and acceptance. Agreement link/email changes deferred; booking never establishes signature evidence. |
+| Dotloop | Explicitly deferred. | Revisit account/API permissions and import checks later. |
+| Private storage | Existing Railway documents bucket and API/worker storage variable names inspected; credentials are redacted by the connector. Source requires production S3 and authorizes/checksums downloads. | Verify actual references, synthetic upload/download, audience access, share withdrawal, deletion cleanup, backups and isolated recovery. |
 
-Review the [provider recovery checks](providers.md), [deployment runbook](deployment.md), and [backup and recovery runbook](recovery.md) before the separate release authorization. Hosted acceptance covers the web, API and worker individually, followed by the verified provider journeys.
+## Continue the handoff
+
+1. Verify the newly published source, custom-field migration and browser behavior, and hosted social previews.
+2. Implement the outstanding contract-rule and FUB corrections.
+3. Finish private-storage acceptance and encrypted backup/isolated restore planning and rehearsal, including independent key storage, cadence, retention and monitoring.
+4. Complete provider/runtime acceptance and coordinator/agent/client journeys. Never infer delivery, payment success, storage recovery or launch approval from configuration/deployment success.
+5. Resume deferred items when Ireland asks. Final real-client launch remains a separate explicit decision.
+
+See [provider operations](providers.md), [Calendly](calendly.md), [deployment](deployment.md), and [backup/recovery](recovery.md). Use controlled recipients and synthetic records for acceptance; keep document bodies, tokens and credentials out of logs.

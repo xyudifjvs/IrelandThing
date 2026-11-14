@@ -269,11 +269,15 @@ export const templateKeys = new Set([
   "co_op_email",
   "co_op_phone",
 ]);
-export function validateMerge(template: string) {
+export function validateMerge(
+  template: string,
+  customKeys: ReadonlySet<string> = new Set(),
+) {
   const matches = [...template.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)];
   for (const m of matches)
     if (
       !templateKeys.has(m[1]) &&
+      !customKeys.has(m[1]) &&
       !/^(date|deadline|task)_[a-z0-9_]{1,80}$/.test(m[1])
     )
       throw new HttpError(

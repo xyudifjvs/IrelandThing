@@ -532,6 +532,15 @@ model EmailDraft {
   @@index([workItemId])
 }
 
+model CustomMergeField {
+  key          String   @id
+  label        String
+  defaultValue String   @default("")
+  revision     Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+}
+
 model CommunicationTemplate {
   serviceGroup String?
   id        String   @id @default(cuid())

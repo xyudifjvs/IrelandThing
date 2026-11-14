@@ -2,6 +2,18 @@
 
 Use Ireland’s laptop and her own provider accounts for account configuration and provider acceptance. The [local release record](../release/intake-to-transaction.md) tracks the reviewed application commit and the local checks. The [environment map](environment.md) lists where deployment settings belong. Put secrets in the approved environment’s secret store.
 
+## Sync the repository
+
+Open the existing `IrelandThing` checkout on Ireland’s laptop and run `git status --short --branch`. If it shows local changes, preserve them before switching branches. Then run:
+
+```sh
+git switch main
+git pull --ff-only origin main
+git log -1 --oneline
+```
+
+If there is no existing checkout, run `git clone https://github.com/xyudifjvs/IrelandThing.git` and open the `IrelandThing` folder. For local app setup, follow [Run locally](../../README.md#run-locally). Use the release and recovery runbooks below for any hosted database or deployment changes.
+
 ## Decisions and content
 
 Review the [decision register](../handovers/intake-to-transaction/C00/contracts.md#decisions-for-ireland-to-confirm) and record a decision for each pending entry. Confirm the signed-contract precedence for Remedies and Title Commitment, **Only this date** pinning, HTO terminal corrections and recorded actual dates, dormant HTO rows, confirmed Follow Up Boss fields, the legacy document publication switch, business and package changes, and the weekday digest cutoff and wording.

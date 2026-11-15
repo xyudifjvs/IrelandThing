@@ -5,7 +5,7 @@ import {
   previewLinkedClosingDate,
   type HtoClosingDateCommands,
 } from "./closing-date";
-import { exportHtoClosings } from "./csv";
+import { exportHtoClosings, HtoExportIncomplete } from "./csv";
 import {
   resolveHtoMatch,
   updateLinkedClosing,
@@ -107,14 +107,25 @@ export function createHtoOperationsRouter({
   router.post(
     "/export",
     asyncHandler(async (req, res) => {
-      const result = await exportHtoClosings(principal(req), req.body);
-      res
-        .set({
-          "Content-Disposition": `attachment; filename="${result.filename}"`,
-          "Content-Type": "text/csv; charset=utf-8",
-          "X-Content-Type-Options": "nosniff",
-        })
-        .send(result.csv);
+      try {
+        const result = await exportHtoClosings(principal(req), req.body);
+        res
+          .set({
+            "Content-Disposition": `attachment; filename="${result.filename}"`,
+            "Content-Type": "text/csv; charset=utf-8",
+            "X-Content-Type-Options": "nosniff",
+          })
+          .send(result.csv);
+      } catch (error) {
+        if (!(error instanceof HtoExportIncomplete)) throw error;
+        res.status(error.status).json({
+          error: {
+            code: error.code,
+            message: error.message,
+            issues: error.issues,
+          },
+        });
+      }
     }),
   );
   return router;

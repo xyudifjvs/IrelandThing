@@ -85,6 +85,11 @@ export function Composer({
   const customValuesChanged =
     !!binding &&
     JSON.stringify(binding.customValues) !== JSON.stringify(customValues);
+  const sameSavedTemplate =
+    draft?.status === "draft" &&
+    !!template &&
+    template === draft.details?.templateId;
+  const replaceSavedWording = sameSavedTemplate && customValuesChanged;
   const enteredRecipients = useRef<string[]>([]);
   const busyRef = useRef(false);
   function setBusy(value: boolean) {
@@ -190,8 +195,14 @@ export function Composer({
     ].filter((address) => remaining.includes(address));
     edit(field === "to" ? setTo : setCc, value);
   }
-  function loadDraft(d: Draft) {
-    enteredRecipients.current = [];
+  function loadDraft(d: Draft, preserveEnvelope = false) {
+    if (!preserveEnvelope) {
+      enteredRecipients.current = [];
+      setTo(d.to.join(", "));
+      setCc(d.cc.join(", "));
+      setAttachments(d.attachmentIds || []);
+      setDirty(false);
+    }
     setDraft(d);
     const savedCustomValues = Object.fromEntries(
       Object.entries(d.details?.templateValues ?? {}).filter(([key]) =>
@@ -201,12 +212,9 @@ export function Composer({
     setCustomValues(savedCustomValues);
     setReplyToMessageId(undefined);
     setMatter(d.matterId);
-    setTo(d.to.join(", "));
-    setCc(d.cc.join(", "));
     setNewPersonEmail("");
     setSubject(d.subject);
     setBody(d.body);
-    setAttachments(d.attachmentIds || []);
     setTemplate(d.details?.templateId || "");
     setRecipientName(d.details?.templateValues?.recipientName || "");
     setBinding(
@@ -219,7 +227,6 @@ export function Composer({
           }
         : null,
     );
-    setDirty(false);
     setConfirmed(false);
     setMessage("");
     setError("");
@@ -328,20 +335,21 @@ export function Composer({
           `/api/v1/communications/drafts/${draft.id}/reset-template`,
           {
             expectedRevision: draft.revision,
-            ...(customValuesChanged && template === draft.details?.templateId
-              ? {}
-              : { templateId: template }),
+            ...(replaceSavedWording ? {} : { templateId: template }),
             values: {
               ...customValues,
               ...(recipientName ? { recipientName } : {}),
             },
           },
         );
-        loadDraft(rebound);
+        const preserveEnvelope = replaceSavedWording && dirty;
+        loadDraft(rebound, preserveEnvelope);
         await drafts.refresh();
         await onWorkChanged?.();
         setMessage(
-          "Template updated. Review the saved wording before sending.",
+          preserveEnvelope
+            ? "Template refilled. Review the wording and save your draft changes."
+            : "Template updated. Review the saved wording before sending.",
         );
         return;
       }
@@ -552,11 +560,8 @@ export function Composer({
                   draft.status !== "draft")
               }
               rebind={!!draft}
-              replaceSavedWording={
-                !!draft &&
-                customValuesChanged &&
-                template === draft.details?.templateId
-              }
+              customFieldsEditable={sameSavedTemplate}
+              replaceSavedWording={replaceSavedWording}
               fill={() => void fillTemplate()}
             />
           )}

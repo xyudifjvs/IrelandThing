@@ -11,6 +11,7 @@ import {
   formatCents,
   statusLabels,
   type HtoClosingRow,
+  type HtoExportIssue,
   type HtoFilters,
   type HtoOperationsView,
 } from "./model";
@@ -34,7 +35,10 @@ function listPath(filters: HtoFilters) {
   return `${apiPath}?${params}`;
 }
 
-async function downloadCsv(filters: HtoFilters, rowIds: string[]) {
+async function downloadCsv(
+  filters: HtoFilters,
+  rowIds: string[],
+): Promise<HtoExportIssue[]> {
   const response = await fetch(`${apiPath}/export`, {
     method: "POST",
     credentials: "include",
@@ -43,6 +47,8 @@ async function downloadCsv(filters: HtoFilters, rowIds: string[]) {
   });
   if (!response.ok) {
     const reason = await response.json().catch(() => ({}));
+    if (reason.error?.code === "HTO_EXPORT_INCOMPLETE")
+      return reason.error.issues;
     throw new Error(
       reason.error?.message || "Unable to download the closing rows.",
     );
@@ -57,6 +63,7 @@ async function downloadCsv(filters: HtoFilters, rowIds: string[]) {
   link.download = filename;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(href), 1_000);
+  return [];
 }
 
 export function HtoOperations() {
@@ -67,6 +74,7 @@ export function HtoOperations() {
   const [selected, setSelected] = useState(new Set<string>());
   const [editor, setEditor] = useState<Editor | null>(null);
   const [actionError, setActionError] = useState("");
+  const [exportIssues, setExportIssues] = useState<HtoExportIssue[]>([]);
   const [exporting, setExporting] = useState(false);
   const [matching, setMatching] = useState(false);
   const editorArea = useRef<HTMLDivElement>(null);
@@ -81,6 +89,7 @@ export function HtoOperations() {
   function filter(next: Partial<HtoFilters>) {
     setFilters({ ...filters, ...next });
     setSelected(new Set());
+    setExportIssues([]);
   }
 
   function openEditor(next: Editor) {
@@ -99,7 +108,6 @@ export function HtoOperations() {
   }
 
   function saveEditor() {
-    setSelected(new Set());
     closeEditor();
     void refresh();
   }
@@ -107,8 +115,9 @@ export function HtoOperations() {
   async function exportRows() {
     setExporting(true);
     setActionError("");
+    setExportIssues([]);
     try {
-      await downloadCsv(filters, [...selected]);
+      setExportIssues(await downloadCsv(filters, [...selected]));
     } catch (reason) {
       setActionError(
         reason instanceof Error
@@ -141,6 +150,7 @@ export function HtoOperations() {
           : { action: "dismiss" }),
       });
       setSelected(new Set());
+      setExportIssues([]);
       await refresh();
     } catch (reason) {
       setActionError(
@@ -205,6 +215,38 @@ export function HtoOperations() {
         <p className={s.error} role="alert">
           {actionError}
         </p>
+      )}
+      {exportIssues.length > 0 && (
+        <div className={s.error} role="alert">
+          <p>
+            Complete the selected clients’ names and phones, then download
+            again.
+          </p>
+          <ul>
+            {exportIssues.map((issue) => {
+              const row = rows.find(({ id }) => id === issue.rowId);
+              return (
+                <li key={`${issue.rowId}:${issue.clientNumber}`}>
+                  {issue.propertyAddress} ·{" "}
+                  {issue.clientNumber
+                    ? `${issue.name || `Client ${issue.clientNumber}`} needs ${issue.missing.join(" and ")}`
+                    : "No saved clients"}
+                  {row && (
+                    <>
+                      {" "}
+                      <button
+                        className={s.quiet}
+                        onClick={() => openEditor({ kind: "facts", row })}
+                      >
+                        Edit row
+                      </button>
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
       <div className={s.filters} aria-label="Closing row filters">
         <label>
@@ -302,21 +344,23 @@ export function HtoOperations() {
             <ClosingTable
               rows={rows}
               selected={selected}
-              toggleRow={(id) =>
+              toggleRow={(id) => {
+                setExportIssues([]);
                 setSelected((current) => {
                   const next = new Set(current);
                   if (next.has(id)) next.delete(id);
                   else next.add(id);
                   return next;
-                })
-              }
-              toggleAll={() =>
+                });
+              }}
+              toggleAll={() => {
+                setExportIssues([]);
                 setSelected(
                   selected.size === rows.length
                     ? new Set()
                     : new Set(rows.map(({ id }) => id)),
-                )
-              }
+                );
+              }}
               edit={(row) => openEditor({ kind: "facts", row })}
               editDate={(row) => openEditor({ kind: "date", row })}
               resolveMatch={(row, candidate) =>

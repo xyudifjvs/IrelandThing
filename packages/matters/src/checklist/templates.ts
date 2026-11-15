@@ -1,7 +1,4 @@
-import type {
-  ChecklistDateRule,
-  TransactionSide,
-} from "@weatherly/platform/handoff-contracts";
+import type { TransactionSide } from "@weatherly/platform/handoff-contracts";
 
 export const checklistVersion = 1;
 
@@ -91,30 +88,3 @@ export function checklistTemplate(
 }
 
 export const remediesAnchorKey = "remedies";
-
-/** Defaults are review proposals. Confirmation uses the rules Ireland selected. */
-export function checklistWorkflowDefault(
-  side: TransactionSide,
-  key: string,
-): { label: "Workflow default"; rule: ChecklistDateRule } | null {
-  const anchor = key === remediesAnchorKey ? "inspections" : "closing";
-  if (
-    key !== remediesAnchorKey &&
-    (key !== "title_commitment" || side !== "seller")
-  )
-    return null;
-  return {
-    label: "Workflow default",
-    rule: {
-      kind: "relative",
-      offset: {
-        anchor: { kind: "step", key: anchor },
-        amount: key === remediesAnchorKey ? 0 : -15,
-        unit: "days",
-        counting: "calendar",
-        rollover: "none",
-        calendar: null,
-      },
-    },
-  };
-}

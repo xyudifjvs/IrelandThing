@@ -1,8 +1,10 @@
 export { formatHtoAddress } from "../../../../../../../packages/matters/src/hto-operations/address";
+export { htoClientName as clientName } from "../../../../../../../packages/matters/src/hto-operations/contracts";
 export type {
   HtoAddress,
   HtoClient,
   HtoClosingRow,
+  HtoExportIssue,
   HtoFilters,
   HtoOperationsView,
   HtoSide,
@@ -11,10 +13,7 @@ export type {
 } from "../../../../../../../packages/matters/src/hto-operations/contracts";
 export type { ChecklistDatePreview } from "../../../../../../../packages/matters/src/date-graph/preview";
 
-import type {
-  HtoClosingRow,
-  HtoStatus,
-} from "../../../../../../../packages/matters/src/hto-operations/contracts";
+import type { HtoStatus } from "../../../../../../../packages/matters/src/hto-operations/contracts";
 
 export const apiPath = "/api/v1/hto-operations";
 export const statusLabels = {
@@ -51,10 +50,4 @@ export function readPrice(value: string) {
   if (cents > Number.MAX_SAFE_INTEGER)
     throw new Error("Enter a smaller purchase price.");
   return Number(cents);
-}
-
-export function clientName(client: HtoClosingRow["clients"][number]) {
-  return (
-    client.name ?? [client.firstName, client.lastName].filter(Boolean).join(" ")
-  );
 }

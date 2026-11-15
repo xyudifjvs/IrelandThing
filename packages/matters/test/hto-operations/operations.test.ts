@@ -589,9 +589,9 @@ describe("HTO operations", () => {
     const all = await exportHtoClosings(actor, { filters }, now);
     expect(all.filename).toBe("synthetic-closings-for-FUB.csv");
     expect(all.csv.split("\r\n")).toEqual([
-      "First Name,Last Name,Email,Phone,Street,City,State,ZIP,Close Date,Sale Price,Side,Agent",
-      '"Morgan ""Mo""",Synthetic,mo@example.test,+1 555 0100,"91 Synthetic, Unit ""A""",Fixture City,OH,00000,2025-12-22,255000.32,Seller,Synthetic Teammate',
-      `'=Synthetic,Zoë,zoe@example.test,555-0101,"91 Synthetic, Unit ""A""",Fixture City,OH,00000,2025-12-22,255000.32,Seller,Synthetic Teammate`,
+      "Name,Email,Phone,Street,City,State,ZIP,Close Date,Sale Price,Side,Agent",
+      '"Morgan ""Mo"" Synthetic",mo@example.test,+1 555 0100,"91 Synthetic, Unit ""A""",Fixture City,OH,00000,2025-12-22,255000.32,Seller,Synthetic Teammate',
+      `'=Synthetic Zoë,zoe@example.test,555-0101,"91 Synthetic, Unit ""A""",Fixture City,OH,00000,2025-12-22,255000.32,Seller,Synthetic Teammate`,
       "",
     ]);
     const selected = await exportHtoClosings(
@@ -606,7 +606,7 @@ describe("HTO operations", () => {
     ).rejects.toMatchObject({ code: "HTO_EXPORT_SELECTION_CHANGED" });
   });
 
-  it("uses canonical contact snapshots and blanks stale name or address structures", async () => {
+  it("exports saved canonical names and phone numbers without stale structured fields", async () => {
     const parts = address();
     const canonical = await file(parts);
     const [fresh, stale] = await Promise.all([
@@ -616,6 +616,7 @@ describe("HTO operations", () => {
           role: "seller",
           name: "Fresh Synthetic",
           email: "fresh@example.test",
+          phone: "555-0141",
         },
       }),
       prisma.matterContact.create({
@@ -624,6 +625,7 @@ describe("HTO operations", () => {
           role: "client",
           name: "Changed Synthetic",
           email: "changed@example.test",
+          phone: "555-0142",
         },
       }),
       prisma.matterContact.create({
@@ -669,9 +671,82 @@ describe("HTO operations", () => {
       { filters: { agentId: rosterId }, rowIds: [row.id] },
       now,
     );
-    expect(exported.csv).toContain(",,changed@example.test");
+    expect(exported.csv).toContain(
+      "Changed Synthetic,changed@example.test,555-0142",
+    );
+    expect(exported.csv).not.toContain("Stale Synthetic");
     expect(exported.csv).not.toContain("agent@example.test");
     expect(exported.csv).not.toContain(parts.street);
+  });
+
+  it("reports incomplete clients without skipping legacy entries or inferring their values", async () => {
+    const manual = await addManualClosing(
+      actor,
+      manualInput(address(), "closed"),
+    );
+    await prisma.htoClosing.update({
+      where: { id: manual.id },
+      data: {
+        manualClients: [
+          people[0],
+          { email: "legacy@example.test", phone: "555-0145" },
+          {
+            firstName: "Missing Phone",
+            lastName: "",
+            email: "other@example.test",
+          },
+        ],
+      },
+    });
+    await expect(
+      exportHtoClosings(actor, { filters: {}, rowIds: [manual.id] }, now),
+    ).rejects.toMatchObject({
+      code: "HTO_EXPORT_INCOMPLETE",
+      issues: [
+        { rowId: manual.id, clientNumber: 2, name: null, missing: ["name"] },
+        {
+          rowId: manual.id,
+          clientNumber: 3,
+          name: "Missing Phone",
+          missing: ["phone"],
+        },
+      ],
+    });
+  });
+
+  it("offers a previous row's contact for review only on an unambiguous email match", async () => {
+    const canonical = await file(address());
+    const row = (await synchronize(canonical.id))!;
+    const clients = [
+      { name: "Saved client", email: "MO@example.test" },
+      { name: "Do not match", email: "unmatched@example.test" },
+      { name: "Ambiguous client", email: "zoe@example.test" },
+    ];
+    await prisma.matterContact.createMany({
+      data: clients.map((client) => ({
+        ...client,
+        matterId: canonical.id,
+        role: "client",
+      })),
+    });
+    await prisma.htoClosing.update({
+      where: { id: row.id },
+      data: { manualClients: [...people, { ...people[1], phone: "555-0999" }] },
+    });
+    const projected = (await view()).rows.find(({ id }) => id === row.id)!;
+    const [matched, unmatched, ambiguous] = clients.map(({ email }) =>
+      projected.clients.find((client) => client.email === email),
+    );
+    expect(matched).toMatchObject({
+      phone: "",
+      previousClient: { email: "mo@example.test", phone: "+1 555 0100" },
+    });
+    expect(unmatched?.previousClient).toBeUndefined();
+    expect(ambiguous?.previousClient).toBeUndefined();
+    expect(ambiguous?.previousClientConflict).toBe(true);
+    await expect(
+      exportHtoClosings(actor, { filters: {}, rowIds: [row.id] }, now),
+    ).rejects.toMatchObject({ code: "HTO_EXPORT_INCOMPLETE" });
   });
 
   it("serves coordinator-only private HTTP responses and injects the linked canonical writer", async () => {
@@ -737,6 +812,27 @@ describe("HTO operations", () => {
     expect((await view()).rows[0]).toMatchObject({
       status: "closed",
       purchasePriceCents: 500,
+    });
+    await request(app)
+      .post("/hto/export")
+      .set("x-test-role", "coordinator")
+      .send({ filters: { agentId: rosterId } })
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({
+          code: "HTO_EXPORT_INCOMPLETE",
+          issues: [
+            { rowId: row.id, clientNumber: null, missing: ["name", "phone"] },
+          ],
+        });
+      });
+    await prisma.matterContact.create({
+      data: {
+        matterId: canonical.id,
+        role: "seller",
+        name: "Confirmed Synthetic",
+        phone: "555-0146",
+      },
     });
     await request(app)
       .post("/hto/export")

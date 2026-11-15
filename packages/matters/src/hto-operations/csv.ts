@@ -6,12 +6,16 @@ import {
 } from "@weatherly/platform";
 import { entityIdSchema } from "@weatherly/platform/handoff-contracts";
 import { z } from "zod";
-import { htoFilters, type HtoClosingRow } from "./contracts";
+import {
+  htoClientName,
+  htoFilters,
+  type HtoClosingRow,
+  type HtoExportIssue,
+} from "./contracts";
 import { filterRows, loadHtoOperations } from "./queries";
 
 const columns = [
-  "First Name",
-  "Last Name",
+  "Name",
   "Email",
   "Phone",
   "Street",
@@ -35,7 +39,8 @@ function cell(value: string, index: number) {
   // Quoting alone does not disable spreadsheet formulas. A plain international
   // telephone number is safe and keeps its leading + for the FUB import.
   const normalized = value.normalize("NFKC");
-  const internationalPhone = index === 3 && /^\+\d[\d ()-]*$/.test(normalized);
+  const internationalPhone =
+    columns[index] === "Phone" && /^\+\d[\d ()-]*$/.test(normalized);
   const formula =
     /^[\u0000-\u0020]*[=+\-@]/.test(normalized) || /^[\t\r\n]/.test(normalized);
   const safe = formula && !internationalPhone ? "'" + value : value;
@@ -51,8 +56,7 @@ function salePrice(value: number | null) {
 function serializeRows(rows: readonly HtoClosingRow[]) {
   const records = rows.flatMap((row) =>
     row.clients.map((client) => [
-      client.firstName,
-      client.lastName,
+      htoClientName(client),
       client.email,
       client.phone,
       row.address?.street ?? "",
@@ -69,6 +73,49 @@ function serializeRows(rows: readonly HtoClosingRow[]) {
     [columns, ...records]
       .map((record) => record.map(cell).join(","))
       .join("\r\n") + "\r\n"
+  );
+}
+
+export class HtoExportIncomplete extends HttpError {
+  constructor(public issues: HtoExportIssue[]) {
+    super(
+      422,
+      "HTO_EXPORT_INCOMPLETE",
+      "Complete the selected clients’ names and phones before downloading.",
+    );
+  }
+}
+
+function exportIssues(rows: readonly HtoClosingRow[]) {
+  return rows.flatMap(
+    ({ id: rowId, propertyAddress, clients }): HtoExportIssue[] => {
+      if (!clients.length)
+        return [
+          {
+            rowId,
+            propertyAddress,
+            clientNumber: null,
+            name: null,
+            missing: ["name", "phone"],
+          },
+        ];
+      return clients.flatMap((client, index): HtoExportIssue[] => {
+        const name = htoClientName(client);
+        const missing: HtoExportIssue["missing"] = [];
+        if (!name) missing.push("name");
+        if (!client.phone.trim()) missing.push("phone");
+        if (!missing.length) return [];
+        return [
+          {
+            rowId,
+            propertyAddress,
+            clientNumber: index + 1,
+            name: name || null,
+            missing,
+          },
+        ];
+      });
+    },
   );
 }
 
@@ -102,6 +149,8 @@ export async function exportHtoClosings(
           "HTO_EXPORT_SELECTION_CHANGED",
           "A selected row changed. Refresh the closing rows and try again.",
         );
+      const issues = exportIssues(selected);
+      if (issues.length) throw new HtoExportIncomplete(issues);
       return {
         filename: filename(
           agents.find((agent) => agent.id === filters.agentId)?.name,

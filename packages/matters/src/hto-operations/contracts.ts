@@ -96,7 +96,12 @@ export type HtoClosingRow = {
   canonicalDateEditable: boolean;
   agentRosterId: string | null;
   agentName: string | null;
-  clients: (HtoClient & { id?: string; name?: string })[];
+  clients: (HtoClient & {
+    id?: string;
+    name?: string;
+    previousClient?: HtoClient;
+    previousClientConflict?: true;
+  })[];
   propertyAddress: string;
   address: HtoAddress | null;
   side: HtoSide;
@@ -136,3 +141,23 @@ export type HtoOperationsView = {
     closedVolumeCents: string;
   }[];
 };
+
+export type HtoExportIssue = {
+  rowId: string;
+  propertyAddress: string;
+  clientNumber: number | null;
+  name: string | null;
+  missing: ("name" | "phone")[];
+};
+
+export function htoClientName(
+  client: Pick<
+    HtoClosingRow["clients"][number],
+    "name" | "firstName" | "lastName"
+  >,
+) {
+  return (
+    client.name?.trim() ||
+    [client.firstName.trim(), client.lastName.trim()].filter(Boolean).join(" ")
+  );
+}

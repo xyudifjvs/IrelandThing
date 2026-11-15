@@ -21,7 +21,7 @@ Follow [Run locally](../../README.md#run-locally), the [environment map](environ
 
 All nine workflow decisions were addressed with Ireland. Signed-contract dates are proposed for review; linked dates use **Update all** based on uploaded-contract rules; HTO corrections preserve lifecycle/actual dates; dormant HTO rows are reused; older document publication requires explicit sharing; older drafts require fresh recipient review/save/approval; private summaries use weekday 8 a.m. Eastern cutoffs.
 
-Two required corrections remain **unimplemented**: remove unsupported Remedies/Title Commitment fallback assumptions from new creation reviews, and require saved client name/phone before FUB export using a supported full Name column. See the [exact correction scope](../handovers/intake-to-transaction/IRELAND_PROGRESS_2026-11-14.md#required-corrections-not-yet-implemented).
+The release candidate removes unsupported Remedies and Title Commitment assumptions from new creation reviews and requires saved client names and phones before Follow Up Boss downloads. Verify these corrections with synthetic transactions during hosted acceptance. See the [original correction scope](../handovers/intake-to-transaction/IRELAND_PROGRESS_2026-11-14.md#required-corrections-not-yet-implemented).
 
 Ireland will add her buyer/seller templates and compliance items later. Keep current client-portal wording for now, with future copy changes expected. Do not invent substitute templates or compliance tasks. Service-agreement/signing link and Calendly confirmation wording, dual Gmail routing, and Dotloop are explicitly deferred.
 
@@ -44,7 +44,7 @@ Use the existing **Weatherly** Railway project, environment named **staging**, s
 ## Continue the handoff
 
 1. Verify the newly published source, custom-field migration and browser behavior, and hosted social previews.
-2. Implement the outstanding contract-rule and FUB corrections.
+2. Verify the corrected contract-rule and Follow Up Boss flows using a signed-term fixture, a fixture with missing terms, and an export with an incomplete client.
 3. Finish private-storage acceptance and encrypted backup/isolated restore planning and rehearsal, including independent key storage, cadence, retention and monitoring.
 4. Complete provider/runtime acceptance and coordinator/agent/client journeys. Never infer delivery, payment success, storage recovery or launch approval from configuration/deployment success.
 5. Resume deferred items when Ireland asks. Final real-client launch remains a separate explicit decision.

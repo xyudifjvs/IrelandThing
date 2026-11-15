@@ -35,18 +35,23 @@ function proposal(): CreationProposal {
   };
 }
 
-it("shows a signed title date ahead of the workflow default and keeps edits ahead of both", () => {
+it("leaves absent terms unresolved and keeps explicit manual edits ahead of signed suggestions", () => {
   const facts = { side: "seller" as const };
   const closing = {
     key: "closing",
     value: { date: "2026-12-15", instant: null },
     rule: { kind: "fixed" as const },
   };
-  const defaultDates = assembleDates(facts, [closing], null);
-  expect(previewDates(facts, defaultDates).get("title_commitment")?.date).toBe(
-    "2026-11-30",
-  );
-  const signedDates = assembleDates(facts, [closing], proposal());
+  const inspection = {
+    ...closing,
+    key: "inspections",
+    value: { date: "2026-11-20", instant: null },
+  };
+  const dates = [closing, inspection];
+  const missing = previewDates(facts, assembleDates(facts, dates, null));
+  expect(missing.get("title_commitment")).toBeNull();
+  expect(missing.get("remedies")).toBeNull();
+  const signedDates = assembleDates(facts, dates, proposal());
   expect(previewDates(facts, signedDates).get("title_commitment")?.date).toBe(
     "2026-12-04",
   );

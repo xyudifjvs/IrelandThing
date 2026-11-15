@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { mutate } from "../../_components/data";
 import {
   apiPath,
+  clientName,
   formatHtoAddress,
   priceField,
   readPrice,
@@ -68,6 +69,27 @@ export function ClosingFactsForm({
     setClients(
       clients.map((person) =>
         person.key === key ? { ...person, [field]: value } : person,
+      ),
+    );
+  }
+
+  function usePreviousClient(client: EditableClient) {
+    const previous = client.previousClient;
+    if (!previous || client.email.trim().toLowerCase() !== previous.email)
+      return;
+    setClientsEdited(true);
+    setClients((current) =>
+      current.map((person) =>
+        person.key === client.key
+          ? {
+              ...person,
+              ...(!clientName(person) && {
+                firstName: previous.firstName,
+                lastName: previous.lastName,
+              }),
+              phone: person.phone.trim() ? person.phone : previous.phone,
+            }
+          : person,
       ),
     );
   }
@@ -264,11 +286,34 @@ export function ClosingFactsForm({
           <fieldset className={s.clientForm} key={client.key}>
             <legend>Client {index + 1}</legend>
             {client.name && !client.firstName && !client.lastName && (
+              <p className={s.muted}>Saved name: {client.name}.</p>
+            )}
+            {client.previousClientConflict && (
               <p className={s.muted}>
-                Saved name: {client.name}. Enter the name parts to include them
-                in the CSV.
+                This email matches more than one client record. Review the
+                client’s details before completing the row.
               </p>
             )}
+            {client.previousClient &&
+              client.email.trim().toLowerCase() ===
+                client.previousClient.email &&
+              ((!clientName(client) && clientName(client.previousClient)) ||
+                (!client.phone.trim() && client.previousClient.phone)) && (
+                <div className={s.muted}>
+                  <p>
+                    Previous row with the same email:{" "}
+                    {clientName(client.previousClient)}{" "}
+                    {client.previousClient.phone}
+                  </p>
+                  <button
+                    type="button"
+                    className={s.quiet}
+                    onClick={() => usePreviousClient(client)}
+                  >
+                    Use previous details for empty fields
+                  </button>
+                </div>
+              )}
             <div className={s.fields}>
               <label>
                 First name

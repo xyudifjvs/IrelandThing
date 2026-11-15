@@ -17,6 +17,7 @@ export function ComposerTemplateFields({
   setCustomValues,
   disabled,
   rebind,
+  customFieldsEditable,
   replaceSavedWording,
   fill,
 }: {
@@ -31,6 +32,7 @@ export function ComposerTemplateFields({
   setCustomValues: (value: Record<string, string>) => void;
   disabled: boolean;
   rebind: boolean;
+  customFieldsEditable: boolean;
   replaceSavedWording: boolean;
   fill: () => void;
 }) {
@@ -119,7 +121,7 @@ export function ComposerTemplateFields({
               <textarea
                 className={s.textarea}
                 maxLength={2000}
-                disabled={disabled}
+                disabled={disabled && !customFieldsEditable}
                 value={customValues[field.key] ?? field.defaultValue}
                 onChange={(event) =>
                   setCustomValues({
@@ -132,12 +134,12 @@ export function ComposerTemplateFields({
           ))}
           <button
             className={s.buttonSmall}
-            disabled={!template || disabled}
+            disabled={!template || (disabled && !replaceSavedWording)}
             type="button"
             onClick={fill}
           >
             {replaceSavedWording
-              ? "Refill template and replace saved wording"
+              ? "Refill template and replace message wording"
               : rebind
                 ? "Apply template and keep saved wording"
                 : "Fill template with confirmed details"}

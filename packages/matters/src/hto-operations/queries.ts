@@ -2,7 +2,6 @@ import { prisma, Prisma } from "@weatherly/db";
 import { assertCoordinator, type Principal } from "@weatherly/platform";
 import {
   htoAddress,
-  htoClient,
   htoFilters,
   htoSide,
   htoStatus,
@@ -14,6 +13,7 @@ import {
   activeManualMatches,
   fileStatus,
   hasConflictingClientEmails,
+  matchEmail,
   matchKey,
   matterAddress,
   matterCloseDate,
@@ -31,10 +31,45 @@ import {
 
 function manualClients(row: StoredHtoClosing) {
   if (!Array.isArray(row.manualClients)) return [];
-  return row.manualClients.flatMap((person) => {
-    const result = htoClient.safeParse(person);
-    return result.success ? [result.data] : [];
+  return row.manualClients.map((person) => {
+    const fields = jsonRecord(person);
+    const read = (key: string) => {
+      const value = fields[key];
+      return typeof value === "string" ? value.trim() : "";
+    };
+    return {
+      firstName: read("firstName"),
+      lastName: read("lastName"),
+      email: read("email"),
+      phone: read("phone"),
+    };
   });
+}
+
+function previousClient(
+  contact: HtoMatter["contacts"][number],
+  contacts: HtoMatter["contacts"],
+  previous: ReturnType<typeof manualClients>,
+): Pick<
+  HtoClosingRow["clients"][number],
+  "previousClient" | "previousClientConflict"
+> {
+  if (contact.name.trim() && contact.phone.trim()) return {};
+  const email = matchEmail.safeParse(contact.email).data;
+  if (!email) return {};
+  const matches = previous.filter(
+    (person) => matchEmail.safeParse(person.email).data === email,
+  );
+  if (!matches.length) return {};
+  if (
+    matches.length > 1 ||
+    contacts.filter(
+      (person) => matchEmail.safeParse(person.email).data === email,
+    ).length > 1
+  )
+    return { previousClientConflict: true };
+  const { firstName, lastName, phone } = matches[0];
+  return { previousClient: { firstName, lastName, email, phone } };
 }
 
 function projectRow(
@@ -56,6 +91,7 @@ function projectRow(
         ? (closing?.actualDate ?? null)
         : null;
     const names = jsonRecord(jsonRecord(matter.details).structuredClientNames);
+    const previous = manualClients(row);
     return {
       id: row.id,
       revision: row.revision,
@@ -79,6 +115,7 @@ function projectRow(
           lastName: namesMatch ? lastName : "",
           email: contact.email,
           phone: contact.phone,
+          ...previousClient(contact, matter.contacts, previous),
         };
       }),
       propertyAddress: matter.propertyAddress,

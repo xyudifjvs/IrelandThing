@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { socialImagePath } from "./social-image";
+import { socialImagePath } from "./social-image.ts";
 
 export const publicPages = {
   "/": {

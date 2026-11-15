@@ -1,10 +1,10 @@
 # Deployment preparation and release
 
-Production release status: prepared, not accepted for real-client use. At the user's explicit request, a separate Railway staging environment has been deployed from GitHub; see `../release/railway-staging.md` and `../../infra/railway/staging.json`. Live provider integrations remain disabled and no demo seed is used. These runbook files do not provision resources automatically.
+For Weatherly's current Railway project, deployed revisions, provider configuration and open launch gates, start with the [Ireland laptop handoff](intake-to-transaction-ireland-laptop.md). The older Railway staging release and infrastructure records refer to a separate project. Never run the local synthetic seed in a hosted environment.
 
 ## Service layout
 
-`infra/railway/services.json` is an explicit production review matrix, not an executable Railway configuration schema. It specifies Railway PostgreSQL, a private document bucket, private API/worker services and a public Next.js web service. The separate `infra/railway/staging.json` records the actual hosted staging resources. Dockerfiles live under `infra/docker/`; use the repository root as build context. Each Dockerfile has a matching ignore file excluding secrets, dependencies and local data.
+`infra/railway/services.json` is a production review matrix. It specifies Railway PostgreSQL, a private document bucket, private API and worker services, and a public Next.js web service. Confirm the current target against the handoff before acting on a service. Dockerfiles live under `infra/docker/`. Use the repository root as the build context. Each Dockerfile has an ignore file that excludes secrets, dependencies and local data.
 
 Railway's current project configuration system is IaC; new services cannot use legacy `railway.json`/`railway.toml`. Translate this matrix into the linked environment's current IaC or settings during the separately approved provisioning step. Review a plan before applying it. [Current Railway IaC documentation](https://docs.railway.com/infrastructure-as-code).
 

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildChecklistSeed } from "../../src/checklist/seed";
-import {
-  checklistTemplate,
-  checklistWorkflowDefault,
-} from "../../src/checklist/templates";
+import { checklistTemplate } from "../../src/checklist/templates";
 
 const buyerTitles = [
   "Pre-Approval",
@@ -132,24 +129,7 @@ describe("official checklist templates", () => {
     ]);
   });
 
-  it("offers workflow defaults for review without assigning them silently", () => {
-    expect(
-      checklistWorkflowDefault("seller", "title_commitment"),
-    ).toMatchObject({
-      label: "Workflow default",
-      rule: {
-        kind: "relative",
-        offset: { anchor: { kind: "step", key: "closing" }, amount: -15 },
-      },
-    });
-    expect(checklistWorkflowDefault("buyer", "title_commitment")).toBeNull();
-    expect(checklistWorkflowDefault("buyer", "remedies")).toMatchObject({
-      label: "Workflow default",
-      rule: {
-        kind: "relative",
-        offset: { anchor: { kind: "step", key: "inspections" }, amount: 0 },
-      },
-    });
+  it("leaves remedies and title commitment unresolved without supplied terms", () => {
     const seed = buildChecklistSeed({
       side: "seller",
       purchaseType: null,

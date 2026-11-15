@@ -1,7 +1,6 @@
 import type { CreationProposal } from "../../../../../../../packages/ai/src/creation-extraction/proposal";
 import {
   checklistTemplate,
-  checklistWorkflowDefault,
   remediesAnchorKey,
 } from "../../../../../../../packages/matters/src/checklist/templates";
 import { buildChecklistSeed } from "../../../../../../../packages/matters/src/checklist/seed";
@@ -173,8 +172,7 @@ export function assembleDates(
     const suggested = proposal?.dates.find((item) => item.key === key);
     if (suggested)
       return [{ key, value: suggested.date, rule: suggested.rule }];
-    const fallback = checklistWorkflowDefault(facts.side ?? "buyer", key);
-    return fallback ? [{ key, value: null, rule: fallback.rule }] : [];
+    return [];
   });
 }
 

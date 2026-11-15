@@ -81,7 +81,11 @@ export function activeManualMatches(
   );
 }
 
-const matchEmail = z.string().trim().toLowerCase().pipe(z.email().max(254));
+export const matchEmail = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email().max(254));
 
 function knownClientEmails(values: readonly unknown[]) {
   return new Set(

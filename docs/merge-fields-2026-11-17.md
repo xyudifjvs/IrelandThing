@@ -116,4 +116,24 @@ The distinct existing codes `{{recipient_name}}`, `{{possession_date}}`, `{{appr
 
 ## Release progress
 
-Ireland authorized deployment on November 17, 2026. Target: the existing Weatherly project, staging environment, serving https://www.weatherlytc.com. API migrations and the read-only field probe run before the new web/worker release. Provider settings and approved email workflows remain as configured. Actual serving revisions and verification results will be recorded after rollout.
+Ireland authorized deployment on November 17, 2026. Target: the existing Weatherly project, staging environment, serving https://www.weatherlytc.com. API migrations run before the new web/worker release. Provider settings and approved email workflows remain as configured. The release is now live; verified receipts are below.
+
+
+The four migrations completed successfully in the API pre-deploy logs (25 total migrations now present). The optional read-only probe was not observed in those logs. Automatic approval review rejected replacing the migration command with a check-only command for an additional diagnostic redeploy; the standard `npm run db:deploy` safeguard remains configured. Normal deployment health and unauthenticated access checks continue without that optional diagnostic.
+
+
+### Verified live deployment
+
+All three application services serve GitHub release `32a89577836a3284bc27d717c24338537e73ff69`. Main was fast-forwarded to that tested release; services are pinned to it on `codex/merge-fields-release-32a8957`.
+
+| Service | Successful deployment |
+| --- | --- |
+| API | `5693500c-bbb6-4c00-a3ba-6a97b588f210` |
+| Worker | `751f02f4-6659-4d26-8126-9731e7e7de43` |
+| Web | `0829e919-993a-4c2b-a570-727e23746a73` |
+
+API readiness followed successful application of all four release migrations. Railway reports all services online, one running replica each, no crashes/issues and no pending work. The public `/health` endpoint returns 200; unauthenticated session and merge-field configuration reads return 401. Browser reload confirms the served shared accent is `#1e1c1a`.
+
+Hosted verification used public health, authentication boundaries, source/deployment receipts and the served theme. Coordinator field edits and actual email delivery were not tested against live client records. Functional checks used synthetic local data. No new email or payment was sent as a deployment test, and existing provider gates were retained.
+
+The first API deployment request used main's previous head despite the saved commit pin. Switching the source to the release branch corrected the actual build source; the successful deployment IDs above are the verified release, rather than that older-source attempt.

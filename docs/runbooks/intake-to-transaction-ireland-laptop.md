@@ -1,5 +1,15 @@
 # Ireland’s Weatherly handoff
 
+## November 17, 2026: merge-field cleanup deployed
+
+Ireland’s new merge-field uploads and final corrections are live at https://www.weatherlytc.com. API, worker and web serve release `32a89577836a3284bc27d717c24338537e73ff69`; all four migrations applied, every service is healthy and no staged work remains. Full field list, source decisions, tests, actual deployment IDs and verification limits: [merge-field release record](../merge-fields-2026-11-17.md).
+
+Possession terms now use the Possession checklist wording/rule/date. Buyer-agent commission has an autosaving Commission box on each transaction and supplies `{{buyer_agent_commission}}`; Title introductions with one literal 3% are migrated to the field. The repair-completion deadline field was removed. Greetings use the first word of full names, wiring instructions are shared per brokerage, and typed custom keys have no automatic prefix. Settings source bindings, transaction Details, editable checklist amounts/date wording, filled email previews, recipient chips and Save for later/reminders are deployed.
+
+The release passed 467 tests across 71 files, TypeScript and a production build. Six backup/recovery tests were excluded because local pg_dump/pg_restore are unavailable. Public health returned 200; unauthenticated private endpoints returned 401; the served accent is black. Hosted coordinator edits and real email deliveries were not exercised. Existing provider configuration and the API migration pre-deploy safeguard remain intact. The older November 14 provider/progress record below remains useful context, rather than the current source/deployment receipt.
+
+## Earlier handoff context
+
 Current review: **November 14, 2026**. Start with the [dated progress and next-work record](../handovers/intake-to-transaction/IRELAND_PROGRESS_2026-11-14.md). It records Ireland’s decisions, actual provider configuration, deployment receipts, deferred items and unfinished acceptance. It supersedes earlier all-providers-pending descriptions. Keep secrets in Railway/provider secret stores.
 
 ## Repository and source update

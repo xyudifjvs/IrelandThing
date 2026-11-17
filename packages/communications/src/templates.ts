@@ -1,4 +1,5 @@
 import { mergeFields } from "./merge-fields";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
 import {
@@ -11,6 +12,8 @@ import { stepKeySchema } from "@weatherly/platform/handoff-contracts";
 import { asRecord, assertReviewedMatter, validateMerge } from "./policy";
 import type { CommunicationsService } from "./service";
 import { ensureTemplateWork } from "./email-work";
+import { canonicalFieldKey, normalizeFieldCodes } from "./field-catalog";
+import { listFieldDefinitions } from "./field-sources";
 import {
   listCustomMergeFields,
   applyCustomMergeValues,
@@ -74,9 +77,14 @@ export async function saveTemplate(
       "TEMPLATE_GROUP_SIDE_MISMATCH",
       "Select the buyer or seller group matching this template.",
     );
-  const customKeys = new Set(
-    (await listCustomMergeFields(actor)).map(({ key }) => key),
-  );
+  parsed.subject = normalizeFieldCodes(parsed.subject);
+  parsed.body = normalizeFieldCodes(parsed.body);
+  const customKeys = new Set([
+    ...(await listCustomMergeFields(actor)).map(({ key }) =>
+      canonicalFieldKey(key),
+    ),
+    ...(await listFieldDefinitions(actor)).map(({ key }) => key),
+  ]);
   validateMerge(parsed.subject, customKeys);
   validateMerge(parsed.body, customKeys);
   return prisma.$transaction(async (tx) => {
@@ -257,10 +265,11 @@ export async function availableMergeFields(actor: Principal, matterId: string) {
   assertCoordinator(actor);
   const fields = await mergeFields(actor, matterId);
   const custom = await listCustomMergeFields(actor);
+  const customKeys = new Set(custom.map(({ key }) => canonicalFieldKey(key)));
   return [
-    ...fields,
+    ...fields.filter(({ key }) => !customKeys.has(key)),
     ...custom.map((field) => ({
-      key: field.key,
+      key: canonicalFieldKey(field.key),
       label: field.label,
       value: field.defaultValue || null,
       status: field.defaultValue.trim() ? "confirmed" : "unknown",
@@ -309,20 +318,26 @@ export async function renderInDb(
     );
   const fields = await mergeFields(actor, matterId, db);
   const custom = await listCustomMergeFields(actor, db);
-  const customKeys = new Set(custom.map(({ key }) => key));
+  const customKeys = new Set([
+    ...custom.map(({ key }) => canonicalFieldKey(key)),
+    ...fields.map(({ key }) => canonicalFieldKey(key)),
+  ]);
   const computed: Record<string, string> = {};
-  for (const f of fields) if (f.value !== null) computed[f.key] = f.value;
+  for (const f of fields)
+    if (f.value !== null && f.status === "confirmed")
+      computed[canonicalFieldKey(f.key)] = f.value;
   applyCustomMergeValues(computed, custom, values);
   for (const [key, value] of Object.entries(values)) {
-    if (key !== "recipientName" && key !== "coordinatorName") continue;
-    computed[key] = value;
+    if (!["recipientName", "recipient_name", "coordinatorName"].includes(key))
+      continue;
+    computed[canonicalFieldKey(key)] = value;
   }
   const missing = new Set<string>();
   const missingSubjectFields = new Set<string>();
   const missingBodyFields = new Set<string>();
   const render = (source: string, missingPart: Set<string>) => {
     validateMerge(source, customKeys);
-    return source.replace(
+    return normalizeFieldCodes(source).replace(
       /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
       (_all, key: string) => {
         if (!computed[key]?.trim()) {
@@ -336,6 +351,12 @@ export async function renderInDb(
   };
   const subject = render(template.subject, missingSubjectFields),
     body = render(template.body, missingBodyFields);
+  if (/[\r\n]/.test(subject) || subject.length > 998)
+    throw new HttpError(
+      422,
+      "INVALID_MERGED_SUBJECT",
+      "A subject field must fit on one line of at most 998 characters. Put multiline fields in the email body.",
+    );
   if (missing.size && !allowUnresolved && matter.checklistVersion === null)
     throw new HttpError(
       422,
@@ -345,6 +366,17 @@ export async function renderInDb(
   return {
     subject,
     body,
+    previewFingerprint: createHash("sha256")
+      .update(
+        JSON.stringify([
+          template.id,
+          template.revision,
+          subject,
+          body,
+          [...missing],
+        ]),
+      )
+      .digest("hex"),
     templateId: template.id,
     templateRevision: template.revision,
     missingFields: [...missing],
@@ -424,6 +456,7 @@ export async function refreshTemplateDrafts(
             subject: generated.subject,
             body: generated.body,
           },
+          templatePreviewFingerprint: generated.previewFingerprint,
           subjectOverride,
           bodyOverride,
           reviewNeeded:
@@ -515,6 +548,7 @@ export async function resetTemplate(
             subject: generated.subject,
             body: generated.body,
           },
+          templatePreviewFingerprint: generated.previewFingerprint,
           subjectOverride: subject !== generated.subject,
           bodyOverride: body !== generated.body,
           reviewNeeded: preserveWording || !!generated.missingFields.length,

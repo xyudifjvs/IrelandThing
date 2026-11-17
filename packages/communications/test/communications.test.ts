@@ -745,7 +745,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
           where: { id: initial.id },
         })
       ).body,
-    ).toContain("closingDate");
+    ).toContain("closing_date");
     expect(
       (
         await service.renderTemplate(owner, next.id, {
@@ -848,7 +848,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     });
     expect(
       (await service.availableMergeFields(owner, matter.id)).find(
-        (f) => f.key === "date_custom_review",
+        (f) => f.key === "custom_review_date",
       )?.value,
     ).toBeNull();
     await updateDeadline(owner, matter.id, custom.id, {
@@ -865,7 +865,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     const rendered = await service.renderTemplate(owner, template.id, {
       matterId: matter.id,
     });
-    expect(rendered.body).toContain("2026-12-18");
+    expect(rendered.body).toContain("12/18/26");
     const draft = await service.createDraft(owner, {
       matterId: matter.id,
       to: [lenderEmail],
@@ -882,7 +882,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     let refreshed = await prisma.emailDraft.findUniqueOrThrow({
       where: { id: draft.id },
     });
-    expect(refreshed.subject).toBe("Closing 2026-12-25");
+    expect(refreshed.subject).toBe("Closing 12/25/26");
     custom = await prisma.deadline.findUniqueOrThrow({
       where: { id: custom.id },
     });
@@ -894,7 +894,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     refreshed = await prisma.emailDraft.findUniqueOrThrow({
       where: { id: draft.id },
     });
-    expect(refreshed.body).toContain("2026-12-23");
+    expect(refreshed.body).toContain("12/23/26");
     await service.updateDraft(owner, draft.id, {
       expectedRevision: refreshed.revision,
       body: "Manually edited: preserve this wording",
@@ -914,7 +914,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     const reset = await service.resetTemplate(owner, draft.id, {
       expectedRevision: refreshed.revision,
     });
-    expect(reset.body).toContain("2026-12-23");
+    expect(reset.body).toContain("12/23/26");
     const approved = await service.queueSend(owner, draft.id, {
       revision: reset.revision,
       confirmed: true,
@@ -926,7 +926,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     expect(
       (await prisma.emailDraft.findUniqueOrThrow({ where: { id: draft.id } }))
         .subject,
-    ).toBe("Closing 2026-12-30");
+    ).toBe("Closing 12/30/26");
     await expect(
       jobs["gmail.send"]({
         draftId: draft.id,
@@ -941,7 +941,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
     });
     expect(
       (await service.availableMergeFields(owner, matter.id)).find(
-        (f) => f.key === "closingDate",
+        (f) => f.key === "closing_date",
       )?.status,
     ).toBe("ambiguous");
   });

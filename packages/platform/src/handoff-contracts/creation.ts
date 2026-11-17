@@ -51,6 +51,22 @@ export const transactionFactsSchema = z
       .max(Number.MAX_SAFE_INTEGER)
       .nullable(),
     acceptance: dateValueSchema.nullable(),
+    earnestMoneyCents: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(10000000000)
+      .nullable()
+      .optional(),
+    earnestMoneyHolder: z.string().trim().max(300).optional(),
+    homeWarrantyCents: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(10000000000)
+      .nullable()
+      .optional(),
+    homeWarrantyCompany: z.string().trim().max(300).optional(),
     deadlineTimeZone: z
       .string()
       .trim()

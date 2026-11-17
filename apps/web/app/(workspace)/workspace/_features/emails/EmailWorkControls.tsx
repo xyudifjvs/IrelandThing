@@ -12,7 +12,7 @@ const easternDate = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-function tomorrow() {
+export function tomorrow() {
   const parts = Object.fromEntries(
     easternDate
       .formatToParts(new Date())

@@ -18,6 +18,7 @@ import {
 import type { CommunicationsService } from "./service";
 import { finishSentWork, requireEmailWorkFile } from "./email-work";
 import { recordSentDirectoryContacts } from "./directory-history";
+import { validateAuthoredMergeFields } from "./render-email-fields";
 
 export async function queueSend(
   this: CommunicationsService,
@@ -49,6 +50,13 @@ export async function queueSend(
     assertReviewedMatter(matter);
     await requireEmailWorkFile(tx, actor, matter.id);
     const details = asRecord(old.details);
+    if (!old.subject.trim() || !old.body.trim() || !textArray(old.to).length)
+      throw new HttpError(
+        422,
+        "INCOMPLETE_EMAIL",
+        "Add a subject, message and To recipient before sending.",
+      );
+    await validateAuthoredMergeFields(actor, old, tx);
     if (details.templateNeedsRebind === true)
       throw new HttpError(
         409,

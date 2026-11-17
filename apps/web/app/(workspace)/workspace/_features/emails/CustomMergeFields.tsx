@@ -40,7 +40,9 @@ export function CustomMergeFields() {
           <div>
             <strong>{field.label}</strong> · <code>{`{{${field.key}}}`}</code>
             <p className={s.tiny}>
-              {field.defaultValue || "Fill in for each email"}
+              <span style={{ whiteSpace: "pre-wrap" }}>
+                {field.defaultValue || "Fill in for each email"}
+              </span>
             </p>
           </div>
           <button
@@ -77,7 +79,7 @@ export function CustomMergeFields() {
                 : {
                     label,
                     defaultValue,
-                    key: `custom_${String(values.get("key") || "").trim()}`,
+                    key: String(values.get("key") || "").trim(),
                   },
               editing ? "PATCH" : "POST",
             );
@@ -123,13 +125,14 @@ export function CustomMergeFields() {
                   className={s.input}
                   name="key"
                   required
-                  pattern="[a-z][a-z0-9_]{0,63}"
-                  maxLength={64}
+                  pattern="[a-z][a-z0-9_]{0,79}"
+                  maxLength={80}
                   placeholder="closing_instructions"
                 />
                 <small>
                   Letters, numbers, and underscores. Example code:{" "}
-                  {"{{custom_closing_instructions}}"}
+                  {"{{closing_instructions}}"}. Your key is used exactly as
+                  entered.
                 </small>
               </label>
             )}

@@ -403,7 +403,7 @@ it("copies confirmed aliases to checklist and email fields, preserves manual edi
  await prisma.$transaction(tx=>recalculateWorkflow(tx,owner,matter.id));
  expect((await getMatter(owner,matter.id)).tasks.find(t=>t.id===task.id)?.dueDate).toBe("2026-12-10");
  expect((await getMatter(agent,matter.id)).tasks.find(t=>t.id===task.id)?.dueDate).toBeNull();
- expect(await mergeFields(owner,matter.id)).toEqual(expect.arrayContaining([expect.objectContaining({key:"closingDate",value:"2026-12-10"})]));
+ expect(await mergeFields(owner,matter.id)).toEqual(expect.arrayContaining([expect.objectContaining({key:"closing_date",value:"12/10/26"})]));
  const saved=await prisma.task.findUniqueOrThrow({where:{id:task.id}});
  await updateTask(owner,matter.id,task.id,{expectedRevision:saved.revision,dueDate:"2026-12-12",note:"Coordinator confirmed the appointment.",appointmentAt:"2026-12-12T15:00:00Z"});
  expect((await getMatter(owner,matter.id)).tasks.find(t=>t.id===task.id)).toMatchObject({note:"Coordinator confirmed the appointment.",appointmentAt:"2026-12-12T15:00:00Z"});

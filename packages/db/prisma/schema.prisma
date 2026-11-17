@@ -541,6 +541,47 @@ model CustomMergeField {
   updatedAt    DateTime @default(now()) @updatedAt
 }
 
+// Coordinator-created source bindings; one public code per field.
+model MergeFieldDefinition {
+  key       String   @id
+  label     String
+  side      String   @default("both")
+  source    Json
+  revision  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MergeFieldSettings {
+  ownerId   String   @id
+  name      String   @default("")
+  signature String   @default("")
+  reviewLink String  @default("")
+  revision  Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+// Shared company instructions are keyed by an exact normalized company name.
+model CompanyMergeProfile {
+  kind           String
+  normalizedName String
+  name           String
+  text           String   @default("")
+  revision       Int      @default(1)
+  updatedAt      DateTime @updatedAt
+
+  @@id([kind, normalizedName])
+}
+
+// Preserve the exact original wording before normalizing old field codes.
+model MergeFieldTemplateBackup {
+  templateId String @id
+  subject    String
+  body       String
+  revision   Int
+  createdAt  DateTime @default(now())
+}
+
 model CommunicationTemplate {
   serviceGroup String?
   id        String   @id @default(cuid())
@@ -831,6 +872,7 @@ model EmailWork {
   remindOn            String?
   manualCompletedAt   DateTime?
   manualCompletedById String?
+  checkedOverride     Boolean?
   revision            Int                    @default(1)
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt

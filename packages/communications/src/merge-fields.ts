@@ -1,6 +1,10 @@
 import { prisma, Prisma } from "@weatherly/db";
 import { type Principal } from "@weatherly/platform";
-import { requireMatter, approvedWorkflowTaskDates, canonicalDeadlineLabel } from "@weatherly/matters";
+import {
+  requireMatter,
+  approvedWorkflowTaskDates,
+  canonicalDeadlineLabel,
+} from "@weatherly/matters";
 import { asRecord } from "./policy";
 import { contactMergeFields } from "./contact-fields";
 import { canonicalMergeFields } from "./canonical-merge-fields";
@@ -27,16 +31,17 @@ const aliases: Record<string, string[]> = {
   appraisalDate: ["appraisal", "appraisal_completed"],
   loanCommitmentDate: ["loan_commitment", "financing_commitment"],
 };
-export async function mergeFields(
+export async function legacyMergeFields(
   actor: Principal,
   matterId: string,
   db: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
   const matter = await requireMatter(actor, matterId, false, db);
-  if (matter.checklistVersion !== null) return canonicalMergeFields(actor, matter, db);
+  if (matter.checklistVersion !== null)
+    return canonicalMergeFields(actor, matter, db);
   const deadlines = await db.deadline.findMany({ where: { matterId } });
   const rawTasks = await db.task.findMany({ where: { matterId } });
-  const tasks=approvedWorkflowTaskDates(rawTasks,deadlines,matter.details);
+  const tasks = approvedWorkflowTaskDates(rawTasks, deadlines, matter.details);
   const agent = matter.agentId
     ? await db.user.findUnique({ where: { id: matter.agentId } })
     : null;
@@ -78,9 +83,14 @@ export async function mergeFields(
     {
       key: "packageName",
       label: "Service package",
-      value: typeof asRecord(details.serviceSnapshot).name === "string"
-        ? String(asRecord(details.serviceSnapshot).name)
-        : ({essentials:"Contract to Close",complete:"Contract to Close + Compliance",full_listing:"Full Listing"}[matter.packageCode] || matter.packageCode),
+      value:
+        typeof asRecord(details.serviceSnapshot).name === "string"
+          ? String(asRecord(details.serviceSnapshot).name)
+          : {
+              essentials: "Contract to Close",
+              complete: "Contract to Close + Compliance",
+              full_listing: "Full Listing",
+            }[matter.packageCode] || matter.packageCode,
       status: "confirmed",
       sourceIds: [matter.id],
     },
@@ -125,7 +135,14 @@ export async function mergeFields(
     add(
       key,
       key,
-      deadlines.filter((d) => labels.includes(normalize(d.label)) || labels.some(value => canonicalDeadlineLabel(value) === canonicalDeadlineLabel(d.label))),
+      deadlines.filter(
+        (d) =>
+          labels.includes(normalize(d.label)) ||
+          labels.some(
+            (value) =>
+              canonicalDeadlineLabel(value) === canonicalDeadlineLabel(d.label),
+          ),
+      ),
     );
   for (const d of deadlines)
     add(
@@ -181,14 +198,58 @@ export async function mergeFields(
       } else if (dates.length > 1) f.status = "ambiguous";
     }
   }
-  const confirmed=asRecord(details.confirmedFacts);
+  const confirmed = asRecord(details.confirmedFacts);
   fields.push(...contactMergeFields(details, matter.id));
-  const corrected=(keys:string[])=>{for(const key of keys)if(typeof confirmed[key]==='string'&&String(confirmed[key]).trim())return String(confirmed[key]);return null;};
-  for(const [key,sourceKeys] of Object.entries({propertyAddress:['property_address'],clientNames:[matter.side==='buyer'?'buyer_name':'seller_name','client_name']})){
-    const value=corrected(sourceKeys);const target=fields.find(f=>f.key===key);if(value&&target){target.value=value;target.status='confirmed';target.sourceIds=[matter.id];}
+  const corrected = (keys: string[]) => {
+    for (const key of keys)
+      if (typeof confirmed[key] === "string" && String(confirmed[key]).trim())
+        return String(confirmed[key]);
+    return null;
+  };
+  for (const [key, sourceKeys] of Object.entries({
+    propertyAddress: ["property_address"],
+    clientNames: [
+      matter.side === "buyer" ? "buyer_name" : "seller_name",
+      "client_name",
+    ],
+  })) {
+    const value = corrected(sourceKeys);
+    const target = fields.find((f) => f.key === key);
+    if (value && target) {
+      target.value = value;
+      target.status = "confirmed";
+      target.sourceIds = [matter.id];
+    }
   }
-  const price=corrected(['purchase_price']);fields.push({key:'purchasePrice',label:'Purchase price',value:price,status:price?'confirmed':'unknown',sourceIds:price?[matter.id]:[]});
-  for(const [alias,key] of Object.entries({client_name:'clientNames',clientName:'clientNames',client_names:'clientNames',property_address:'propertyAddress',purchase_price:'purchasePrice'})){const field=fields.find(f=>f.key===key);if(field)fields.push({...field,key:alias});}
-  if(matter.stage==="pending_review"||asRecord(details.fileReview).status==="pending"||Array.isArray(details.sourceConflicts)&&details.sourceConflicts.length)return fields.map(f=>({...f,value:null,status:'ambiguous' as const}));
+  const price = corrected(["purchase_price"]);
+  fields.push({
+    key: "purchasePrice",
+    label: "Purchase price",
+    value: price,
+    status: price ? "confirmed" : "unknown",
+    sourceIds: price ? [matter.id] : [],
+  });
+  for (const [alias, key] of Object.entries({
+    client_name: "clientNames",
+    clientName: "clientNames",
+    client_names: "clientNames",
+    property_address: "propertyAddress",
+    purchase_price: "purchasePrice",
+  })) {
+    const field = fields.find((f) => f.key === key);
+    if (field) fields.push({ ...field, key: alias });
+  }
+  if (
+    matter.stage === "pending_review" ||
+    asRecord(details.fileReview).status === "pending" ||
+    (Array.isArray(details.sourceConflicts) && details.sourceConflicts.length)
+  )
+    return fields.map((f) => ({
+      ...f,
+      value: null,
+      status: "ambiguous" as const,
+    }));
   return fields;
 }
+
+export { resolveMergeFields as mergeFields } from "./field-values";

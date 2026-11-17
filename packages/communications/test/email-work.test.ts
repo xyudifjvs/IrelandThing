@@ -166,7 +166,7 @@ it("uses keyed dates and immutable file contacts for editable blank merge values
     matterId,
   });
   expect(rendered.body).toBe("Closing date . Thank you.");
-  expect(rendered.missingBodyFields).toEqual(["closingDate"]);
+  expect(rendered.missingBodyFields).toEqual(["closing_date"]);
   await prisma.task.create({
     data: {
       matterId,
@@ -177,10 +177,10 @@ it("uses keyed dates and immutable file contacts for editable blank merge values
     },
   });
   const fields = await mergeFields(owner, matterId);
-  expect(fields.find(({ key }) => key === "closingDate")?.value).toBe(
-    "2027-02-03",
+  expect(fields.find(({ key }) => key === "closing_date")?.value).toBe(
+    "2/3/27",
   );
-  expect(fields.find(({ key }) => key === "purchasePrice")?.value).toBe(
+  expect(fields.find(({ key }) => key === "purchase_price")?.value).toBe(
     "$123,456.78",
   );
   const draft = await service.createDraft(owner, {

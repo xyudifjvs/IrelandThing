@@ -96,6 +96,18 @@ export function suggestFacts(
       ? { purchasePriceCents: proposal.purchasePriceCents.value }
       : {}),
     ...(proposal?.acceptance ? { acceptance: proposal.acceptance.value } : {}),
+    ...(proposal?.earnestMoneyCents
+      ? { earnestMoneyCents: proposal.earnestMoneyCents.value }
+      : {}),
+    ...(proposal?.earnestMoneyHolder
+      ? { earnestMoneyHolder: proposal.earnestMoneyHolder.value }
+      : {}),
+    ...(proposal?.homeWarrantyCents
+      ? { homeWarrantyCents: proposal.homeWarrantyCents.value }
+      : {}),
+    ...(proposal?.homeWarrantyCompany
+      ? { homeWarrantyCompany: proposal.homeWarrantyCompany.value }
+      : {}),
     ...facts,
   };
 }

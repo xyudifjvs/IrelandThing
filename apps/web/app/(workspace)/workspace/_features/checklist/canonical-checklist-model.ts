@@ -33,6 +33,14 @@ export type ChecklistTaskRecord = Task & {
     appointmentPlace?: string;
     note?: string;
     showNoteToAgent?: boolean;
+    dateWording?: string;
+    amountCents?: number | null;
+    holder?: string;
+    company?: string;
+    earnestMoneyCents?: number | null;
+    earnestMoneyHolder?: string;
+    homeWarrantyCents?: number | null;
+    homeWarrantyCompany?: string;
   };
 };
 
@@ -72,7 +80,9 @@ export function editableRemediesDate(
   const anchors = matter.details?.checklistDateAnchors;
   if (!Array.isArray(anchors)) return;
   const remedies = anchors.find(
-    (anchor: unknown): anchor is { key: string; status: string; due: unknown } =>
+    (
+      anchor: unknown,
+    ): anchor is { key: string; status: string; due: unknown } =>
       !!anchor &&
       typeof anchor === "object" &&
       "key" in anchor &&

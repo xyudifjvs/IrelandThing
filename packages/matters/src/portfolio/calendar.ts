@@ -72,7 +72,7 @@ export async function listPortfolioDue(
     dependencies.listEmailWork(actor, { through }),
   ]);
   const emailEvents = work.flatMap((item): PortfolioMilestone[] =>
-    item.toSend && item.remindOn && item.remindOn <= through
+    item.toSend && item.remindOn && item.remindOn <= today
       ? [
           {
             id: item.id,

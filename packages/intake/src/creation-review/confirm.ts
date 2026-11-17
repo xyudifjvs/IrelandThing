@@ -190,6 +190,44 @@ export async function confirmCreationReview(
         dates,
       });
       await dependencies.seedPeople(tx, actor, matter.id, people);
+      for (const [keys, amountCents, company] of [
+        [
+          ["earnest_money_due"],
+          facts.earnestMoneyCents,
+          facts.earnestMoneyHolder,
+        ],
+        [
+          ["home_warranty", "home_warranty_ordered"],
+          facts.homeWarrantyCents,
+          facts.homeWarrantyCompany,
+        ],
+      ] as const) {
+        if (amountCents == null && !company) continue;
+        const step = await tx.task.findFirst({
+          where: { matterId: matter.id, stepKey: { in: [...keys] } },
+        });
+        if (!step) continue;
+        const old =
+          step.details &&
+          typeof step.details === "object" &&
+          !Array.isArray(step.details)
+            ? step.details
+            : {};
+        await tx.task.update({
+          where: { id: step.id },
+          data: {
+            details: {
+              ...old,
+              ...(amountCents != null ? { amountCents } : {}),
+              ...(company
+                ? keys[0] === "earnest_money_due"
+                  ? { holder: company }
+                  : { company }
+                : {}),
+            },
+          },
+        });
+      }
       await attachReviewDocuments(tx, review, matter.id);
       if (pending) {
         await tx.intakeSubmission.update({

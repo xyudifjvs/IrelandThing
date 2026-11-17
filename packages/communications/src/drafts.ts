@@ -15,6 +15,7 @@ import {
 } from "./policy";
 import type { CommunicationsService } from "./service";
 import { ensureTemplateWork, requireEmailWorkFile } from "./email-work";
+import { renderEmailFields } from "./render-email-fields";
 
 export async function listDrafts(
   actor: Principal,
@@ -82,14 +83,54 @@ export async function createDraft(
         "Render the current template before saving",
       );
   }
-  const rendered = data.templateId
-    ? await this.renderInDb(actor, data.templateId, {
-        matterId: data.matterId,
-        values: data.templateValues || {},
-      })
-    : null;
   return prisma.$transaction(async (tx) => {
     const matter = await requireMatter(actor, data.matterId, true, tx);
+    const rendered = data.templateId
+      ? await this.renderInDb(
+          actor,
+          data.templateId,
+          {
+            matterId: data.matterId,
+            values: data.templateValues || {},
+          },
+          tx,
+          data.saveForLater === true,
+        )
+      : null;
+    if (
+      rendered &&
+      data.templatePreviewFingerprint &&
+      rendered.previewFingerprint !== data.templatePreviewFingerprint
+    )
+      throw new HttpError(
+        409,
+        "SOURCE_PREVIEW_CHANGED",
+        "Template fields changed after the displayed preview. Refill the template and review it before saving or sending.",
+      );
+
+    const hasFields = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(
+      data.subject + data.body,
+    );
+    const filled = hasFields
+      ? await renderEmailFields(
+          actor,
+          matter.id,
+          data.subject,
+          data.body,
+          tx,
+          data.templateValues,
+        )
+      : null;
+    if (
+      filled &&
+      data.fieldPreviewFingerprint &&
+      data.fieldPreviewFingerprint !== filled.fingerprint
+    )
+      throw new HttpError(
+        409,
+        "SOURCE_PREVIEW_CHANGED",
+        "Fields changed after the displayed preview. Review the refreshed preview before saving or sending.",
+      );
     const recipients = await recipientPolicy(
       actor,
       matter.id,
@@ -106,7 +147,7 @@ export async function createDraft(
       },
     );
     let workItemId: string | null = null;
-    if (recipients.matter.checklistVersion !== null) {
+    if (recipients.matter.checklistVersion !== null || data.saveForLater) {
       const current = await requireEmailWorkFile(tx, actor, matter.id);
       const work = data.templateId
         ? await ensureTemplateWork(tx, current, data.templateId)
@@ -123,16 +164,25 @@ export async function createDraft(
         createdById: actor.id,
         to: recipients.to,
         cc: recipients.cc,
-        subject: data.subject,
-        body: data.body,
+        subject: filled?.subject ?? data.subject,
+        body: filled?.body ?? data.body,
         attachmentIds: data.attachmentIds,
         status: "draft",
         details: {
+          authoredMerge: filled
+            ? {
+                subjectSource: data.subject,
+                bodySource: data.body,
+                fingerprint: filled.fingerprint,
+                values: data.templateValues || {},
+              }
+            : null,
           recipientEvidence: recipients.recipientEvidence,
           formerRecipientEvidence: recipients.formerRecipientEvidence,
           knownRecipients: recipients.knownRecipients,
           templateId: data.templateId || null,
           templateRevision: data.templateRevision || null,
+          templatePreviewFingerprint: rendered?.previewFingerprint ?? null,
           templateValues: data.templateValues || {},
           templateSnapshot: rendered
             ? { subject: rendered.subject, body: rendered.body }
@@ -143,6 +193,18 @@ export async function createDraft(
         },
       },
     });
+    if (data.saveForLater && workItemId)
+      await tx.emailWork.update({
+        where: { id: workItemId },
+        data: {
+          laterAt: new Date(),
+          remindOn: data.remindOn ?? null,
+          manualCompletedAt: null,
+          manualCompletedById: null,
+          checkedOverride: false,
+          revision: { increment: 1 },
+        },
+      });
     await audit(
       tx,
       actor,
@@ -162,18 +224,31 @@ export async function updateDraft(
   input: unknown,
 ) {
   assertCoordinator(actor);
-  const { expectedRevision, ...patch } = z
+  const {
+    expectedRevision,
+    saveForLater,
+    remindOn,
+    fieldPreviewFingerprint,
+    enteredRecipients,
+    ...patch
+  } = z
     .object({
       expectedRevision: revision,
-      to: recipientArray.min(1).optional(),
+      to: recipientArray.optional(),
+      enteredRecipients: z.array(z.email()).max(80).optional(),
+      saveForLater: z.boolean().optional(),
+      remindOn: z.iso.date().nullable().optional(),
+      fieldPreviewFingerprint: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       cc: recipientArray.optional(),
       subject: z
         .string()
-        .min(1)
         .max(998)
         .refine((v) => !/[\r\n]/.test(v))
         .optional(),
-      body: z.string().min(1).max(100000).optional(),
+      body: z.string().max(100000).optional(),
       attachmentIds: z.array(z.string()).max(20).optional(),
     })
     .strict()
@@ -191,13 +266,66 @@ export async function updateDraft(
     if (file.checklistVersion !== null)
       await requireEmailWorkFile(tx, actor, old.matterId);
     const details = asRecord(old.details);
+    let workItemId = old.workItemId;
+    if (saveForLater && !workItemId) {
+      await requireEmailWorkFile(tx, actor, file.id);
+      const work =
+        typeof details.templateId === "string"
+          ? await ensureTemplateWork(tx, file, details.templateId)
+          : await tx.emailWork.create({
+              data: { matterId: file.id },
+              select: { id: true },
+            });
+      workItemId = work.id;
+    }
+    const subjectSource = patch.subject ?? old.subject,
+      bodySource = patch.body ?? old.body;
+    const hasFields = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(
+      subjectSource + bodySource,
+    );
+    const templateValues = Object.fromEntries(
+      Object.entries(asRecord(details.templateValues)).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
+    const filled = hasFields
+      ? await renderEmailFields(
+          actor,
+          old.matterId,
+          subjectSource,
+          bodySource,
+          tx,
+          templateValues,
+        )
+      : null;
+    if (
+      filled &&
+      fieldPreviewFingerprint &&
+      fieldPreviewFingerprint !== filled.fingerprint
+    )
+      throw new HttpError(
+        409,
+        "SOURCE_PREVIEW_CHANGED",
+        "Fields changed after the displayed preview. Review the refreshed preview before saving or sending.",
+      );
+    if (
+      !saveForLater &&
+      (!subjectSource.trim() ||
+        !bodySource.trim() ||
+        !(patch.to ?? textArray(old.to)).length)
+    )
+      throw new HttpError(
+        422,
+        "INCOMPLETE_EMAIL",
+        "Add a subject, message and To recipient, or save this email for later.",
+      );
     const recipients = await recipientPolicy(
       actor,
       old.matterId,
       patch.to || textArray(old.to),
       patch.cc || textArray(old.cc),
       tx,
-      { saved: details.formerRecipientEvidence },
+      { saved: details.formerRecipientEvidence, entered: enteredRecipients },
     );
     const removedRecipients = textArray(details.knownRecipients);
     if (
@@ -214,10 +342,24 @@ export async function updateDraft(
       where: { id, revision: expectedRevision, status: "draft" },
       data: {
         ...patch,
+        ...(workItemId ? { workItemId } : {}),
+        ...(filled ? { subject: filled.subject, body: filled.body } : {}),
         to: recipients.to,
         cc: recipients.cc,
         details: {
           ...details,
+          ...(patch.subject !== undefined || patch.body !== undefined
+            ? {
+                authoredMerge: filled
+                  ? {
+                      subjectSource,
+                      bodySource,
+                      fingerprint: filled.fingerprint,
+                      values: templateValues,
+                    }
+                  : null,
+              }
+            : {}),
           recipientEvidence: recipients.recipientEvidence,
           formerRecipientEvidence: recipients.formerRecipientEvidence,
           knownRecipients: recipients.knownRecipients,
@@ -232,6 +374,18 @@ export async function updateDraft(
         "REVISION_CONFLICT",
         "Draft changed or is already queued/sent",
       );
+    if (saveForLater && workItemId)
+      await tx.emailWork.update({
+        where: { id: workItemId },
+        data: {
+          laterAt: new Date(),
+          remindOn: remindOn ?? null,
+          manualCompletedAt: null,
+          manualCompletedById: null,
+          checkedOverride: false,
+          revision: { increment: 1 },
+        },
+      });
     await audit(
       tx,
       actor,

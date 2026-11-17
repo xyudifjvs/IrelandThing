@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { Mail, Save } from "lucide-react";
+import { Mail, Save, Send } from "lucide-react";
 import { useData, mutate, label, type Matter } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import MatterPicker from "../../_components/MatterPicker";
-import type { Draft, FileEmailMessage, Template } from "./email-model";
+import type {
+  Draft,
+  EmailWork,
+  FileEmailMessage,
+  Template,
+} from "./email-model";
 import {
   defaultEmailRecipients,
   emailRoleFamily,
@@ -13,8 +18,8 @@ import {
   type EmailRecipient,
 } from "./recipient-defaults";
 import { ComposerTemplateFields } from "./ComposerTemplateFields";
-import { DraftApproval } from "./DraftApproval";
-import { EmailWorkControls } from "./EmailWorkControls";
+import { AvailableFieldCodes } from "./AvailableFieldCodes";
+import { tomorrow } from "./EmailWorkControls";
 import {
   addresses,
   AddEmailRecipientToDeal,
@@ -49,6 +54,7 @@ export function Composer({
     id: string;
     revision: number;
     recipientName: string;
+    previewFingerprint?: string;
     customValues: Record<string, string>;
   } | null>(null);
   const [matter, setMatter] = useState(fixedMatterId || "");
@@ -62,6 +68,20 @@ export function Composer({
   const drafts = useData<Draft[]>(
     `/api/v1/communications/drafts${matter ? "?matterId=" + encodeURIComponent(matter) : ""}`,
   );
+  const work = useData<EmailWork[]>(
+    matter
+      ? `/api/v1/communications/work?matterId=${encodeURIComponent(matter)}&view=all`
+      : null,
+  );
+  const [remindOn, setRemindOn] = useState("");
+  const [preview, setPreview] = useState<{
+    key: string;
+    subject: string;
+    body: string;
+    missingFields: string[];
+    fingerprint?: string;
+  } | null>(null);
+  const [previewError, setPreviewError] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [replyToMessageId, setReplyToMessageId] = useState(initialReply?.id);
   const [to, setTo] = useState(initialReply?.fromEmail ?? ""),
@@ -82,6 +102,55 @@ export function Composer({
     [confirmed, setConfirmed] = useState(false),
     [template, setTemplate] = useState(initialTemplateId || ""),
     [recipientName, setRecipientName] = useState("");
+  const previewKey = JSON.stringify([matter, subject, body, customValues]);
+  useEffect(() => {
+    if (!matter) {
+      setPreview(null);
+      return;
+    }
+    let current = true;
+    setPreviewError("");
+    if (!/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(subject + body)) {
+      setPreview({ key: previewKey, subject, body, missingFields: [] });
+      return;
+    }
+    const timer = setTimeout(() => {
+      void mutate<{
+        subject: string;
+        body: string;
+        missingFields: string[];
+        fingerprint: string;
+      }>("/api/v1/communications/render-fields", {
+        matterId: matter,
+        subject,
+        body,
+        values: customValues,
+      })
+        .then((filled) => {
+          if (current) setPreview({ key: previewKey, ...filled });
+        })
+        .catch((failure) => {
+          if (current) {
+            setPreview(null);
+            setPreviewError((failure as Error).message);
+          }
+        });
+    }, 250);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [matter, subject, body, customValues, previewKey]);
+  const reminderLoaded = useRef("");
+  useEffect(() => {
+    if (!draft?.workItemId || !work.data || reminderLoaded.current === draft.id)
+      return;
+    const saved = work.data.find((item) => item.id === draft.workItemId);
+    if (saved) {
+      setRemindOn(saved.remindOn || "");
+      reminderLoaded.current = draft.id;
+    }
+  }, [draft, work.data]);
   const customValuesChanged =
     !!binding &&
     JSON.stringify(binding.customValues) !== JSON.stringify(customValues);
@@ -123,6 +192,24 @@ export function Composer({
       person.email &&
       (!throughAgent || emailRoleFamily(person.role ?? "") !== "client"),
   );
+  const clientEmails = [...canonicalPeople, ...legacyPeople]
+    .filter((person) => emailRoleFamily(person.role ?? "") === "client")
+    .map((person) => person.email?.toLowerCase())
+    .filter(Boolean)
+    .join(",");
+  useEffect(() => {
+    if (throughAgent || !servingAgent?.email) return;
+    const selected = addresses(to + "," + cc),
+      clients = addresses(clientEmails);
+    if (
+      !clients.some((email) => selected.includes(email)) ||
+      selected.includes(servingAgent.email.toLowerCase())
+    )
+      return;
+    setCc(addresses(cc + "," + servingAgent.email).join(", "));
+    setDirty(true);
+    setConfirmed(false);
+  }, [to, cc, clientEmails, throughAgent, servingAgent?.email]);
   const existingEmails = new Set(
     [
       ...canonicalPeople.map((person) => person.email),
@@ -204,17 +291,13 @@ export function Composer({
       setDirty(false);
     }
     setDraft(d);
-    const savedCustomValues = Object.fromEntries(
-      Object.entries(d.details?.templateValues ?? {}).filter(([key]) =>
-        key.startsWith("custom_"),
-      ),
-    );
+    const savedCustomValues = { ...(d.details?.templateValues ?? {}) };
     setCustomValues(savedCustomValues);
     setReplyToMessageId(undefined);
     setMatter(d.matterId);
     setNewPersonEmail("");
-    setSubject(d.subject);
-    setBody(d.body);
+    setSubject(d.details?.authoredMerge?.subjectSource ?? d.subject);
+    setBody(d.details?.authoredMerge?.bodySource ?? d.body);
     setTemplate(d.details?.templateId || "");
     setRecipientName(d.details?.templateValues?.recipientName || "");
     setBinding(
@@ -222,6 +305,7 @@ export function Composer({
         ? {
             id: d.details.templateId,
             revision: d.details.templateRevision,
+            previewFingerprint: d.details.templatePreviewFingerprint,
             recipientName: d.details.templateValues?.recipientName || "",
             customValues: savedCustomValues,
           }
@@ -265,6 +349,7 @@ export function Composer({
       templateId: string;
       templateRevision: number;
       missingFields?: string[];
+      previewFingerprint: string;
     }>(`/api/v1/communications/templates/${initialTemplateId}/render`, {
       matterId: fixedMatterId,
       values: defaultRecipientName
@@ -281,6 +366,7 @@ export function Composer({
         setBinding({
           id: rendered.templateId,
           revision: rendered.templateRevision,
+          previewFingerprint: rendered.previewFingerprint,
           recipientName: defaultRecipientName,
           customValues: {},
         });
@@ -321,6 +407,7 @@ export function Composer({
       people,
       next.recipientRoles ?? [],
       detail.data?.details?.directContact,
+      detail.data?.side,
     );
     edit(setTo, recipients.map(({ email }) => email).join(", "));
     setRecipientName(recipientGreeting(recipients));
@@ -359,6 +446,7 @@ export function Composer({
         templateId: string;
         templateRevision: number;
         missingFields: string[];
+        previewFingerprint: string;
       }>(`/api/v1/communications/templates/${template}/render`, {
         matterId: matter,
         values: {
@@ -371,6 +459,7 @@ export function Composer({
       setBinding({
         id: result.templateId,
         revision: result.templateRevision,
+        previewFingerprint: result.previewFingerprint,
         recipientName,
         customValues: { ...customValues },
       });
@@ -388,7 +477,7 @@ export function Composer({
     }
   }
 
-  async function save() {
+  async function save(sendNow = false) {
     if (busyRef.current) return;
     if (draft && customValuesChanged) {
       setError(
@@ -408,14 +497,33 @@ export function Composer({
       );
       return;
     }
+    if (
+      sendNow &&
+      (!confirmed ||
+        !preview ||
+        preview.key !== previewKey ||
+        preview.missingFields.length ||
+        !preview.subject.trim() ||
+        !preview.body.trim() ||
+        !addresses(to).length)
+    ) {
+      setError(
+        "Review the filled preview and complete the recipients and message before sending.",
+      );
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
     try {
       const values = {
-        ...(draft
-          ? {}
-          : { matterId: matter, enteredRecipients: enteredRecipients.current }),
+        saveForLater: !sendNow,
+        ...(!sendNow ? { remindOn: remindOn || null } : {}),
+        ...(preview?.key === previewKey && preview.fingerprint
+          ? { fieldPreviewFingerprint: preview.fingerprint }
+          : {}),
+        enteredRecipients: enteredRecipients.current,
+        ...(draft ? {} : { matterId: matter }),
         to: addresses(to),
         cc: addresses(cc),
         subject,
@@ -426,6 +534,9 @@ export function Composer({
           ? {
               templateId: binding.id,
               templateRevision: binding.revision,
+              ...(binding.previewFingerprint
+                ? { templatePreviewFingerprint: binding.previewFingerprint }
+                : {}),
               templateValues: {
                 ...binding.customValues,
                 ...(binding.recipientName
@@ -440,11 +551,37 @@ export function Composer({
         draft ? { expectedRevision: draft.revision, ...values } : values,
         draft ? "PATCH" : "POST",
       );
-      loadDraft(saved);
+      if (
+        sendNow &&
+        (JSON.stringify(addresses(saved.to.join(","))) !==
+          JSON.stringify(addresses(to)) ||
+          JSON.stringify(addresses(saved.cc.join(","))) !==
+            JSON.stringify(addresses(cc)))
+      ) {
+        loadDraft(saved);
+        await drafts.refresh();
+        await onWorkChanged?.();
+        setMessage(
+          "The saved contact instructions updated the recipients. Review the displayed recipients and click Send when ready.",
+        );
+        return;
+      }
+      if (sendNow) {
+        // Saving alone never sends; only this explicit Send action queues delivery.
+        setDraft(saved);
+        const queued = await mutate<Draft>(
+          `/api/v1/communications/drafts/${saved.id}/send`,
+          { revision: saved.revision, confirmed: true },
+        );
+        loadDraft(queued);
+      } else loadDraft(saved);
+      await work.refresh();
       await drafts.refresh();
       await onWorkChanged?.();
       setMessage(
-        "Draft saved. Review the recipients, message and attachments before sending.",
+        sendNow
+          ? "Email queued. Delivery status will update in the template list and history."
+          : "Saved for later with your edits. Nothing has been sent.",
       );
     } catch (e) {
       setError((e as Error).message);
@@ -493,52 +630,27 @@ export function Composer({
                 }}
               />
             )}
-            <label className={s.field}>
-              Existing draft
-              <select
-                className={s.select}
-                value={draft?.id || ""}
-                onChange={(e) => {
-                  const selected = drafts.data?.find(
-                    (d) => d.id === e.target.value,
-                  );
-                  if (selected) loadDraft(selected);
-                  else {
-                    setDraft(null);
-                    setReplyToMessageId(undefined);
-                    setTemplate("");
-                    setBinding(null);
-                    setCustomValues({});
-                    setRecipientName("");
-                    setTo("");
-                    setCc("");
-                    enteredRecipients.current = [];
-                    setSubject("");
-                    setBody("");
-                    setAttachments([]);
-                    setDirty(true);
-                  }
-                }}
-              >
-                <option value="">Write a new draft</option>
-                {drafts.data
-                  ?.filter((d) => !["sent", "queued"].includes(d.status))
-                  .map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.subject || "Untitled draft"}
-                    </option>
-                  ))}
-              </select>
-            </label>
           </div>
-          {fixedMatterId && (
-            <EmailWorkControls
-              matterId={fixedMatterId}
-              workItemId={draft?.workItemId}
-              templateId={binding?.id ?? (template || undefined)}
-              refresh={onWorkChanged}
-            />
-          )}
+          {!fixedMatterId &&
+            !!drafts.data?.some((entry) => entry.status === "draft") && (
+              <details style={{ marginTop: 16 }}>
+                <summary>Saved emails</summary>
+                <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                  {drafts.data
+                    .filter((entry) => entry.status === "draft")
+                    .map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className={s.buttonSmall}
+                        onClick={() => loadDraft(entry)}
+                      >
+                        {entry.subject || "Untitled email"}
+                      </button>
+                    ))}
+                </div>
+              </details>
+            )}
           {matter && (
             <ComposerTemplateFields
               matter={matter}
@@ -573,46 +685,12 @@ export function Composer({
                 : "Copy the agent on direct client communication."}
             </p>
           )}
-          {detail.data && (
-            <div style={{ margin: "18px 0" }}>
-              <p className={s.fieldHint}>People saved on this deal</p>
-              <div className={s.formRow} style={{ flexWrap: "wrap" }}>
-                {servingAgent && (
-                  <button
-                    type="button"
-                    className={s.buttonSmall}
-                    onClick={() => {
-                      const previous = throughAgent ? to : cc;
-                      edit(
-                        throughAgent ? setTo : setCc,
-                        addresses(previous + "," + servingAgent.email).join(
-                          ", ",
-                        ),
-                      );
-                    }}
-                  >
-                    {throughAgent ? "To agent · " : "CC agent · "}
-                    {servingAgent.name}
-                  </button>
-                )}
-                {suggestions.map((person, index) => (
-                  <button
-                    type="button"
-                    className={s.buttonSmall}
-                    key={person.email + ":" + index}
-                    onClick={() =>
-                      edit(setTo, addresses(to + "," + person.email).join(", "))
-                    }
-                  >
-                    {person.name || person.email}
-                    {person.role ? " · " + label(person.role) : ""}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className={s.formGrid} key={`recipients:${matter}`}>
+          <div style={{ display: "grid", gap: 0 }} key={`recipients:${matter}`}>
             <RecipientField
+              people={[
+                ...(servingAgent ? [{ ...servingAgent, role: "agent" }] : []),
+                ...suggestions,
+              ]}
               title="To"
               value={to}
               change={(value, entered) =>
@@ -623,7 +701,11 @@ export function Composer({
               searchDirectory={editablePeople}
             />
             <RecipientField
-              title="CC"
+              people={[
+                ...(servingAgent ? [{ ...servingAgent, role: "agent" }] : []),
+                ...suggestions,
+              ]}
+              title="Cc"
               value={cc}
               change={(value, entered) =>
                 changeRecipients("cc", value, entered)
@@ -662,7 +744,7 @@ export function Composer({
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              void save();
+              void save(true);
             }}
           >
             <label className={s.field} style={{ marginTop: 18 }}>
@@ -671,7 +753,6 @@ export function Composer({
                 className={s.input}
                 value={subject}
                 onChange={(e) => edit(setSubject, e.target.value)}
-                required
               />
             </label>
             <label className={s.field} style={{ marginTop: 18 }}>
@@ -681,7 +762,6 @@ export function Composer({
                 style={{ minHeight: 200 }}
                 value={body}
                 onChange={(e) => edit(setBody, e.target.value)}
-                required
               />
             </label>
             {detail.data?.documents?.length ? (
@@ -725,46 +805,133 @@ export function Composer({
                 {message}
               </p>
             )}
-            <button
-              className={s.buttonSecondary}
-              style={{ marginTop: 20 }}
-              disabled={
-                busy ||
-                !matter ||
-                (!!draft && customValuesChanged) ||
-                addresses(to).length === 0 ||
-                (!draft &&
-                  !!template &&
-                  (!binding ||
-                    binding.recipientName !== recipientName ||
-                    JSON.stringify(binding.customValues) !==
-                      JSON.stringify(customValues))) ||
-                ["queued", "sent"].includes(draft?.status || "")
-              }
+            <AvailableFieldCodes />
+            <section
+              aria-label="Filled email preview"
+              style={{
+                marginTop: 18,
+                border: "1px solid var(--line)",
+                padding: 15,
+              }}
             >
-              <Save />
-              {busy ? "Saving…" : "Save reviewed draft"}
-            </button>
+              <h3>Filled preview</h3>
+              {previewError ? (
+                <p className={s.error} role="alert">
+                  {previewError}
+                </p>
+              ) : preview?.key === previewKey ? (
+                <>
+                  <strong>{preview.subject || "No subject yet"}</strong>
+                  <div
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      overflowWrap: "anywhere",
+                      marginTop: 12,
+                    }}
+                  >
+                    {preview.body || "No message yet"}
+                  </div>
+                  {!!preview.missingFields.length && (
+                    <p className={s.error}>
+                      Fill or remove:{" "}
+                      {preview.missingFields
+                        .map((key) => `{{${key}}}`)
+                        .join(", ")}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p role="status">Updating preview…</p>
+              )}
+            </section>
+            {draft?.details?.reviewNeeded && (
+              <p className={s.notice}>
+                The transaction changed. Review the wording, recipients and
+                attachments again.
+                {draft.details.mergeError ? ` ${draft.details.mergeError}` : ""}
+              </p>
+            )}
+            {draft?.details?.sendFailure && (
+              <p className={s.notice}>
+                The previous delivery stopped. Review before sending again.
+              </p>
+            )}
+            <label className={s.todo} style={{ marginTop: 18 }}>
+              <input
+                type="checkbox"
+                checked={confirmed}
+                disabled={preview?.key !== previewKey}
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+              I reviewed the filled message, recipients, contact permissions and
+              attachments.
+            </label>
+            <div
+              className={s.formRow}
+              style={{ marginTop: 16, flexWrap: "wrap" }}
+            >
+              <button
+                className={s.button}
+                type="submit"
+                disabled={
+                  busy ||
+                  !matter ||
+                  !connected ||
+                  !confirmed ||
+                  preview?.key !== previewKey ||
+                  !!preview?.missingFields.length ||
+                  !subject.trim() ||
+                  !body.trim() ||
+                  !addresses(to).length ||
+                  [
+                    "queued",
+                    "sending",
+                    "sent",
+                    "delivery_unknown",
+                    "cancelled",
+                  ].includes(draft?.status || "")
+                }
+              >
+                <Send />
+                Send
+              </button>
+              <label className={s.field}>
+                Remind me
+                <input
+                  className={s.input}
+                  type="date"
+                  value={remindOn}
+                  onChange={(event) => setRemindOn(event.target.value)}
+                />
+              </label>
+              <button
+                className={s.buttonSmall}
+                type="button"
+                onClick={() => setRemindOn(tomorrow())}
+              >
+                Tomorrow
+              </button>
+              <button
+                className={s.buttonSecondary}
+                type="button"
+                disabled={
+                  busy ||
+                  !matter ||
+                  [
+                    "queued",
+                    "sending",
+                    "sent",
+                    "delivery_unknown",
+                    "cancelled",
+                  ].includes(draft?.status || "")
+                }
+                onClick={() => void save(false)}
+              >
+                <Save />
+                Save for later
+              </button>
+            </div>
           </form>
-          {draft && (
-            <DraftApproval
-              draft={draft}
-              matter={matter}
-              dirty={dirty || customValuesChanged}
-              confirmed={confirmed}
-              connected={!!connected}
-              busy={busy}
-              recipientName={recipientName}
-              setBusy={setBusy}
-              setError={setError}
-              setMessage={setMessage}
-              setConfirmed={setConfirmed}
-              setDraft={setDraft}
-              loadDraft={loadDraft}
-              refresh={drafts.refresh}
-              onWorkChanged={onWorkChanged}
-            />
-          )}
           {!connected && (
             <div className={s.notice}>
               Gmail is not connected to an approved mailbox. You can prepare

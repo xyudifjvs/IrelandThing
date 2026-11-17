@@ -45,21 +45,16 @@ describe("official checklist templates", () => {
     expect(seller.map(({ title }) => title)).toEqual(sellerTitles);
     expect(
       buyer.filter((item) => !item.dateCapable).map(({ title }) => title),
-    ).toEqual([
-      "Appraisal Ordered",
-      "Appraisal Completed",
-      "Home Warranty Ordered",
-      "Clear to Close",
-    ]);
+    ).toEqual(["Clear to Close"]);
     expect(
       seller.filter((item) => !item.dateCapable).map(({ title }) => title),
     ).toEqual(["Clear to Close"]);
     expect(
       buyer.filter(({ scheduled }) => scheduled).map(({ key }) => key),
-    ).toEqual(["inspections", "final_walkthrough", "closing"]);
+    ).toEqual(["inspections", "appraisal", "final_walkthrough", "closing"]);
     expect(
       seller.filter(({ scheduled }) => scheduled).map(({ key }) => key),
-    ).toEqual(["final_walkthrough", "closing"]);
+    ).toEqual(["inspections", "appraisal", "final_walkthrough", "closing"]);
   });
 
   it("uses proof of funds for cash and skips only financing steps by default", () => {
@@ -163,7 +158,7 @@ describe("official checklist templates", () => {
         acceptance: null,
         dates: [
           {
-            key: "appraisal",
+            key: "clear_to_close",
             value: { date: "2026-11-27", instant: null },
             rule: { kind: "fixed" },
           },

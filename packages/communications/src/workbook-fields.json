@@ -1,0 +1,362 @@
+[
+  {
+    "key": "client_names",
+    "label": "Full names of your clients (buyers on the buyer side, sellers on the seller side)",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "client_first_names",
+    "label": "Your clients' first names for greetings",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "property_address",
+    "label": "Property address",
+    "comesFrom": "Contract"
+  },
+  {
+    "key": "agent_name",
+    "label": "Your agent (buyer's agent on the buyer side, listing agent on the seller side)",
+    "comesFrom": "Agent profile"
+  },
+  {
+    "key": "coop_agent_name",
+    "label": "Agent on the other side (listing agent on the buyer side, buyer's agent on the seller side)",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "title_company",
+    "label": "Title company name",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "title_rep",
+    "label": "Title rep name",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "title_rep_email",
+    "label": "Title rep email",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "title_rep_phone",
+    "label": "Title rep phone",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "lender_name",
+    "label": "Loan officer name",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "deadlines",
+    "label": "List of contract deadlines from the checklist",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "emd_amount",
+    "label": "Earnest money amount",
+    "comesFrom": "Checklist (Earnest Money step)"
+  },
+  {
+    "key": "emd_holder",
+    "label": "Who holds the earnest money",
+    "comesFrom": "Checklist (Earnest Money step)"
+  },
+  {
+    "key": "emd_due_date",
+    "label": "EMD deadline",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "hoa_review_deadline",
+    "label": "HOA document review deadline",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "utility_list",
+    "label": "Utility providers for the property",
+    "comesFrom": "Details (you type it)"
+  },
+  {
+    "key": "closing_date",
+    "label": "Closing date only (e.g. for \"transfer into your name on 9/21/26\")",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "walkthrough_deadline",
+    "label": "Latest date for the walkthrough per contract",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "inspection_scheduled",
+    "label": "Scheduled inspection details",
+    "comesFrom": "Checklist (Schedule)"
+  },
+  {
+    "key": "walkthrough_scheduled",
+    "label": "Scheduled walkthrough details",
+    "comesFrom": "Checklist (Schedule)"
+  },
+  {
+    "key": "closing_scheduled",
+    "label": "Scheduled closing details",
+    "comesFrom": "Checklist (Schedule)"
+  },
+  {
+    "key": "review_link",
+    "label": "Link where clients leave a review",
+    "comesFrom": "Settings"
+  },
+  {
+    "key": "tc_name",
+    "label": "Your name",
+    "comesFrom": "Settings"
+  },
+  {
+    "key": "tc_signature",
+    "label": "Your full sign-off and signature block",
+    "comesFrom": "Settings"
+  },
+  {
+    "key": "loan_app_deadline",
+    "label": "Loan application deadline",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "inspection_deadline",
+    "label": "End of inspection period",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "remedy_deadline",
+    "label": "Deadline to agree on remedies",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "loan_commitment_deadline",
+    "label": "Loan commitment deadline",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "walkthrough_terms",
+    "label": "Walkthrough timing, using the wording on the checklist",
+    "comesFrom": "Checklist (Final Walkthrough step wording)"
+  },
+  {
+    "key": "possession_terms",
+    "label": "Possession timing per contract",
+    "comesFrom": "Contract"
+  },
+  {
+    "key": "title_closing_info",
+    "label": "Title company's closing hours and locations, saved once per title company",
+    "comesFrom": "Title company contact (saved once)"
+  },
+  {
+    "key": "agent_first_name",
+    "label": "Your agent's first name",
+    "comesFrom": "Agent profile"
+  },
+  {
+    "key": "coop_agent_first_name",
+    "label": "Other side's agent's first name",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "lender_company",
+    "label": "Lender's company",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "lender_email",
+    "label": "Loan officer's email",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "warranty_company",
+    "label": "Home warranty company",
+    "comesFrom": "Checklist (Home Warranty step)"
+  },
+  {
+    "key": "mls_closing_instructions",
+    "label": "Buyer's agent's instructions for closing out the listing in the MLS, from the intake form",
+    "comesFrom": "Intake"
+  },
+  {
+    "key": "title_rep_first_name",
+    "label": "Title rep's first name",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "lender_first_name",
+    "label": "Loan officer's first name",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "client_contact_info",
+    "label": "Your clients' names, emails and phone numbers, one line each",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "agent_contact_info",
+    "label": "Buyer's agent's email and phone",
+    "comesFrom": "Agent profile"
+  },
+  {
+    "key": "coop_agent_contact_info",
+    "label": "Other side's agent's email and phone",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "closing_preferences",
+    "label": "Buyers' preferred closing location and times, from their reply to Closing Prep",
+    "comesFrom": "Details (you type it)"
+  },
+  {
+    "key": "preapproval_status",
+    "label": "Pre-approval letter status",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "attorney_review_deadline",
+    "label": "Attorney review deadline",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "remedy_request_deadline",
+    "label": "Deadline to submit remedies (repair requests)",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "warranty_deadline",
+    "label": "Home warranty order deadline",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "appraisal_ordered_deadline",
+    "label": "Deadline for the appraisal to be ordered",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "title_commitment_deadline",
+    "label": "Title commitment deadline",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "buyer_fee",
+    "label": "Brokerage fee charged to the buyer (buyer side), from the intake",
+    "comesFrom": "Intake"
+  },
+  {
+    "key": "agent_brokerage",
+    "label": "Your agent's brokerage, from their profile",
+    "comesFrom": "Agent profile"
+  },
+  {
+    "key": "agent_phone",
+    "label": "Your agent's phone, from their profile",
+    "comesFrom": "Agent profile"
+  },
+  {
+    "key": "agent_email",
+    "label": "Your agent's email, from their profile",
+    "comesFrom": "Agent profile"
+  },
+  {
+    "key": "lender_info",
+    "label": "Buyer's lender name, company, email and phone (N/A on cash deals)",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "commission_wiring_instructions",
+    "label": "How title gets commission wiring instructions, saved once per agent or brokerage",
+    "comesFrom": "Agent profile (saved once per agent or brokerage)"
+  },
+  {
+    "key": "buyer_names",
+    "label": "Buyers' full names (seller side)",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "hoa_provision_deadline",
+    "label": "Deadline for the seller to provide HOA documents (seller side)",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "access_details",
+    "label": "How the buyer's inspector, appraiser or agent gets in (seller side)",
+    "comesFrom": "Details (you type it)"
+  },
+  {
+    "key": "repair_agreement_summary",
+    "label": "What was agreed in the inspection addendum (seller side)",
+    "comesFrom": "Details (you type it)"
+  },
+  {
+    "key": "repair_completion_deadline",
+    "label": "Deadline to finish agreed repairs (seller side)",
+    "comesFrom": "Checklist"
+  },
+  {
+    "key": "appraisal_scheduled",
+    "label": "Scheduled appraisal details (seller side)",
+    "comesFrom": "Checklist (Schedule)"
+  },
+  {
+    "key": "signing_preference",
+    "label": "How the sellers will sign: in person, mail-away or remote (seller side)",
+    "comesFrom": "Details (you type it)"
+  },
+  {
+    "key": "seller_forwarding_address",
+    "label": "Sellers' forwarding address (seller side)",
+    "comesFrom": "Details (you type it)"
+  },
+  {
+    "key": "seller_fee",
+    "label": "Seller flat fee charged by the listing brokerage (seller side), from the intake",
+    "comesFrom": "Intake"
+  },
+  {
+    "key": "buyer_agent_commission",
+    "label": "Commission paid by the seller to the buyer's brokerage, from the contract",
+    "comesFrom": "Contract"
+  },
+  {
+    "key": "warranty_amount",
+    "label": "Home warranty cost",
+    "comesFrom": "Checklist (Home Warranty step)"
+  },
+  {
+    "key": "listing_commission",
+    "label": "Listing commission (seller side), from the intake",
+    "comesFrom": "Intake"
+  },
+  {
+    "key": "coop_agent_brokerage",
+    "label": "Other side's agent's brokerage",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "coop_agent_phone",
+    "label": "Other side's agent's phone",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "coop_agent_email",
+    "label": "Other side's agent's email",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "lender_phone",
+    "label": "Loan officer's phone",
+    "comesFrom": "People on this deal"
+  },
+  {
+    "key": "closing_terms",
+    "label": "Closing date with the wording on the checklist",
+    "comesFrom": "Checklist (Closing step wording)"
+  }
+]

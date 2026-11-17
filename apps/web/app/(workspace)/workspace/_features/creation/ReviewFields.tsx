@@ -131,6 +131,70 @@ export function ReviewFields({
             agentRosterId={facts.agentRosterId}
             onChange={onFacts}
           />
+          <label>
+            Earnest money amount ($)
+            <input
+              type="number"
+              min="0"
+              max="100000000"
+              step="0.01"
+              value={
+                facts.earnestMoneyCents == null
+                  ? ""
+                  : facts.earnestMoneyCents / 100
+              }
+              onChange={(event) =>
+                onFacts({
+                  earnestMoneyCents:
+                    event.target.value === ""
+                      ? null
+                      : Math.round(Number(event.target.value) * 100),
+                })
+              }
+            />
+          </label>
+          <label>
+            Earnest money held by
+            <input
+              maxLength={300}
+              value={facts.earnestMoneyHolder ?? ""}
+              onChange={(event) =>
+                onFacts({ earnestMoneyHolder: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Home warranty amount ($)
+            <input
+              type="number"
+              min="0"
+              max="100000000"
+              step="0.01"
+              value={
+                facts.homeWarrantyCents == null
+                  ? ""
+                  : facts.homeWarrantyCents / 100
+              }
+              onChange={(event) =>
+                onFacts({
+                  homeWarrantyCents:
+                    event.target.value === ""
+                      ? null
+                      : Math.round(Number(event.target.value) * 100),
+                })
+              }
+            />
+          </label>
+          <label>
+            Home warranty company
+            <input
+              maxLength={300}
+              value={facts.homeWarrantyCompany ?? ""}
+              onChange={(event) =>
+                onFacts({ homeWarrantyCompany: event.target.value })
+              }
+            />
+          </label>
         </div>
       </section>
       <section className={s.section} aria-labelledby="creation-dates">

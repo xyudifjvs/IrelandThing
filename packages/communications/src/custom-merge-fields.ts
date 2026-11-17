@@ -6,6 +6,12 @@ import {
   type Principal,
 } from "@weatherly/platform";
 import { audit } from "@weatherly/matters";
+import {
+  canonicalFieldKey,
+  fieldKeyPattern,
+  reservedFieldKeys,
+} from "./field-catalog";
+import { builtInKeyReserved } from "./field-sources";
 
 export type CustomMergeField = {
   key: string;
@@ -19,9 +25,10 @@ export const customMergeFieldInput = z
     key: z
       .string()
       .regex(
-        /^custom_[a-z][a-z0-9_]{0,63}$/,
-        "Use custom_ followed by letters, numbers, or underscores.",
-      ),
+        fieldKeyPattern,
+        "Use a lowercase letter followed by letters, numbers, or underscores.",
+      )
+      .refine((key) => !reservedFieldKeys.has(key)),
     label: z.string().trim().min(1).max(100),
     defaultValue: z.string().max(2000).default(""),
   })
@@ -50,6 +57,21 @@ export async function saveCustomMergeField(
         .parse(raw)
     : customMergeFieldInput.parse(raw);
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('weatherly-merge-field-registration'))::text`;
+    if (!key) {
+      const parsed = customMergeFieldInput.parse(raw);
+      if (
+        builtInKeyReserved(parsed.key) ||
+        (await tx.mergeFieldDefinition.findUnique({
+          where: { key: parsed.key },
+        }))
+      )
+        throw new HttpError(
+          409,
+          "MERGE_FIELD_EXISTS",
+          "That code belongs to a built-in field. Choose another key.",
+        );
+    }
     let rows: CustomMergeField[];
     if (key && "expectedRevision" in input) {
       rows = await tx.$queryRaw<CustomMergeField[]>`
@@ -99,8 +121,14 @@ export function applyCustomMergeValues(
   values: Record<string, string>,
 ) {
   for (const field of definitions) {
-    computed[field.key] = Object.hasOwn(values, field.key)
-      ? values[field.key]
-      : field.defaultValue;
+    const key = canonicalFieldKey(field.key);
+    const legacyValue = Object.entries(values).find(
+      ([old]) => canonicalFieldKey(old) === key,
+    )?.[1];
+    computed[key] = Object.hasOwn(values, key)
+      ? values[key]
+      : Object.hasOwn(values, field.key)
+        ? values[field.key]
+        : (legacyValue ?? field.defaultValue);
   }
 }

@@ -7,7 +7,12 @@ import { hasVersionedChecklist } from "../checklist/canonical-checklist-model";
 import { PeopleOnFilePanel } from "../people/PeopleOnFilePanel";
 import { PrivateTodoPanel } from "../private-notes/PrivateTodoPanel";
 import { SavedTask } from "./SavedTask";
-import { isLegacyFileTask, legacyPeople, type TransactionFile } from "./file-model";
+import { TransactionDetailsCard } from "./TransactionDetailsCard";
+import {
+  isLegacyFileTask,
+  legacyPeople,
+  type TransactionFile,
+} from "./file-model";
 import styles from "./file-workspace.module.css";
 
 export function FileSidebar({
@@ -62,6 +67,12 @@ export function FileSidebar({
           </details>
         )}
       </div>
+      <TransactionDetailsCard matterId={file.id} readOnly={readOnly} />
+      <TransactionDetailsCard
+        matterId={file.id}
+        readOnly={readOnly}
+        area="commission"
+      />
       <details className={styles.share}>
         <summary>Share</summary>
         <ChecklistShare
@@ -91,20 +102,22 @@ export function FileSidebar({
                       <span>{date(note.createdAt)}</span>
                     </li>
                   ))}
-                  {readOnly && savedTodos.map((task) => (
-                    <SavedTask key={task.id} task={task} />
-                  ))}
+                  {readOnly &&
+                    savedTodos.map((task) => (
+                      <SavedTask key={task.id} task={task} />
+                    ))}
                 </ul>
               )}
-              {!readOnly && savedTodos.map((task) => (
-                <ChecklistTask
-                  key={task.id}
-                  task={task}
-                  matterId={file.id}
-                  busy={busy}
-                  act={act}
-                />
-              ))}
+              {!readOnly &&
+                savedTodos.map((task) => (
+                  <ChecklistTask
+                    key={task.id}
+                    task={task}
+                    matterId={file.id}
+                    busy={busy}
+                    act={act}
+                  />
+                ))}
             </div>
           ) : null
         }

@@ -38,11 +38,11 @@ export function checklistTemplate(
     return [
       step("attorney_review", "Attorney Review"),
       step("earnest_money_due", "Earnest Money Deposit Received"),
-      step("inspections", "Buyer's Inspections"),
+      step("inspections", "Buyer's Inspections", { scheduled: true }),
       step("remedies_negotiated", "Repairs Agreed On"),
       step("home_warranty", "Home Warranty"),
       step("condo_hoa_docs_provided", "Condo / HOA Documents Provided"),
-      step("appraisal", "Appraisal Completed"),
+      step("appraisal", "Appraisal Completed", { scheduled: true }),
       step("loan_commitment", "Buyer's Financing Approved", {
         notNeeded: cash,
       }),
@@ -72,11 +72,9 @@ export function checklistTemplate(
     step("remedies_negotiated", "Repairs Agreed On"),
     step("condo_hoa_docs_provided", "Condo / HOA Document Provision"),
     step("condo_hoa_doc_review", "Condo / HOA Document Review"),
-    step("appraisal_ordered", "Appraisal Ordered", { dateCapable: false }),
-    step("appraisal", "Appraisal Completed", { dateCapable: false }),
-    step("home_warranty_ordered", "Home Warranty Ordered", {
-      dateCapable: false,
-    }),
+    step("appraisal_ordered", "Appraisal Ordered"),
+    step("appraisal", "Appraisal Completed", { scheduled: true }),
+    step("home_warranty_ordered", "Home Warranty Ordered"),
     step("loan_commitment", "Financing Approved / Loan Commitment", {
       notNeeded: cash,
     }),

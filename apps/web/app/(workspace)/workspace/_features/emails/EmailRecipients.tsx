@@ -29,6 +29,7 @@ export function RecipientField({
   addToDeal,
   existingEmails,
   searchDirectory = false,
+  people = [],
 }: {
   title: string;
   value: string;
@@ -36,6 +37,7 @@ export function RecipientField({
   addToDeal?: (email: string) => void;
   existingEmails: ReadonlySet<string>;
   searchDirectory?: boolean;
+  people?: readonly { email?: string; name?: string; role?: string }[];
 }) {
   const [entry, setEntry] = useState("");
   const [error, setError] = useState("");
@@ -54,6 +56,16 @@ export function RecipientField({
       : null,
   );
   const selected = addresses(value);
+  const dealPeople = [
+    ...new Map(
+      people
+        .filter((person) => person.email && validAddress.test(person.email))
+        .map((person) => [person.email!.toLowerCase(), person]),
+    ).entries(),
+  ];
+  const extraSelected = selected.filter(
+    (email) => !dealPeople.some(([address]) => address === email),
+  );
   const options = (saved.data?.items ?? []).filter(
     ({ email }) =>
       validAddress.test(email) &&
@@ -76,9 +88,39 @@ export function RecipientField({
   return (
     <fieldset className={styles.recipients}>
       <legend>{title}</legend>
-      {selected.length > 0 && (
+      <div className={s.formRow} style={{ flexWrap: "wrap" }}>
+        {dealPeople.map(([email, person]) => (
+          <button
+            type="button"
+            className={
+              selected.includes(email) ? s.buttonSmall : s.buttonSecondary
+            }
+            style={{
+              maxWidth: "100%",
+              whiteSpace: "normal",
+              overflowWrap: "anywhere",
+              textAlign: "left",
+            }}
+            aria-pressed={selected.includes(email)}
+            key={email}
+            onClick={() =>
+              change(
+                (selected.includes(email)
+                  ? selected.filter((address) => address !== email)
+                  : [...selected, email]
+                ).join(", "),
+              )
+            }
+          >
+            {selected.includes(email) ? "✓ " : ""}
+            {person.name || email}
+            {person.role ? ` · ${label(person.role)}` : ""}
+          </button>
+        ))}
+      </div>
+      {extraSelected.length > 0 && (
         <ul className={styles.chips}>
-          {selected.map((email) => (
+          {extraSelected.map((email) => (
             <li className={styles.chip} key={email}>
               <span>{email}</span>
               <button
@@ -111,6 +153,8 @@ export function RecipientField({
           autoCapitalize="none"
           autoComplete="off"
           value={entry}
+          placeholder="Type another email address, then press Enter"
+          onBlur={add}
           onChange={(event) => {
             setEntry(event.target.value);
             setError("");
@@ -127,7 +171,7 @@ export function RecipientField({
           onClick={add}
           disabled={!entry.trim()}
         >
-          Add {title}
+          Add address
         </button>
       </div>
       {options.length > 0 && (

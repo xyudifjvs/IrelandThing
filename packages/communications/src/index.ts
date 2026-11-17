@@ -11,6 +11,7 @@ import {
 } from "@weatherly/platform";
 import { CommunicationsService, createCommunicationsService } from "./service";
 import { registerEmailWorkRoutes } from "./email-work-routes";
+import { registerMergeFieldRoutes } from "./field-routes";
 import { archiveTemplate, reorderTemplates } from "./templates";
 import {
   listCustomMergeFields,
@@ -56,6 +57,7 @@ export const sendSystemEmail = (
 export function createCommunicationsRouter(service = current()) {
   const r = Router();
   registerEmailWorkRoutes(r);
+  registerMergeFieldRoutes(r);
   r.get(
     "/custom-merge-fields",
     asyncHandler(async (req, res) => {

@@ -279,7 +279,15 @@ it("uses active dates for Due this week and preserves terminal history on the ra
     due.items
       .filter((item) => item.matterId === target)
       .map(({ label }) => label),
-  ).toEqual(["Inspections", "Closing prep", "Closing", "Closing appointment"]);
+  ).toEqual(["Inspections", "Closing", "Closing appointment"]);
+  const reminderDay = await listPortfolioDue(
+    owner,
+    work,
+    new Date("2027-01-08T05:00:00Z"),
+  );
+  expect(reminderDay.items.some((item) => item.label === "Closing prep")).toBe(
+    true,
+  );
   expect(due.items.some((item) => item.matterId === legacy)).toBe(false);
   expect(due.items.some((item) => historical.includes(item.matterId))).toBe(
     false,

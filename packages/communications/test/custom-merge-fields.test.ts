@@ -4,6 +4,7 @@ import type { Principal } from "@weatherly/platform";
 const db = vi.hoisted(() => ({
   $queryRaw: vi.fn(),
   $transaction: vi.fn(),
+  mergeFieldDefinition: { findUnique: vi.fn() },
   communicationTemplate: { findUnique: vi.fn(), create: vi.fn() },
 }));
 vi.mock("@weatherly/db", () => ({ prisma: db }));
@@ -19,7 +20,12 @@ vi.mock("@weatherly/matters", () => ({
 }));
 vi.mock("../src/merge-fields", () => ({
   mergeFields: vi.fn(async () => [
-    { key: "propertyAddress", value: "1 Saved Lane" },
+    {
+      key: "property_address",
+      value: "1 Saved Lane",
+      status: "confirmed",
+      sourceIds: ["matter"],
+    },
   ]),
 }));
 vi.mock("../src/email-work", () => ({ ensureTemplateWork: vi.fn() }));
@@ -48,6 +54,7 @@ const field = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.mergeFieldDefinition.findUnique.mockResolvedValue(null);
   db.$transaction.mockImplementation(async (run) => run(db));
   db.$queryRaw.mockResolvedValue([field]);
   db.communicationTemplate.findUnique.mockResolvedValue({
@@ -60,10 +67,9 @@ beforeEach(() => {
   });
 });
 
-it("reserves a custom namespace and rejects malformed or oversized definitions", () => {
+it("accepts exact custom keys and rejects malformed or oversized definitions", () => {
   for (const key of [
     "propertyAddress",
-    "custom_",
     "custom_Upper",
     "custom_bad-key",
     "__proto__",
@@ -78,6 +84,9 @@ it("reserves a custom namespace and rejects malformed or oversized definitions",
       defaultValue: "x".repeat(2001),
     }).success,
   ).toBe(false);
+  expect(
+    customMergeFieldInput.parse({ key: "geo_info", label: "Geography" }).key,
+  ).toBe("geo_info");
   expect(
     customMergeFieldInput.parse({ key: field.key, label: " Instructions " })
       .label,

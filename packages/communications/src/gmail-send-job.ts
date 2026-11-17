@@ -18,6 +18,7 @@ import {
 } from "./policy";
 import { assertConfigured } from "./gateway";
 import { jobActor } from "./gmail-job-actor";
+import { validateAuthoredMergeFields } from "./render-email-fields";
 
 const sendPayload = z.object({
   draftId: z.string(),
@@ -131,6 +132,7 @@ async function dispatchGmail(
     lock = false,
   ) => {
     const currentMatter = await requireMatter(actor, draft.matterId, lock, db);
+    await validateAuthoredMergeFields(actor, draft, db);
     assertReviewedMatter(currentMatter);
     if (!["under_contract", "closing", "listing"].includes(currentMatter.stage))
       throw new HttpError(

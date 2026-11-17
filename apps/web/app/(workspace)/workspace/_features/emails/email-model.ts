@@ -30,11 +30,18 @@ export type Draft = {
   details?: {
     templateId?: string;
     templateRevision?: number;
+    templatePreviewFingerprint?: string;
     templateValues?: Record<string, string>;
     reviewNeeded?: boolean;
     mergeError?: string | null;
     templateNeedsRebind?: boolean;
     sendFailure?: string | null;
+    authoredMerge?: {
+      subjectSource: string;
+      bodySource: string;
+      fingerprint: string;
+      values?: Record<string, string>;
+    };
   };
 };
 
@@ -74,4 +81,5 @@ export type EmailWork = {
   manualCompletedAt: string | null;
   revision: number;
   toSend: boolean;
+  checked: boolean;
 };

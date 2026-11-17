@@ -8,7 +8,8 @@ import type { TransactionAction } from "../../_components/transaction-controls";
 import type { ChecklistTaskRecord } from "./canonical-checklist-model";
 import s from "./canonical-checklist.module.css";
 
-export type StepEditorKind = "title" | "note" | "appointment";
+export type StepEditorKind =
+  "title" | "note" | "appointment" | "money" | "wording";
 
 export function ChecklistStepEditor({
   kind,
@@ -33,11 +34,13 @@ export function ChecklistStepEditor({
   const savedAppointment = task.appointmentAt ?? task.details?.appointmentAt;
   const [wallTime, setWallTime] = useState(() =>
     kind === "appointment" && savedAppointment
-      ? localWallTime(savedAppointment, timeZone) ?? ""
+      ? (localWallTime(savedAppointment, timeZone) ?? "")
       : "",
   );
   const [occurrence, setOccurrence] = useState(() =>
-    savedAppointment && wallTime ? new Date(savedAppointment).toISOString() : "",
+    savedAppointment && wallTime
+      ? new Date(savedAppointment).toISOString()
+      : "",
   );
   const choices = wallTime ? wallTimeInstants(wallTime, timeZone) : [];
   const invalidWallTime = !!wallTime && !choices.length;
@@ -62,10 +65,21 @@ export function ChecklistStepEditor({
               note: String(values.get("note") || ""),
               showNoteToAgent: values.has("showNoteToAgent"),
             }
-          : {
-              appointmentAt: appointmentAt ?? null,
-              appointmentPlace: String(values.get("place") || "").trim(),
-            };
+          : kind === "wording"
+            ? { dateWording: String(values.get("dateWording") || "") }
+            : kind === "money"
+              ? {
+                  amountCents: String(values.get("amount") || "").trim()
+                    ? Math.round(Number(values.get("amount")) * 100)
+                    : null,
+                  ...(task.stepKey === "earnest_money_due"
+                    ? { holder: String(values.get("company") || "") }
+                    : { company: String(values.get("company") || "") }),
+                }
+              : {
+                  appointmentAt: appointmentAt ?? null,
+                  appointmentPlace: String(values.get("place") || "").trim(),
+                };
     void act(task.id, async () => {
       await mutate(
         `/api/v1/matters/${matterId}/tasks/${task.id}`,
@@ -78,6 +92,64 @@ export function ChecklistStepEditor({
 
   return (
     <form className={s.editor} onSubmit={submit}>
+      {kind === "wording" && (
+        <label>
+          Email date wording
+          <input
+            name="dateWording"
+            maxLength={300}
+            defaultValue={task.details?.dateWording || ""}
+            placeholder="Use the date / default wording"
+          />
+          <small>
+            Leave blank to use the default. The real due date stays in place for
+            sorting and reminders.
+          </small>
+        </label>
+      )}
+      {kind === "money" && (
+        <div className={s.fields}>
+          <label>
+            Amount ($)
+            <input
+              name="amount"
+              type="number"
+              min="0"
+              max="100000000"
+              step="0.01"
+              defaultValue={
+                (task.details && Object.hasOwn(task.details, "amountCents")
+                  ? task.details.amountCents
+                  : (task.details?.earnestMoneyCents ??
+                    task.details?.homeWarrantyCents)) != null
+                  ? Number(
+                      task.details && Object.hasOwn(task.details, "amountCents")
+                        ? task.details.amountCents
+                        : (task.details?.earnestMoneyCents ??
+                            task.details?.homeWarrantyCents),
+                    ) / 100
+                  : ""
+              }
+            />
+          </label>
+          <label>
+            {task.stepKey === "earnest_money_due"
+              ? "Held by"
+              : "Warranty company"}
+            <input
+              name="company"
+              maxLength={300}
+              defaultValue={
+                task.details?.holder ??
+                task.details?.company ??
+                task.details?.earnestMoneyHolder ??
+                task.details?.homeWarrantyCompany ??
+                ""
+              }
+            />
+          </label>
+        </div>
+      )}
       {kind === "title" && (
         <label>
           Step title
@@ -141,8 +213,8 @@ export function ChecklistStepEditor({
                 <option value="">Choose an occurrence</option>
                 {choices.map((instant, index) => (
                   <option key={instant} value={instant}>
-                    {index === 0 ? "First occurrence" : "Second occurrence"}{" "}
-                    ({offsetName(instant)})
+                    {index === 0 ? "First occurrence" : "Second occurrence"} (
+                    {offsetName(instant)})
                   </option>
                 ))}
               </select>

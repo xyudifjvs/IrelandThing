@@ -1,3 +1,8 @@
+:root {
+  --accent: #1e1c1a;
+  --accent-hover: #3a3733;
+}
+
 .weatherly-theme {
   --weatherly-color-background: #f6f3ee;
   --weatherly-color-surface: #ffffff;
@@ -8,7 +13,10 @@
   --weatherly-color-text: #1e1c1a;
   --weatherly-color-secondary: #5e564e;
   --weatherly-color-faint: #8a8178;
-  --weatherly-color-accent: #6b4f2e;
+  --weatherly-color-accent: #1e1c1a;
+  --accent: var(--weatherly-color-accent);
+  --accent-dark: #3a3733;
+  --on-accent: #ffffff;
   --weatherly-color-warning: #a33a12;
   --weatherly-color-warning-surface: #fbede6;
   --weatherly-color-success: #496144;
@@ -18,11 +26,7 @@
     var(--weatherly-color-accent) 8%,
     var(--weatherly-color-background)
   );
-  --weatherly-color-accent-hover: color-mix(
-    in srgb,
-    var(--weatherly-color-accent) 85%,
-    var(--weatherly-color-dark)
-  );
+  --weatherly-color-accent-hover: #3a3733;
   --weatherly-color-dark-hover: color-mix(
     in srgb,
     var(--weatherly-color-on-dark) 12%,
@@ -62,6 +66,44 @@
 .weatherly-theme :focus-visible {
   outline: 2px solid var(--weatherly-color-accent);
   outline-offset: 2px;
+}
+
+.weatherly-theme :is(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid var(--weatherly-color-accent);
+  outline-offset: 2px;
+}
+
+/* The shared upload control predates the workspace palette. */
+.weatherly-theme button[class*="DocumentUploadQueue"][class*="primary"] {
+  background: var(--weatherly-color-accent);
+  border-color: var(--weatherly-color-accent);
+  color: #ffffff;
+}
+
+.weatherly-theme button[class*="DocumentUploadQueue"][class*="primary"]:hover {
+  background: var(--weatherly-color-accent-hover);
+}
+
+/* Older intake controls share the same palette without changing their layout. */
+.weatherly-theme .weatherly-intake {
+  --accent: #1e1c1a;
+  --accent-dark: #3a3733;
+  --accent-soft: #eae7e2;
+  --on-accent: #ffffff;
+}
+
+.weatherly-theme input:is([type="checkbox"], [type="radio"]) {
+  accent-color: var(--weatherly-color-accent);
+}
+
+.weatherly-theme button[aria-pressed="true"] {
+  background: var(--weatherly-color-accent);
+  border-color: var(--weatherly-color-accent);
+  color: #ffffff;
+}
+
+.weatherly-theme button[aria-pressed="true"]:hover {
+  background: var(--weatherly-color-accent-hover);
 }
 
 .weatherly-theme .weatherly-brand-tile {

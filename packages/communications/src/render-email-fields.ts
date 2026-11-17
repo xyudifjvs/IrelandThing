@@ -1,0 +1,134 @@
+import { createHash } from "node:crypto";
+import type { Principal } from "@weatherly/platform";
+import { assertCoordinator, HttpError } from "@weatherly/platform";
+import { mergeFields } from "./merge-fields";
+import { listCustomMergeFields } from "./custom-merge-fields";
+import { canonicalFieldKey } from "./field-catalog";
+import { replaceFieldText } from "./field-renderer";
+import { asRecord } from "./policy";
+import { prisma } from "@weatherly/db";
+import type { FieldDb } from "./field-sources";
+
+export async function renderEmailFields(
+  actor: Principal,
+  matterId: string,
+  subject: string,
+  body: string,
+  db: FieldDb = prisma,
+  values: Record<string, string> = {},
+) {
+  assertCoordinator(actor);
+  const [builtins, custom] = await Promise.all([
+    mergeFields(actor, matterId, db),
+    listCustomMergeFields(actor, db),
+  ]);
+  const customKeys = new Set(
+    custom.map((field) => canonicalFieldKey(field.key)),
+  );
+  const fields = [
+    ...builtins.filter((field) => !customKeys.has(field.key)),
+    ...custom.map((field) => {
+      const key = canonicalFieldKey(field.key),
+        value = Object.hasOwn(values, key) ? values[key] : field.defaultValue;
+      return {
+        key,
+        label: field.label,
+        value,
+        status: value.trim() ? ("confirmed" as const) : ("unknown" as const),
+        sourceIds: [field.key, String(field.revision)],
+      };
+    }),
+  ];
+  const renderedSubject = replaceFieldText(subject, fields),
+    renderedBody = replaceFieldText(body, fields);
+  if (/[\r\n]/.test(renderedSubject.output))
+    throw new HttpError(
+      422,
+      "MULTILINE_SUBJECT_FIELD",
+      "This field has multiple lines. Use it in the body, or choose a single-line subject value.",
+    );
+  if (
+    renderedSubject.output.length > 998 ||
+    renderedBody.output.length > 100000
+  )
+    throw new HttpError(
+      422,
+      "MERGED_EMAIL_TOO_LONG",
+      "The filled email exceeds the subject or message length limit.",
+    );
+  const missingFields = [
+    ...new Set([...renderedSubject.missing, ...renderedBody.missing]),
+  ];
+  const unknownFields = [
+    ...new Set([...renderedSubject.unknown, ...renderedBody.unknown]),
+  ];
+  const fingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        subject: renderedSubject.output,
+        body: renderedBody.output,
+        fields: fields
+          .filter((field) =>
+            [renderedSubject.normalized, renderedBody.normalized].some(
+              (source) => source.includes(`{{${field.key}}}`),
+            ),
+          )
+          .map((field) => [
+            field.key,
+            field.value,
+            field.status,
+            field.sourceIds,
+          ]),
+      }),
+    )
+    .digest("hex");
+  return {
+    subject: renderedSubject.output,
+    body: renderedBody.output,
+    missingFields,
+    unknownFields,
+    fingerprint,
+  };
+}
+
+export async function validateAuthoredMergeFields(
+  actor: Principal,
+  draft: { matterId: string; subject: string; body: string; details: unknown },
+  db: FieldDb = prisma,
+) {
+  const source = asRecord(asRecord(draft.details).authoredMerge);
+  if (
+    typeof source.subjectSource !== "string" ||
+    typeof source.bodySource !== "string"
+  )
+    return;
+  const values = Object.fromEntries(
+    Object.entries(asRecord(source.values)).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+  const current = await renderEmailFields(
+    actor,
+    draft.matterId,
+    source.subjectSource,
+    source.bodySource,
+    db,
+    values,
+  );
+  if (current.missingFields.length)
+    throw new HttpError(
+      422,
+      "MISSING_MERGE_FIELD",
+      `Fill or remove these fields before sending: ${current.missingFields.map((key) => `{{${key}}}`).join(", ")}`,
+    );
+  if (
+    current.subject !== draft.subject ||
+    current.body !== draft.body ||
+    current.fingerprint !== source.fingerprint
+  )
+    throw new HttpError(
+      409,
+      "SOURCE_PREVIEW_CHANGED",
+      "A field changed after this email was saved. Refresh the filled preview and review it before sending.",
+    );
+}

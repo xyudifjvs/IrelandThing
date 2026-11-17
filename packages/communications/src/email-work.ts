@@ -91,10 +91,12 @@ function projectWork(
     propertyAddress: matter.propertyAddress,
     sentAt: delivered?.sentAt ?? null,
     sentDraftId: delivered?.id ?? null,
+    checked:
+      work.checkedOverride ?? Boolean(delivered || work.manualCompletedAt),
     toSend:
       openStages.includes(matter.stage) &&
       available &&
-      !delivered &&
+      (!delivered || work.checkedOverride === false) &&
       !work.manualCompletedAt &&
       Boolean(work.laterAt || work.remindOn),
   };
@@ -120,7 +122,16 @@ export async function listEmailWork(actor: Principal, raw: unknown = {}) {
             matter: { is: { stage: { in: openStages } } },
             manualCompletedAt: null,
             OR: [{ laterAt: { not: null } }, { remindOn: { not: null } }],
-            drafts: { none: { status: "sent", sentAt: { not: null } } },
+            AND: [
+              {
+                OR: [
+                  { checkedOverride: false },
+                  {
+                    drafts: { none: { status: "sent", sentAt: { not: null } } },
+                  },
+                ],
+              },
+            ],
           }
         : {}),
       ...(query.from || query.through
@@ -211,7 +222,12 @@ async function changeWork(
       "REVISION_CONFLICT",
       "This email already has saved work. Refresh before editing.",
     );
-  if (work.drafts.length || work.template?.active === false)
+  if (
+    work.template?.active === false ||
+    (work.drafts.length &&
+      work.checkedOverride !== false &&
+      !["manual_complete", "uncheck"].includes(change.action))
+  )
     throw new HttpError(
       409,
       "EMAIL_WORK_COMPLETE",
@@ -241,12 +257,17 @@ async function changeWork(
       data = {
         manualCompletedAt: new Date(),
         manualCompletedById: actor.id,
+        checkedOverride: true,
         laterAt: null,
         remindOn: null,
       };
       break;
     case "uncheck":
-      data = { manualCompletedAt: null, manualCompletedById: null };
+      data = {
+        manualCompletedAt: null,
+        manualCompletedById: null,
+        checkedOverride: false,
+      };
       break;
   }
   const updated = await tx.emailWork.update({
@@ -312,6 +333,11 @@ export async function finishSentWork(
   if (!workItemId) return;
   await tx.emailWork.updateMany({
     where: { id: workItemId },
-    data: { laterAt: null, remindOn: null, revision: { increment: 1 } },
+    data: {
+      laterAt: null,
+      remindOn: null,
+      checkedOverride: null,
+      revision: { increment: 1 },
+    },
   });
 }

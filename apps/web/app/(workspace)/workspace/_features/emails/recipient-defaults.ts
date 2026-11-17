@@ -2,7 +2,7 @@ import { contactRoleFamily } from "../../../../../../../packages/contacts/src/tr
 
 export type EmailRecipient = { name: string; email: string; role: string };
 
-export function emailRoleFamily(role: string) {
+export function emailRoleFamily(role: string, side?: string) {
   const key = role
     .trim()
     .toLowerCase()
@@ -12,6 +12,12 @@ export function emailRoleFamily(role: string) {
   )
     return "client";
   if (["agent", "my_agent", "your_agent", "serving_agent"].includes(key))
+    return "agent";
+  if (
+    (["listing_agent", "listing_side_agent"].includes(key) &&
+      side === "seller") ||
+    (["buyers_agent", "buyer_s_agent"].includes(key) && side === "buyer")
+  )
     return "agent";
   if (
     [
@@ -29,12 +35,13 @@ export function defaultEmailRecipients(
   people: readonly EmailRecipient[],
   roles: readonly string[],
   directContact: unknown,
+  side?: string,
 ) {
-  const families = new Set(roles.map(emailRoleFamily));
+  const families = new Set(roles.map((role) => emailRoleFamily(role, side)));
   const recipients = new Map<string, EmailRecipient>();
   for (const person of people) {
     const email = person.email.trim().toLowerCase();
-    const family = emailRoleFamily(person.role);
+    const family = emailRoleFamily(person.role, side);
     if (
       email &&
       families.has(family) &&

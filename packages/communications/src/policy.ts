@@ -4,28 +4,54 @@ import { prisma, type Prisma } from "@weatherly/db";
 import { HttpError, type Principal } from "@weatherly/platform";
 import { requireMatter } from "@weatherly/matters";
 import { placeholderBody, placeholderSubject } from "./placeholder-templates";
+import { canonicalFieldKey, fieldCatalog } from "./field-catalog";
 export const email = z.email().transform((v) => v.trim().toLowerCase());
 export const recipientArray = z.array(email).max(40);
 export const draftInput = z
   .object({
     matterId: z.string(),
-    to: recipientArray.min(1),
+    to: recipientArray.default([]),
     cc: recipientArray.default([]),
     enteredRecipients: z.array(email).max(80).optional(),
     subject: z
       .string()
       .trim()
-      .min(1)
       .max(998)
       .refine((v) => !/[\r\n]/.test(v), "Subject cannot contain line breaks"),
-    body: z.string().min(1).max(100000),
+    body: z.string().max(100000),
+    saveForLater: z.boolean().optional(),
+    remindOn: z.iso.date().nullable().optional(),
+    fieldPreviewFingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    templatePreviewFingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     attachmentIds: z.array(z.string()).max(20).default([]),
     templateId: z.string().optional(),
     templateRevision: z.number().int().positive().optional(),
     replyToMessageId: z.string().optional(),
     templateValues: z.record(z.string(), z.string().max(2000)).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.saveForLater) return;
+    for (const key of ["subject", "body"] as const)
+      if (!value[key].trim())
+        context.addIssue({
+          code: "custom",
+          path: [key],
+          message: "Add a subject and message before sending.",
+        });
+    if (!value.to.length)
+      context.addIssue({
+        code: "custom",
+        path: ["to"],
+        message: "Choose a To recipient.",
+      });
+  });
 export function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -277,8 +303,13 @@ export function validateMerge(
   for (const m of matches)
     if (
       !templateKeys.has(m[1]) &&
-      !customKeys.has(m[1]) &&
-      !/^(date|deadline|task)_[a-z0-9_]{1,80}$/.test(m[1])
+      !fieldCatalog.some((field) => field.key === canonicalFieldKey(m[1])) &&
+      ![...templateKeys].some(
+        (key) => canonicalFieldKey(key) === canonicalFieldKey(m[1]),
+      ) &&
+      !customKeys.has(canonicalFieldKey(m[1])) &&
+      !/^(date|deadline|task)_[a-z0-9_]{1,80}$/.test(m[1]) &&
+      !/^[a-z][a-z0-9_]{0,79}_date$/.test(m[1])
     )
       throw new HttpError(
         422,

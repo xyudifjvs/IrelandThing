@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useLiveData } from "../../../../_components/useLiveData";
-import { date, useData } from "../../_components/data";
+import { date, useData, mutate } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import { Composer } from "./Composer";
 import { FileEmailHistory } from "./FileEmailHistory";
@@ -45,6 +45,8 @@ export function FileEmailWorkspace({
   const [selection, setSelection] = useState<Selection | null>(
     initialTemplateId ? { templateId: initialTemplateId } : null,
   );
+  const [workError, setWorkError] = useState("");
+  const [changingWork, setChangingWork] = useState("");
   const [editorGeneration, setEditorGeneration] = useState(0);
   useEffect(() => {
     if (!initialTemplateId) return;
@@ -81,6 +83,7 @@ export function FileEmailWorkspace({
         contacts,
         currentTemplate.recipientRoles ?? [],
         directContact,
+        side,
       )
     : undefined;
   const sent = (drafts.data || []).filter((entry) => entry.status === "sent");
@@ -119,6 +122,11 @@ export function FileEmailWorkspace({
               Could not load file email.
             </p>
           )}
+          {workError && (
+            <p className={s.error} role="alert">
+              {workError}
+            </p>
+          )}
           {!readOnly && toSend.length > 0 && (
             <div className={styles.group}>
               <h3>To send</h3>
@@ -148,30 +156,71 @@ export function FileEmailWorkspace({
                     (item) => item.templateId === entry.id,
                   );
                   return (
-                    <button
-                      type="button"
-                      className={styles.entry}
+                    <div
                       key={entry.id}
-                      onClick={() => {
-                        const existing = drafts.data?.find(
-                          (draft) =>
-                            draft.details?.templateId === entry.id &&
-                            draft.status === "draft",
-                        );
-                        open({ templateId: entry.id, draftId: existing?.id });
-                      }}
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
                     >
-                      <strong>{entry.name}</strong>
-                      {status?.sentAt ? (
-                        <span>Sent {date(status.sentAt)}</span>
-                      ) : status?.manualCompletedAt ? (
-                        <span>
-                          Checked off {date(status.manualCompletedAt)}
-                        </span>
-                      ) : entry.isPlaceholder ? (
-                        <span>Placeholder</span>
-                      ) : null}
-                    </button>
+                      <input
+                        type="checkbox"
+                        aria-label={`Check off ${entry.name}`}
+                        checked={
+                          status?.checked ??
+                          !!(status?.sentAt || status?.manualCompletedAt)
+                        }
+                        disabled={!!changingWork || work.loading}
+                        onChange={async (event) => {
+                          const checked = event.target.checked;
+                          setChangingWork(entry.id);
+                          setWorkError("");
+                          try {
+                            await mutate(
+                              status
+                                ? `/api/v1/communications/work/${status.id}`
+                                : `/api/v1/communications/matters/${matterId}/templates/${entry.id}/work`,
+                              {
+                                action: checked ? "manual_complete" : "uncheck",
+                                expectedRevision: status?.revision ?? null,
+                              },
+                              status ? "PATCH" : "POST",
+                            );
+                            await refresh();
+                          } catch (failure) {
+                            setWorkError((failure as Error).message);
+                          } finally {
+                            setChangingWork("");
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className={styles.entry}
+                        key={entry.id}
+                        onClick={() => {
+                          const existing = drafts.data?.find(
+                            (draft) =>
+                              draft.details?.templateId === entry.id &&
+                              draft.status === "draft",
+                          );
+                          open({ templateId: entry.id, draftId: existing?.id });
+                        }}
+                      >
+                        <strong>{entry.name}</strong>
+                        {status?.sentAt ? (
+                          <span>
+                            Sent {date(status.sentAt)}
+                            {status.checked === false
+                              ? " · Unchecked manually"
+                              : ""}
+                          </span>
+                        ) : status?.manualCompletedAt ? (
+                          <span>
+                            Checked off {date(status.manualCompletedAt)}
+                          </span>
+                        ) : entry.isPlaceholder ? (
+                          <span>Placeholder</span>
+                        ) : null}
+                      </button>
+                    </div>
                   );
                 })}
               </div>

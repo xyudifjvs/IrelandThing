@@ -39,6 +39,10 @@ const updateInput = z
     showNoteToAgent: z.boolean().optional(),
     appointmentAt: taskAppointment.optional(),
     appointmentPlace: z.string().trim().max(300).optional(),
+    dateWording: z.string().trim().max(300).optional(),
+    amountCents: z.number().int().min(0).max(10000000000).nullable().optional(),
+    holder: z.string().trim().max(300).optional(),
+    company: z.string().trim().max(300).optional(),
   })
   .strict();
 
@@ -111,6 +115,10 @@ export async function updateVersionedChecklistTask(
     showNoteToAgent,
     appointmentAt,
     appointmentPlace,
+    dateWording,
+    amountCents,
+    holder,
+    company,
     ...patch
   } = updateInput.parse(input);
   const old = await tx.task.findFirst({
@@ -123,6 +131,27 @@ export async function updateVersionedChecklistTask(
       409,
       "REVISION_CONFLICT",
       "The checklist step changed. Refresh and try again.",
+    );
+
+  const isEmd = old.stepKey === "earnest_money_due";
+  const isWarranty = ["home_warranty", "home_warranty_ordered"].includes(
+    old.stepKey,
+  );
+  if (
+    (amountCents !== undefined && !isEmd && !isWarranty) ||
+    (holder !== undefined && !isEmd) ||
+    (company !== undefined && !isWarranty)
+  )
+    throw new HttpError(
+      422,
+      "STEP_DETAIL_NOT_AVAILABLE",
+      "Amount and company details are available on the earnest money and home warranty steps.",
+    );
+  if (dateWording !== undefined && !old.dateCapable)
+    throw new HttpError(
+      422,
+      "STEP_DATE_NOT_AVAILABLE",
+      "This step does not have a due date.",
     );
 
   if (remove) {
@@ -193,6 +222,10 @@ export async function updateVersionedChecklistTask(
         ...(showNoteToAgent !== undefined ? { showNoteToAgent } : {}),
         ...(appointmentAt !== undefined ? { appointmentAt } : {}),
         ...(appointmentPlace !== undefined ? { appointmentPlace } : {}),
+        ...(dateWording !== undefined ? { dateWording } : {}),
+        ...(amountCents !== undefined ? { amountCents } : {}),
+        ...(holder !== undefined ? { holder } : {}),
+        ...(company !== undefined ? { company } : {}),
       },
       revision: { increment: 1 },
     },
@@ -207,6 +240,10 @@ export async function updateVersionedChecklistTask(
       ...(showNoteToAgent !== undefined ? { showNoteToAgent } : {}),
       ...(appointmentAt !== undefined ? { appointmentAt } : {}),
       ...(appointmentPlace !== undefined ? { appointmentPlace } : {}),
+      ...(dateWording !== undefined ? { dateWording } : {}),
+      ...(amountCents !== undefined ? { amountCents } : {}),
+      ...(holder !== undefined ? { holder } : {}),
+      ...(company !== undefined ? { company } : {}),
     },
   });
   await finishTaskChange(tx, actor, matter.id);

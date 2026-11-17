@@ -15,6 +15,10 @@ import {
   type ChecklistTaskRecord,
 } from "./canonical-checklist-model";
 import s from "./canonical-checklist.module.css";
+import {
+  checklistMoney,
+  checklistWording,
+} from "../../../../../../../packages/matters/src/checklist/display";
 
 export function CanonicalChecklistStep({
   task,
@@ -55,6 +59,36 @@ export function CanonicalChecklistStep({
   const isHoaDelivery = task.stepKey === "condo_hoa_docs_provided";
   const mayEdit = !readOnly && !busy && !!task.revision;
   const rule = ruleText(task.dateRule, labels);
+  const moneyStep = [
+    "earnest_money_due",
+    "home_warranty",
+    "home_warranty_ordered",
+  ].includes(task.stepKey);
+  const money = checklistMoney(
+    task.details && Object.hasOwn(task.details, "amountCents")
+      ? task.details.amountCents
+      : (task.details?.earnestMoneyCents ?? task.details?.homeWarrantyCents),
+  );
+  const company =
+    task.details?.holder ??
+    task.details?.company ??
+    task.details?.earnestMoneyHolder ??
+    task.details?.homeWarrantyCompany;
+  const moneyLine = [
+    money,
+    company
+      ? `${task.stepKey === "earnest_money_due" ? "held by " : ""}${company}`
+      : "",
+    rule,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const wording = checklistWording(task, task.stepKey);
+  const shownWording =
+    task.details?.dateWording ||
+    ["closing", "final_walkthrough", "possession"].includes(task.stepKey)
+      ? wording
+      : "";
 
   function updateStatus(status: string) {
     void act(task.id, async () => {
@@ -99,7 +133,40 @@ export function CanonicalChecklistStep({
         <div className={s.stepBody}>
           <strong className={s.stepTitle}>{task.title}</strong>
           {skipped && <span className={s.tag}>Not needed</span>}
-          {!skipped && rule && <p className={s.subline}>{rule}</p>}
+          {!skipped &&
+            moneyStep &&
+            (readOnly ? (
+              moneyLine && <p className={s.subline}>{moneyLine}</p>
+            ) : (
+              <button
+                type="button"
+                className={s.textButton}
+                disabled={!mayEdit}
+                onClick={() => setEditor("money")}
+              >
+                {moneyLine ||
+                  (task.stepKey === "earnest_money_due"
+                    ? "+ Add amount and holder"
+                    : "+ Add warranty amount and company")}
+              </button>
+            ))}
+          {!skipped && !moneyStep && rule && (
+            <p className={s.subline}>{rule}</p>
+          )}
+          {!skipped &&
+            task.dateCapable &&
+            (readOnly ? (
+              shownWording && <p className={s.subline}>{shownWording}</p>
+            ) : (
+              <button
+                type="button"
+                className={s.textButton}
+                disabled={!mayEdit}
+                onClick={() => setEditor("wording")}
+              >
+                {shownWording || "+ Add email date wording"}
+              </button>
+            ))}
           {!skipped && note && <p className={s.note}>{note}</p>}
           {!readOnly && !skipped && (
             <button

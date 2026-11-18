@@ -12,7 +12,15 @@ Three separate steps remain in order: **Home Inspections** (seller files retain 
 
 Migration `20261118010000_remedies_checklist_step` promotes the stored Remedies graph anchor to a normal task on existing version-1 checklists. It preserves due/actual dates, exact instants, date rule, completion/not-needed state, and downstream key references; it inherits the inspection row's visibility. Other task order is retained. The promoted anchor is removed from hidden anchors to prevent duplicate graph keys. New buyer checklists have 17 steps; seller checklists have 14. Older noncanonical workflow files are unchanged. No emails or provider variables are changed by this release.
 
-Rollout target: existing Weatherly Railway project, environment **staging**, real site https://www.weatherlytc.com. API deploy runs the normal `npm run db:deploy` pre-deploy safeguard before the new web release. API, worker, and web should be pinned to the same release commit/branch. Deployment receipt will be added after successful rollout.
+Deployed to the existing Weatherly Railway project, environment **staging**, real site https://www.weatherlytc.com on November 17 (Eastern; November 18 UTC). All application services are pinned to commit `2a012c717121b611c95000e3ec025ed17f240a46`, tree `2ac9ff8cef0f292d969a1551c6b5ede13872df68`, branch `codex/checklist-dates-2a012c7`.
+
+| Service | Successful deployment |
+| --- | --- |
+| API | `910c2a08-a708-468e-9efa-28c89da90169` |
+| Worker | `aa002e9d-234f-4b3e-8d32-0bc0222633a6` |
+| Web | `959309af-1c62-4e75-868a-9af9a14c4971` |
+
+The API's unchanged `npm run db:deploy` pre-deploy command reported 26 migrations and successfully applied `20261118010000_remedies_checklist_step`. API, worker, web and Postgres each have one running replica, no issues and no pending work. Service source configuration and deployment metadata agree on the release commit. Public `/health` returned 200 and unauthenticated `/api/v1/session` returned 401. The live `/workspace/new` returned 200, and its served JavaScript contains **Display text (optional)**, **Remedies Negotiated**, and **Shown to agent and client**. Hosted protected-record edits remain untested; row-level behavior was verified against synthetic local data, not asserted from deployment status alone.
 
 ## Validation
 

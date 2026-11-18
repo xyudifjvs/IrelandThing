@@ -2,7 +2,7 @@
 
 ## November 17, 2026: checklist dates and Remedies follow-up
 
-Ireland requested real dates plus optional display text during creation with or without an intake, shared with both agents and clients. She also requested three separate checkboxes: Home Inspections, Remedies, and Remedies Negotiated. Implementation, existing-data migration, validation and rollout receipt are in the [checklist follow-up record](../checklist-dates-2026-11-17.md). Display text stays separate from reminders, date calculations and completion status. The previous merge-field release below remains the provider/source baseline until the follow-up rollout is verified.
+Ireland requested real dates plus optional display text during creation with or without an intake, shared with both agents and clients. She also requested three separate checkboxes: Home Inspections, Remedies, and Remedies Negotiated. This follow-up is live at https://www.weatherlytc.com on API, worker and web release `2a012c717121b611c95000e3ec025ed17f240a46`. The Remedies migration succeeded, all services are healthy, no staged work remains, and the served web bundles contain the new controls and wording. Implementation, migration, validation and deployment IDs are in the [checklist follow-up record](../checklist-dates-2026-11-17.md). Display text stays separate from reminders, date calculations and completion status. The previous merge-field release below remains useful provider and feature history. Hosted account edits and real outgoing emails were not exercised by this follow-up.
 
 ## November 17, 2026: merge-field cleanup deployed
 

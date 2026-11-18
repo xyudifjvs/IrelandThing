@@ -120,7 +120,11 @@ export async function seedMatterChecklist(
       dateCapable: step.dateCapable,
       ...dateFields(step.due),
       dateRule: step.rule ?? Prisma.DbNull,
-      details: { scheduled: step.scheduled, showNoteToAgent: false },
+      details: {
+        scheduled: step.scheduled,
+        showNoteToAgent: false,
+        dateWording: step.dateWording,
+      },
     })),
   });
   await tx.matter.update({

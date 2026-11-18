@@ -1,7 +1,6 @@
 import type { CreationProposal } from "../../../../../../../packages/ai/src/creation-extraction/proposal";
 import {
   checklistTemplate,
-  remediesAnchorKey,
 } from "../../../../../../../packages/matters/src/checklist/templates";
 import { buildChecklistSeed } from "../../../../../../../packages/matters/src/checklist/seed";
 import type {
@@ -73,14 +72,6 @@ export function reviewDates(facts: ReviewFacts) {
     facts.side ?? "buyer",
     facts.purchaseType ?? null,
   ).filter((step) => step.dateCapable);
-  const inspection = steps.findIndex(({ key }) => key === "inspections");
-  steps.splice(inspection + 1, 0, {
-    key: remediesAnchorKey,
-    title: "Remedies",
-    notNeeded: false,
-    dateCapable: true,
-    scheduled: false,
-  });
   return steps;
 }
 
@@ -177,7 +168,7 @@ export function assembleDates(
   facts: ReviewFacts,
   dates: ChecklistDateInput[],
   proposal: CreationProposal | null,
-) {
+): ChecklistDateInput[] {
   return reviewDates(facts).flatMap(({ key }) => {
     const saved = dates.find((item) => item.key === key);
     if (saved) return [saved];

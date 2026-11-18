@@ -36,7 +36,8 @@ export function PortalTimeline({
         const skipped = notNeeded(task);
         const upcoming = client && task.id === next?.id;
         const day = shortDate(task.dueDate);
-        const detail = client ? clientStepDate(task) : appointment(task);
+        const detail =
+          client || task.dateLabel ? clientStepDate(task) : appointment(task);
         return (
           <li key={task.id} className={s.timelineRow}>
             <span
@@ -59,8 +60,12 @@ export function PortalTimeline({
                     : upcoming
                       ? "Up next"
                       : ""
-                  : day}
-              {!client && done && (
+                  : task.dateLabel
+                    ? done
+                      ? "Done"
+                      : ""
+                    : day}
+              {!client && done && !task.dateLabel && (
                 <span className={s.visuallyHidden}>Done</span>
               )}
             </span>

@@ -77,9 +77,9 @@ export function ClientFile({
   const finished = fileGroup(file.stage) !== "active";
   const next = !finished ? nextDatedStep(tasks) : null;
   const done = visibleTasks.filter(completed).length;
-  const closingDate = shortDate(
-    finished ? file.closedOn || closing?.dueDate : closing?.dueDate,
-  );
+  const closingDate = finished
+    ? shortDate(file.closedOn || closing?.dueDate)
+    : closing?.dateLabel || shortDate(closing?.dueDate);
   return (
     <div className={`${s.clientWidth} ${s.clientFile}`}>
       <h1>{fileAddress(file)}</h1>

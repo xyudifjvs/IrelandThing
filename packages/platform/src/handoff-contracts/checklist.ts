@@ -107,6 +107,7 @@ export const checklistDateInputSchema = z
     value: dateValueSchema.nullable(),
     rule: checklistDateRuleSchema.nullable(),
     notNeeded: z.boolean().optional(),
+    dateWording: z.string().trim().max(300).optional(),
   })
   .strict();
 export type ChecklistDateInput = z.infer<typeof checklistDateInputSchema>;

@@ -160,7 +160,7 @@ describe("canonical checklist persistence", () => {
       await prisma.task.count({
         where: { matterId: matter.id, stepKey: { not: null } },
       }),
-    ).toBe(16);
+    ).toBe(17);
     expect(
       await prisma.task.findUnique({ where: { id: legacyTask.id } }),
     ).toMatchObject({
@@ -181,7 +181,7 @@ describe("canonical checklist persistence", () => {
           matterId_stepKey: { matterId: matter.id, stepKey: "remedies" },
         },
       }),
-    ).toBeNull();
+    ).toMatchObject({ dueDate: "2026-10-11", status: "pending" });
     await expect(seed(matter.id)).rejects.toMatchObject({
       code: "CHECKLIST_ALREADY_EXISTS",
     });
@@ -237,7 +237,7 @@ describe("canonical checklist persistence", () => {
     ).toBe(1);
   });
 
-  it("pins downstream changes across future writes and preserves hidden anchors in the matter", async () => {
+  it("pins downstream changes across future writes and keeps Remedies as a real step", async () => {
     const matter = await createMatter();
     await seed(matter.id);
     const first = await command(
@@ -270,18 +270,13 @@ describe("canonical checklist persistence", () => {
       dueDate: "2026-10-14",
       dateRule: { kind: "fixed" },
     });
+    expect(await task(matter.id, "remedies")).toMatchObject({ dueDate: "2026-10-11", dateRule: { kind: "fixed" } });
     expect(
       await prisma.matter.findUniqueOrThrow({ where: { id: matter.id } }),
-    ).toMatchObject({
-      details: {
-        checklistDateAnchors: [
-          { key: "remedies", due: date("2026-10-11"), rule: { kind: "fixed" } },
-        ],
-      },
-    });
+    ).toMatchObject({ details: { checklistDateAnchors: [] } });
   });
 
-  it("amends the hidden Remedies deadline without moving inspections or adding a step", async () => {
+  it("amends the Remedies deadline without moving inspections or adding a duplicate step", async () => {
     const matter = await createMatter();
     await seed(matter.id);
     const edit: ChecklistDateEdit = {
@@ -313,7 +308,7 @@ describe("canonical checklist persistence", () => {
     });
     expect(
       await prisma.task.count({ where: { matterId: matter.id, stepKey: { not: null } } }),
-    ).toBe(16);
+    ).toBe(17);
   });
 
   it("records actual HOA delivery and completion atomically, with hook failure rolling both back", async () => {

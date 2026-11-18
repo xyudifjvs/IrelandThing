@@ -1,5 +1,9 @@
 # Ireland’s Weatherly handoff
 
+## November 17, 2026: checklist dates and Remedies follow-up
+
+Ireland requested real dates plus optional display text during creation with or without an intake, shared with both agents and clients. She also requested three separate checkboxes: Home Inspections, Remedies, and Remedies Negotiated. Implementation, existing-data migration, validation and rollout receipt are in the [checklist follow-up record](../checklist-dates-2026-11-17.md). Display text stays separate from reminders, date calculations and completion status. The previous merge-field release below remains the provider/source baseline until the follow-up rollout is verified.
+
 ## November 17, 2026: merge-field cleanup deployed
 
 Ireland’s new merge-field uploads and final corrections are live at https://www.weatherlytc.com. API, worker and web serve release `32a89577836a3284bc27d717c24338537e73ff69`; all four migrations applied, every service is healthy and no staged work remains. Full field list, source decisions, tests, actual deployment IDs and verification limits: [merge-field release record](../merge-fields-2026-11-17.md).

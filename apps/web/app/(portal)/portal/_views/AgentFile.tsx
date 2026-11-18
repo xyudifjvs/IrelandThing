@@ -106,7 +106,10 @@ export function AgentFile({
       </section>
     );
 
-  const closing = shortDate(file.closedOn || closingTask(file.tasks)?.dueDate);
+  const closingStep = closingTask(file.tasks);
+  const closing = active
+    ? closingStep?.dateLabel || shortDate(closingStep?.dueDate)
+    : shortDate(file.closedOn || closingStep?.dueDate);
   const archive =
     file.stage === "closed"
       ? `/api/v1/documents/archive/${encodeURIComponent(file.id)}`

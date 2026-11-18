@@ -1,6 +1,7 @@
 import type { Prisma } from "@weatherly/db";
 import { audienceAllows } from "./deadline-fields";
 import { sharedTaskFields } from "./task-fields";
+import { checklistDateLabel } from "../checklist/display";
 
 type PortalTask = Pick<
   Prisma.TaskGetPayload<object>,
@@ -12,11 +13,13 @@ type PortalTask = Pick<
   | "dueDate"
   | "dueAt"
   | "details"
+  | "dateRule"
 >;
 
 export function canonicalPortalTimeline(
   tasks: readonly PortalTask[],
   role: "agent" | "client",
+  context: { timeZone?: string | null } = {},
 ) {
   return tasks
     .filter(
@@ -26,7 +29,10 @@ export function canonicalPortalTimeline(
         (role !== "client" || task.status !== "not_applicable"),
     )
     .map(
-      ({ id, stepKey, title, status, dueDate, dueAt, details }, position) => {
+      (
+        { id, stepKey, title, status, dueDate, dueAt, details, dateRule },
+        position,
+      ) => {
         const data =
           details && typeof details === "object" && !Array.isArray(details)
             ? details
@@ -37,6 +43,11 @@ export function canonicalPortalTimeline(
           (role === "agent" ||
             stepKey === "closing" ||
             stepKey === "final_walkthrough");
+        const dateLabel = checklistDateLabel(
+          { dueDate, dueAt, details, dateRule },
+          stepKey!,
+          context.timeZone || "America/New_York",
+        );
         return {
           id,
           stepKey,
@@ -45,6 +56,7 @@ export function canonicalPortalTimeline(
           dueDate,
           dueAt,
           position,
+          ...(dateLabel ? { dateLabel } : {}),
           ...(showSchedule
             ? {
                 scheduled: true,

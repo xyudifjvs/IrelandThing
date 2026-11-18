@@ -94,7 +94,7 @@ export function ChecklistStepEditor({
     <form className={s.editor} onSubmit={submit}>
       {kind === "wording" && (
         <label>
-          Email date wording
+          Date display text
           <input
             name="dateWording"
             maxLength={300}
@@ -102,8 +102,8 @@ export function ChecklistStepEditor({
             placeholder="Use the date / default wording"
           />
           <small>
-            Leave blank to use the default. The real due date stays in place for
-            sorting and reminders.
+            Shown to agents and clients. Leave blank to use the date or default
+            wording. The real due date stays in place for sorting and reminders.
           </small>
         </label>
       )}

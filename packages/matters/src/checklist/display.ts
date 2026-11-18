@@ -69,3 +69,33 @@ export function checklistWording(
   }
   return emailDate(task.dueDate);
 }
+
+/** The same public label is used for agent and client timelines. */
+export function checklistDateLabel(
+  task: {
+    dueDate?: string | null;
+    dueAt?: Date | string | null;
+    dateRule?: unknown;
+    details?: unknown;
+  },
+  stepKey: string,
+  timeZone = "America/New_York",
+) {
+  const label = checklistWording(task, stepKey) || emailDate(task.dueDate);
+  const data = record(task.details);
+  if (typeof data.dateWording === "string" && data.dateWording.trim())
+    return label;
+  if (
+    !task.dueAt ||
+    !label ||
+    !["", "fixed"].includes(String(record(task.dateRule).kind || ""))
+  )
+    return label;
+  const at = new Date(task.dueAt);
+  if (!Number.isFinite(at.valueOf())) return label;
+  try {
+    return `${label} at ${new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(at)}`;
+  } catch {
+    return label;
+  }
+}

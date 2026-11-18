@@ -1,5 +1,4 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { remediesAnchorKey } from "../../../../../../../packages/matters/src/checklist/templates";
 import { mutate } from "../../_components/data";
 import type { TransactionAction } from "../../_components/transaction-controls";
 import { CanonicalChecklistStep } from "./CanonicalChecklistStep";
@@ -9,7 +8,6 @@ import {
 } from "./ChecklistDateEditor";
 import {
   displayDate,
-  editableRemediesDate,
   isChecklistTask,
   isComplete,
   type ChecklistMatter,
@@ -45,7 +43,6 @@ export function CanonicalChecklistPanel({
   const readOnly = ["closed", "terminated", "archived"].includes(
     matter.stage ?? "",
   );
-  const remediesDate = readOnly ? undefined : editableRemediesDate(matter);
   const acceptance = matter.acceptanceDate
     ? { date: matter.acceptanceDate, instant: matter.acceptanceAt }
     : null;
@@ -169,16 +166,6 @@ export function CanonicalChecklistPanel({
               editDate={setDateDraft}
               onComplete={onComplete}
               afterStep={afterStep}
-              editRemedies={
-                task.stepKey === "inspections" && remediesDate !== undefined
-                  ? () =>
-                      setDateDraft({
-                        kind: "set",
-                        target: { kind: "step", key: remediesAnchorKey },
-                        value: remediesDate,
-                      })
-                  : undefined
-              }
               moveUp={index ? () => moveTask(index, index - 1) : undefined}
               moveDown={
                 index < tasks.length - 1

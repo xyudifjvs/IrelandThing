@@ -49,7 +49,7 @@ function FileCard({ file, selected }: { file: PortalFile; selected: boolean }) {
       ) : (
         next && (
           <p>
-            Next: {next.title} · {shortDate(next.dueDate)}
+            Next: {next.title} · {next.dateLabel || shortDate(next.dueDate)}
           </p>
         )
       )}

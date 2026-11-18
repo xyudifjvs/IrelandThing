@@ -12,6 +12,7 @@ export type PortalTask = {
   appointmentAt?: string | null;
   appointmentPlace?: string;
   note?: string;
+  dateLabel?: string;
 };
 
 export type PortalPerson = {
@@ -130,6 +131,8 @@ export function appointment(task: PortalTask) {
 }
 
 export function clientStepDate(task: PortalTask) {
+  if (task.dateLabel)
+    return [task.dateLabel, appointment(task)].filter(Boolean).join(" · ");
   const day = shortDate(task.dueDate);
   if (!scheduledStep(task)) return day;
   const time = appointmentTime(task);

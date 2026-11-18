@@ -8,7 +8,8 @@ const buyerTitles = [
   "Earnest Money Due",
   "Attorney Review",
   "Home Inspections",
-  "Repairs Agreed On",
+  "Remedies",
+  "Remedies Negotiated",
   "Condo / HOA Document Provision",
   "Condo / HOA Document Review",
   "Appraisal Ordered",
@@ -25,7 +26,8 @@ const sellerTitles = [
   "Attorney Review",
   "Earnest Money Deposit Received",
   "Buyer's Inspections",
-  "Repairs Agreed On",
+  "Remedies",
+  "Remedies Negotiated",
   "Home Warranty",
   "Condo / HOA Documents Provided",
   "Appraisal Completed",
@@ -68,7 +70,7 @@ describe("official checklist templates", () => {
     );
   });
 
-  it("keeps Remedies as a hidden anchor and uses selected signed terms over defaults", () => {
+  it("keeps Remedies as its own checkbox and uses selected signed terms over defaults", () => {
     const seed = buildChecklistSeed({
       side: "seller",
       purchaseType: "financed",
@@ -119,9 +121,8 @@ describe("official checklist templates", () => {
     expect(
       seed.steps.find(({ key }) => key === "remedies_negotiated")?.due?.date,
     ).toBe("2026-11-22");
-    expect(seed.hiddenAnchors.map(({ key, due }) => [key, due?.date])).toEqual([
-      ["remedies", "2026-11-19"],
-    ]);
+    expect(seed.steps.find(({ key }) => key === "remedies")?.due?.date).toBe("2026-11-19");
+    expect(seed.hiddenAnchors).toEqual([]);
   });
 
   it("leaves remedies and title commitment unresolved without supplied terms", () => {
@@ -146,7 +147,7 @@ describe("official checklist templates", () => {
     expect(
       seed.steps.find(({ key }) => key === "title_commitment")?.due,
     ).toBeNull();
-    expect(seed.hiddenAnchors[0].due).toBeNull();
+    expect(seed.steps.find(({ key }) => key === "remedies")?.due).toBeNull();
   });
 
   it("rejects a due date on a non-dated step instead of creating a hidden deadline", () => {

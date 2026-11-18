@@ -7,6 +7,7 @@ import type {
 import { ReviewAgentPicker } from "./ReviewAgentPicker";
 import { previewDates, reviewDates, type ReviewFacts } from "./review-model";
 import s from "./creation.module.css";
+import { checklistDateLabel } from "../../../../../../../packages/matters/src/checklist/display";
 
 export function ReviewFields({
   facts,
@@ -199,6 +200,11 @@ export function ReviewFields({
       </section>
       <section className={s.section} aria-labelledby="creation-dates">
         <h2 id="creation-dates">Checklist dates</h2>
+        <p>
+          Choose a date, enter display text, or use both. Agents and clients see
+          the display text exactly as entered; the selected date powers
+          reminders.
+        </p>
         <div className={s.grid}>
           <label>
             Acceptance date
@@ -239,6 +245,7 @@ export function ReviewFields({
                     onChange={(event) => {
                       const value = event.target.value;
                       onDate({
+                        ...item,
                         key,
                         value: value ? { date: value, instant: null } : null,
                         rule: value ? { kind: "fixed" } : null,
@@ -247,6 +254,40 @@ export function ReviewFields({
                     }}
                   />
                 </label>
+                <label>
+                  Display text (optional)
+                  <input
+                    aria-label={`${title} display text`}
+                    value={item?.dateWording ?? ""}
+                    maxLength={300}
+                    disabled={item?.notNeeded ?? notNeeded}
+                    placeholder="e.g. Received, on or before 8/30/26"
+                    onChange={(event) =>
+                      onDate({
+                        ...item,
+                        key,
+                        value: item?.value ?? null,
+                        rule: item?.rule ?? null,
+                        dateWording: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+                {!(item?.notNeeded ?? notNeeded) && (
+                  <small>
+                    Shown to agent and client:{" "}
+                    {checklistDateLabel(
+                      {
+                        dueDate: displayed?.date,
+                        dueAt: displayed?.instant,
+                        dateRule: item?.rule,
+                        details: { dateWording: item?.dateWording },
+                      },
+                      key,
+                      facts.deadlineTimeZone || "America/New_York",
+                    ) || "No date or display text yet"}
+                  </small>
+                )}
                 <div className={s.dateControls}>
                   {linked && <small>Linked date</small>}
                   <label>
@@ -255,6 +296,7 @@ export function ReviewFields({
                       checked={item?.notNeeded ?? notNeeded}
                       onChange={(event) =>
                         onDate({
+                          ...item,
                           key,
                           value: item?.value ?? null,
                           rule: item?.rule ?? null,

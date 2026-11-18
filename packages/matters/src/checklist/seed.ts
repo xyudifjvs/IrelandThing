@@ -68,16 +68,14 @@ export function buildChecklistSeed(input: ChecklistSeed) {
   const graph = resolveChecklistDates({
     acceptance: input.acceptance,
     timeZone: input.timeZone,
-    nodes: [
-      ...templates.map(node),
-      node({ key: remediesAnchorKey, dateCapable: true, notNeeded: false }),
-    ],
+    nodes: templates.map(node),
   });
   const resolved = new Map(graph.nodes.map((item) => [item.key, item]));
   return {
     steps: templates.map((template) => ({
       ...template,
       ...resolved.get(template.key)!,
+      dateWording: dates.get(template.key)?.dateWording ?? "",
       notNeeded: resolved.get(template.key)!.status === "not_needed",
     })),
     hiddenAnchors: graph.nodes.filter((item) => !templatesByKey.has(item.key)),

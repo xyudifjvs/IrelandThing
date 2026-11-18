@@ -1128,6 +1128,13 @@ describe("portal refresh and appointment regressions", () => {
     }
   });
 
+  it("shows the entered closing wording in the active client header and keeps actual closed dates", () => {
+    const task = { id: "closing-label", stepKey: "closing", title: "Closing", status: "pending", dueDate: "2026-08-30", dateLabel: "on or before 8/30/26" };
+    const render = (stage: string, closedOn?: string) => renderToStaticMarkup(createElement(ClientFile, { file: { id: "closing-label-file", propertyAddress: "Synthetic Lane", stage, closedOn, tasks: [task] } }));
+    expect(render("under_contract")).toContain("<strong>on or before 8/30/26</strong>");
+    expect(render("closed", "2026-08-29")).toMatch(/<strong>[^<]*Aug 29<\/strong>/);
+  });
+
   it.each([
     ["closing", "Closing"],
     ["final_walkthrough", "Final Walkthrough"],

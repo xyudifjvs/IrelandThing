@@ -319,6 +319,7 @@ export async function getPublicChecklist(token: string) {
           stage: true,
           side: true,
           checklistVersion: true,
+          deadlineTimeZone: true,
           details: true,
           tasks: {
             orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }],
@@ -333,6 +334,7 @@ export async function getPublicChecklist(token: string) {
               kind: true,
               visibility: true,
               details: true,
+              dateRule: true,
             },
           },
           deadlines: {
@@ -366,6 +368,7 @@ export async function getPublicChecklist(token: string) {
         deadlines,
         details,
         checklistVersion,
+        deadlineTimeZone,
         side,
         documents,
         contacts,
@@ -379,7 +382,9 @@ export async function getPublicChecklist(token: string) {
       if (checklistVersion !== null)
         return {
           matter: portalMatter,
-          tasks: canonicalPortalTimeline(tasks, "client"),
+          tasks: canonicalPortalTimeline(tasks, "client", {
+            timeZone: deadlineTimeZone,
+          }),
           clientRequests: [],
           deadlines: [],
           documents,
@@ -402,6 +407,7 @@ export async function getPublicChecklist(token: string) {
             dueAt: _dueAt,
             actualDate: _actualDate,
             stepKey: _key,
+            dateRule: _dateRule,
             ...task
           },
           position,

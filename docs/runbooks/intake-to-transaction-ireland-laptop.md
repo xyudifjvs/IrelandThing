@@ -1,5 +1,13 @@
 # Ireland’s Weatherly handoff
 
+## November 21, 2026: agent-facing transaction-history stages
+
+Ireland requested removing Closing for both HTO and Weatherly TC agents, and Listing only for Weatherly TC agents. Account → Transaction history now receives the agent business from the existing authenticated session. Agent choices exclude Closing; Listing is present only for HTO. Coordinator choices retain both stages. Existing retained files and lifecycle permissions are not changed.
+
+For agents, records already stored in the Closing stage display “Under contract”, and the Under contract history filter includes both saved `under_contract` and `closing` stages. This avoids stranding older files when the Closing choice disappears. Coordinator labels, exact-stage queries, pagination, authorization scope and complete-history counts are preserved. No stored transaction stage is rewritten, no records are removed, and no 7-day closing filter is introduced.
+
+Validation: **23 account-history tests passed**, including new role/business option checks and authorized legacy Closing-file inclusion; root TypeScript, production web build and whitespace checks passed. Local synthetic browser review confirmed Weatherly options without Listing/Closing, HTO options retaining Listing without Closing, and legacy Closing rows labeled Under contract. No live data, invitations, account credentials, provider settings or outgoing emails were changed. API and web rollout receipts follow; no schema migration or worker redeployment is required.
+
 ## November 21, 2026: agent file overview and focused transaction view
 
 Ireland approved showing transaction cards on the overview, opening only the selected property’s timeline/documents/people, and returning with “← Back to all files” while keeping the prior filter and search. The overview no longer opens the first file automatically; the detail route renders only its requested file. The selected address is the page heading. Pending intakes still show their receipt and sent date, without a premature timeline. Existing client views and coordinator-only lifecycle commands are unchanged.

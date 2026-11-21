@@ -117,7 +117,10 @@ function Account({ user }: { user: AccountUser }) {
         />
       )}
       {(agent || coordinator) && (
-        <TransactionHistory coordinator={coordinator} />
+        <TransactionHistory
+          coordinator={coordinator}
+          business={user.business}
+        />
       )}
     </>
   );

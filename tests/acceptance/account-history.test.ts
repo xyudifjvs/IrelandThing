@@ -109,6 +109,7 @@ const PaymentHistory = historyViews.PaymentHistory as ComponentType<{
 }>;
 const TransactionHistory = historyViews.TransactionHistory as ComponentType<{
   coordinator: boolean;
+  business?: string;
 }>;
 const AccountPage = loadView("apps/web/app/(account)/account/page.tsx")
   .default as ComponentType;
@@ -398,6 +399,37 @@ afterAll(async () => {
 });
 
 describe("independent account transaction history", () => {
+  it("includes legacy closing files in agents' under-contract filter while retaining coordinator stages", async () => {
+    const page = await listAccountTransactions(actors.agent, {
+      stage: "under_contract",
+      limit: 100,
+    });
+    const expected = await prisma.matter.count({
+      where: {
+        id: { in: allowedIds },
+        stage: { in: ["under_contract", "closing"] },
+      },
+    });
+    expect(page.total).toBe(expected);
+    expect(page.items).toHaveLength(expected);
+    expect(page.items.some((row) => row.stage === "closing")).toBe(true);
+    expect(
+      page.items.every((row) =>
+        ["under_contract", "closing"].includes(row.stage),
+      ),
+    ).toBe(true);
+    expect(page.summary.total).toBe(212);
+    const coordinator = await listAccountTransactions(actors.owner, {
+      stage: "under_contract",
+      limit: 100,
+    });
+    expect(coordinator.total).toBe(
+      await prisma.matter.count({ where: { stage: "under_contract" } }),
+    );
+    expect(
+      coordinator.items.every((row) => row.stage === "under_contract"),
+    ).toBe(true);
+  });
   it("walks every authorized transaction beyond the old 200 cap exactly once, including every retained stage", async () => {
     const expected = await prisma.matter.findMany({
       where: { id: { in: allowedIds } },
@@ -881,6 +913,45 @@ describe("independent account view states", () => {
     ui.obligations = [];
     ui.fallback = { data, loading, error, refresh: async () => {} };
   }
+  it("removes Closing for both agent businesses, retains Listing only for HTO, and preserves coordinator choices", () => {
+    state({
+      items: [
+        {
+          id: "synthetic-legacy-closing",
+          title: "Synthetic closing file",
+          propertyAddress: "1 Synthetic Lane",
+          side: "buyer",
+          stage: "closing",
+          packageCode: "essentials",
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-02T00:00:00Z",
+        },
+      ],
+      total: 1,
+      nextCursor: null,
+      summary: { total: 1, stages: { closing: 1 } },
+    });
+    for (const business of ["hto", "weatherly", undefined]) {
+      const output = renderToStaticMarkup(
+        createElement(TransactionHistory, { coordinator: false, business }),
+      );
+      expect(output).not.toContain('<option value="closing">');
+      expect(output.includes('<option value="listing">')).toBe(
+        business === "hto",
+      );
+      expect(output).toContain(">Under contract</span>");
+      expect(output).not.toContain(">Closing</span>");
+      expect(output).toContain(
+        'href="/portal/transactions/synthetic-legacy-closing"',
+      );
+    }
+    const coordinator = renderToStaticMarkup(
+      createElement(TransactionHistory, { coordinator: true }),
+    );
+    expect(coordinator).toContain('<option value="listing">');
+    expect(coordinator).toContain('<option value="closing">');
+    expect(coordinator).toContain(">Closing</span>");
+  });
   it("announces loading and errors and offers clear recovery and honest empty states", () => {
     state(null, true);
     const loading = renderToStaticMarkup(
@@ -1129,10 +1200,32 @@ describe("portal refresh and appointment regressions", () => {
   });
 
   it("shows the entered closing wording in the active client header and keeps actual closed dates", () => {
-    const task = { id: "closing-label", stepKey: "closing", title: "Closing", status: "pending", dueDate: "2026-08-30", dateLabel: "on or before 8/30/26" };
-    const render = (stage: string, closedOn?: string) => renderToStaticMarkup(createElement(ClientFile, { file: { id: "closing-label-file", propertyAddress: "Synthetic Lane", stage, closedOn, tasks: [task] } }));
-    expect(render("under_contract")).toContain("<strong>on or before 8/30/26</strong>");
-    expect(render("closed", "2026-08-29")).toMatch(/<strong>[^<]*Aug 29<\/strong>/);
+    const task = {
+      id: "closing-label",
+      stepKey: "closing",
+      title: "Closing",
+      status: "pending",
+      dueDate: "2026-08-30",
+      dateLabel: "on or before 8/30/26",
+    };
+    const render = (stage: string, closedOn?: string) =>
+      renderToStaticMarkup(
+        createElement(ClientFile, {
+          file: {
+            id: "closing-label-file",
+            propertyAddress: "Synthetic Lane",
+            stage,
+            closedOn,
+            tasks: [task],
+          },
+        }),
+      );
+    expect(render("under_contract")).toContain(
+      "<strong>on or before 8/30/26</strong>",
+    );
+    expect(render("closed", "2026-08-29")).toMatch(
+      /<strong>[^<]*Aug 29<\/strong>/,
+    );
   });
 
   it.each([

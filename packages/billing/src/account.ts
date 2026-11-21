@@ -101,7 +101,11 @@ export async function listAccountTransactions(
       const where: Prisma.MatterWhereInput = {
         AND: [
           scope,
-          query.stage === "all" ? {} : { stage: query.stage },
+          query.stage === "all"
+            ? {}
+            : actor.role === "agent" && query.stage === "under_contract"
+              ? { stage: { in: ["under_contract", "closing"] } }
+              : { stage: query.stage },
           query.side === "all" ? {} : { side: query.side },
           query.q
             ? {

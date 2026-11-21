@@ -37,10 +37,22 @@ const stages = [
   ["terminated", "Terminated / cancelled"],
   ["archived", "Archived"],
 ];
-function stageLabel(value: string) {
+function stageLabel(value: string, coordinator: boolean) {
+  if (!coordinator && value === "closing") return "Under contract";
   return value === "terminated" ? "Terminated / cancelled" : label(value);
 }
-export function TransactionHistory({ coordinator }: { coordinator: boolean }) {
+export function TransactionHistory({
+  coordinator,
+  business,
+}: {
+  coordinator: boolean;
+  business?: string;
+}) {
+  const visibleStages = stages.filter(
+    ([stage]) =>
+      coordinator ||
+      (stage !== "closing" && (stage !== "listing" || business === "hto")),
+  );
   const emptyFilters = { q: "", stage: "all", side: "all" };
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
@@ -143,7 +155,7 @@ export function TransactionHistory({ coordinator }: { coordinator: boolean }) {
                 update({ ...filters, stage: event.target.value })
               }
             >
-              {stages.map(([value, text]) => (
+              {visibleStages.map(([value, text]) => (
                 <option value={value} key={value}>
                   {text}
                 </option>
@@ -234,7 +246,7 @@ export function TransactionHistory({ coordinator }: { coordinator: boolean }) {
                             </td>
                             <td data-label="Stage">
                               <span className={badgeClass(transaction.stage)}>
-                                {stageLabel(transaction.stage)}
+                                {stageLabel(transaction.stage, coordinator)}
                               </span>
                             </td>
                             <td data-label="Side / service">

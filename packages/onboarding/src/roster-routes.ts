@@ -3,8 +3,8 @@ import { asyncHandler, principal } from "@weatherly/platform";
 import { getRosterAgent, listArchivedRoster, listRoster } from "./roster-read";
 import {
   addRosterAgent,
-  archiveRosterInquiry,
-  restoreRosterInquiry,
+  archiveRosterAgent,
+  restoreRosterAgent,
   importRosterAgent,
   markAgreementSent,
   updateRosterAgent,
@@ -43,7 +43,7 @@ export function registerRosterRoutes(router: Router) {
     "/roster/:id/restore",
     asyncHandler(async (req, res) =>
       res.json(
-        await restoreRosterInquiry(
+        await restoreRosterAgent(
           principal(req),
           String(req.params.id),
           req.body,
@@ -85,7 +85,7 @@ export function registerRosterRoutes(router: Router) {
     "/roster/:id/archive",
     asyncHandler(async (req, res) =>
       res.json(
-        await archiveRosterInquiry(
+        await archiveRosterAgent(
           principal(req),
           String(req.params.id),
           req.body,

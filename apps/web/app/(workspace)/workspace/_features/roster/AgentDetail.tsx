@@ -8,9 +8,11 @@ import s from "../../_components/workspace.module.css";
 import styles from "./roster.module.css";
 import { AgentContactForm } from "./AgentContactForm";
 import { AgentSignupActions } from "./AgentSignupActions";
+import { useRosterConfirmation } from "./useRosterConfirmation";
 import { PersonalTestInvitation } from "./PersonalTestInvitation";
 import { AgreementEvidence } from "./AgreementEvidence";
 import {
+  archivePrompt,
   nextRosterAction,
   phaseLabel,
   rosterDate,
@@ -78,6 +80,7 @@ function AgentProfile({
   onRefresh: () => Promise<void>;
   onChanged: (id: string | null, action?: RosterAction) => Promise<void>;
 }) {
+  const confirmation = useRosterConfirmation();
   const [action, setAction] = useState<RosterAction>(initialAction);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -122,6 +125,7 @@ function AgentProfile({
   }
   return (
     <>
+      {confirmation.dialog}
       <div className={styles.identity}>
         <p className={styles.business}>
           {agent.business === "hto" ? "Home Team Ohio" : "Weatherly TC"}
@@ -203,7 +207,34 @@ function AgentProfile({
             ))}
           </ol>
         )}
-        {agent.phase === "access_revoked" && <p>Portal access revoked.</p>}
+        {agent.phase === "access_revoked" && <p>Portal access disabled.</p>}
+        {agent.phase === "access_revoked" && agent.portalUserId && (
+          <button
+            className={s.buttonSmall}
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              if (
+                !(await confirmation.request({
+                  title: `Restore access for ${agent.name}?`,
+                  body: "This restores agent portal access to transactions assigned or shared with this account.",
+                  confirmLabel: "Restore portal access",
+                }))
+              )
+                return;
+              void operate(async () => {
+                await mutate(`/api/v1/users/${agent.portalUserId}/access`, {
+                  enabled: true,
+                  reason:
+                    "Coordinator explicitly restored agent portal access after reviewing this roster entry.",
+                });
+                await onRefresh();
+              });
+            }}
+          >
+            Restore portal access
+          </button>
+        )}
         {agent.booking && (
           <p>Call booked {rosterDate(agent.booking.startAt)}</p>
         )}
@@ -238,17 +269,19 @@ function AgentProfile({
             className={styles.quiet}
             type="button"
             disabled={busy}
-            onClick={() =>
+            onClick={async () => {
+              if (!(await confirmation.request(archivePrompt(agent)))) return;
               void operate(async () => {
                 const row = await materialize();
                 await mutate(`${rosterEndpoint}/${row.id}/archive`, {
                   expectedRevision: row.revision,
+                  confirmed: true,
                 });
                 await onChanged(null);
-              })
-            }
+              });
+            }}
           >
-            Archive inquiry
+            Archive agent
           </button>
         )}
       </section>

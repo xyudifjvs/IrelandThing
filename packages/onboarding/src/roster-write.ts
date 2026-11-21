@@ -41,7 +41,10 @@ const editInput = profile
 const sentInput = z
   .object({ expectedRevision: revision, sentOn: z.iso.date() })
   .strict();
-const archiveInput = z.object({ expectedRevision: revision }).strict();
+const revisionInput = z.object({ expectedRevision: revision }).strict();
+const archiveInput = revisionInput
+  .extend({ confirmed: z.literal(true).optional() })
+  .strict();
 
 export async function addRosterAgent(actor: Principal, raw: unknown) {
   assertCoordinator(actor);
@@ -294,39 +297,116 @@ export async function markAgreementSent(
   });
 }
 
-export async function archiveRosterInquiry(
+export async function archiveRosterAgent(
   actor: Principal,
   id: string,
   raw: unknown,
 ) {
   assertCoordinator(actor);
-  const { expectedRevision } = archiveInput.parse(raw);
+  const { expectedRevision, confirmed } = archiveInput.parse(raw);
   return prisma.$transaction(async (tx) => {
     const row = await lockRosterAgent(tx, id);
     requireRevision(row.revision, expectedRevision);
-    if (!(await canArchiveRosterInquiry(tx, row)))
+    if (!confirmed && !(await canArchiveRosterInquiry(tx, row)))
       throw new HttpError(
         409,
-        "INQUIRY_ARCHIVE_ONLY",
-        "Only an inquiry can be archived.",
+        "ARCHIVE_CONFIRMATION_REQUIRED",
+        "Confirm archiving this agent, cancelling unused invitations, and disabling their portal access. Transaction and agreement history will be kept.",
       );
+    const user = row.userId
+      ? await tx.user.findUnique({
+          where: { id: row.userId },
+          select: { id: true, role: true },
+        })
+      : row.normalizedEmail
+        ? await tx.user.findFirst({
+            where: {
+              email: { equals: row.normalizedEmail, mode: "insensitive" },
+              role: "agent",
+            },
+            select: { id: true, role: true },
+          })
+        : null;
+    if (user?.id === actor.id || user?.role === "coordinator")
+      throw new HttpError(
+        422,
+        "COORDINATOR_ARCHIVE_DENIED",
+        "The coordinator account cannot be archived as an agent.",
+      );
+    if (user && user.role !== "agent")
+      throw new HttpError(
+        409,
+        "ROSTER_ACCOUNT_MISMATCH",
+        "Review the linked account before archiving this agent.",
+      );
+    const invitations = await tx.invitation.findMany({
+      where: {
+        role: "agent",
+        acceptedAt: null,
+        OR: [
+          { rosterAgentId: row.id },
+          ...(row.normalizedEmail
+            ? [
+                {
+                  rosterAgentId: null,
+                  email: {
+                    equals: row.normalizedEmail,
+                    mode: "insensitive" as const,
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+      select: { id: true },
+    });
+    const now = new Date();
+    if (invitations.length) {
+      const ids = invitations.map(({ id }) => id);
+      await tx.invitation.updateMany({
+        where: { id: { in: ids } },
+        data: { expiresAt: now },
+      });
+      await tx.outboxJob.updateMany({
+        where: {
+          topic: "agent.invitation.email",
+          idempotencyKey: { in: ids.map((id) => `system-invitation:${id}`) },
+          state: { in: ["pending", "running"] },
+        },
+        data: { state: "cancelled", lockedBy: null, leaseUntil: null },
+      });
+    }
+    if (user) {
+      await audit(tx, actor, "identity.access_revoked", "User", user.id, null, {
+        reason: "Coordinator archived this roster agent.",
+        rosterAgentId: row.id,
+      });
+      await tx.session.deleteMany({ where: { userId: user.id } });
+    }
     await tx.rosterAgent.update({
       where: { id },
-      data: { archivedAt: new Date(), revision: { increment: 1 } },
+      data: { archivedAt: now, revision: { increment: 1 } },
     });
-    await audit(tx, actor, "roster.inquiry_archived", "RosterAgent", id, null);
-    return { archived: true };
+    await audit(tx, actor, "roster.agent_archived", "RosterAgent", id, null, {
+      revokedUserId: user?.id ?? null,
+      expiredInvitationIds: invitations.map(({ id }) => id),
+    });
+    return {
+      archived: true,
+      portalAccessDisabled: !!user,
+      cancelledInvitations: invitations.length,
+    };
   });
 }
 
 /** Restore the original contact and history without creating an account or invitation. */
-export async function restoreRosterInquiry(
+export async function restoreRosterAgent(
   actor: Principal,
   id: string,
   raw: unknown,
 ) {
   assertCoordinator(actor);
-  const { expectedRevision } = archiveInput.parse(raw);
+  const { expectedRevision } = revisionInput.parse(raw);
   return prisma.$transaction(async (tx) => {
     const initial = await tx.rosterAgent.findUnique({
       where: { id },
@@ -353,7 +433,7 @@ export async function restoreRosterInquiry(
       where: { id },
       data: { archivedAt: null, revision: { increment: 1 } },
     });
-    await audit(tx, actor, "roster.inquiry_restored", "RosterAgent", id, null);
+    await audit(tx, actor, "roster.agent_restored", "RosterAgent", id, null);
     return saved;
   });
 }

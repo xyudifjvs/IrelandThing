@@ -23,6 +23,7 @@ export type RosterEntry = {
     id: string;
   } | null;
   hasAccount: boolean;
+  portalUserId?: string | null;
   personalTest?: boolean;
   canArchive: boolean;
   phase: AgentPhase;
@@ -107,4 +108,12 @@ export function nextRosterAction(
     default:
       return null;
   }
+}
+
+export function archivePrompt(agent: { name: string }) {
+  return {
+    title: `Archive ${agent.name}?`,
+    body: "This hides the agent from your working roster, cancels unused invitations, and disables agent portal access. Transactions, documents, agreements, and history are kept. You can restore the entry later.",
+    confirmLabel: "Archive agent",
+  };
 }

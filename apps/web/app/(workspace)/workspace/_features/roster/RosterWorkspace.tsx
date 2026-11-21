@@ -7,8 +7,10 @@ import { mutate, useData } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import styles from "./roster.module.css";
 import { AgentContactForm } from "./AgentContactForm";
+import { useRosterConfirmation } from "./useRosterConfirmation";
 import { AgentDetail } from "./AgentDetail";
 import {
+  archivePrompt,
   nextRosterAction,
   phaseLabel,
   rosterDate,
@@ -23,6 +25,7 @@ export function RosterWorkspace({
 }: {
   initialAgentId: string | null;
 }) {
+  const confirmation = useRosterConfirmation();
   const roster = useData<RosterEntry[]>(rosterEndpoint);
   const archived = useData<ArchivedRosterEntry[]>(`${rosterEndpoint}/archived`);
   const [restoringId, setRestoringId] = useState<string | null>(null);
@@ -114,6 +117,8 @@ export function RosterWorkspace({
   }
 
   async function archive(agent: RosterEntry) {
+    if (archiveId || !(await confirmation.request(archivePrompt(agent))))
+      return;
     setArchiveId(agent.id);
     setError("");
     try {
@@ -125,6 +130,7 @@ export function RosterWorkspace({
         : agent;
       await mutate(`${rosterEndpoint}/${row.id}/archive`, {
         expectedRevision: row.revision,
+        confirmed: true,
       });
       if (selected.id === agent.id) select(null);
       await Promise.all([roster.refresh(), archived.refresh()]);
@@ -132,7 +138,7 @@ export function RosterWorkspace({
       setError(
         failure instanceof Error
           ? failure.message
-          : "Could not archive this inquiry.",
+          : "Could not archive this agent.",
       );
     } finally {
       setArchiveId(null);
@@ -141,6 +147,7 @@ export function RosterWorkspace({
 
   return (
     <>
+      {confirmation.dialog}
       <header className={s.heading}>
         <div>
           <h1>Agent roster</h1>
@@ -252,6 +259,8 @@ export function RosterWorkspace({
                 rows={team}
                 selectedId={selected.id}
                 onSelect={select}
+                onArchive={archive}
+                busy={archiveId !== null}
                 empty={
                   query ? "No team members match." : "No team members yet."
                 }
@@ -261,6 +270,8 @@ export function RosterWorkspace({
                 rows={active}
                 selectedId={selected.id}
                 onSelect={select}
+                onArchive={archive}
+                busy={archiveId !== null}
                 empty={query ? "No agents match." : "No active agents yet."}
               />
             </>
@@ -270,7 +281,8 @@ export function RosterWorkspace({
               <summary>Archived agents ({archived.data?.length ?? 0})</summary>
               <p>
                 Restore an entry to use its saved contact information and
-                history.
+                history. Portal access stays disabled until you restore it
+                separately.
               </p>
               {archived.error && (
                 <p role="alert">
@@ -327,7 +339,7 @@ export function RosterWorkspace({
               onClose={() => select(null)}
               onChanged={async (id, action) => {
                 if (id !== selected.id) select(id, action);
-                await roster.refresh();
+                await Promise.all([roster.refresh(), archived.refresh()]);
               }}
             />
           )}
@@ -342,12 +354,16 @@ function AgentGroup({
   rows,
   selectedId,
   onSelect,
+  onArchive,
+  busy,
   empty,
 }: {
   title: string;
   rows: RosterEntry[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onArchive: (agent: RosterEntry) => Promise<void>;
+  busy: boolean;
   empty: string;
 }) {
   return (
@@ -356,7 +372,7 @@ function AgentGroup({
       {rows.length ? (
         <ul>
           {rows.map((agent) => (
-            <li key={agent.id}>
+            <li className={styles.row} key={agent.id}>
               <button
                 className={`${styles.agent} ${styles.groupRow}`}
                 type="button"
@@ -388,6 +404,15 @@ function AgentGroup({
                   {agent.activeFileCount} active · {agent.closedFileCount}{" "}
                   closed
                 </small>
+              </button>
+              <button
+                className={styles.quiet}
+                type="button"
+                disabled={busy}
+                aria-label={`Archive ${agent.name}`}
+                onClick={() => void onArchive(agent)}
+              >
+                Archive
               </button>
             </li>
           ))}

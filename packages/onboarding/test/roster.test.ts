@@ -309,7 +309,7 @@ it("preserves distinct website and verified booking events under one email roste
   expect(booking.rosterAgentId).toBe(records[0].rosterAgentId);
 });
 
-it("records actual signed versions and prevents archiving an agreement-bearing signup", async () => {
+it("records actual signed versions and requires archive confirmation for an agreement-bearing signup", async () => {
   const roster = await request(coordinator)
     .post("/onboarding/roster")
     .send({
@@ -398,7 +398,7 @@ async function legacyAgreement(userId: string) {
   ).body;
 }
 
-it("rejects archive after an unlinked legacy account or prior inquiry has advanced", async () => {
+it("requires archive confirmation after an unlinked legacy account or inquiry has advanced", async () => {
   const legacyEmail = email("existing-agent");
   const userId = randomUUID();
   await prisma.user.create({
@@ -439,13 +439,13 @@ it("rejects archive after an unlinked legacy account or prior inquiry has advanc
   expect(detail.body).toMatchObject({
     phase: "active",
     hasAccount: true,
-    canArchive: false,
+    canArchive: true,
   });
   const denied = await request(coordinator)
     .post(`/onboarding/roster/${row.id}/archive`)
     .send({ expectedRevision: row.revision })
     .expect(409);
-  expect(denied.body.code).toBe("INQUIRY_ARCHIVE_ONLY");
+  expect(denied.body.code).toBe("ARCHIVE_CONFIRMATION_REQUIRED");
   expect(
     (await prisma.rosterAgent.findUniqueOrThrow({ where: { id: row.id } }))
       .archivedAt,
@@ -480,7 +480,7 @@ it("rejects archive after an unlinked legacy account or prior inquiry has advanc
     .expect(200);
   expect(sentDetail.body).toMatchObject({
     phase: "agreement_sent",
-    canArchive: false,
+    canArchive: true,
   });
   await request(coordinator)
     .post(`/onboarding/roster/${sentRow.id}/archive`)
@@ -499,7 +499,7 @@ it("materializes and invites a signed-agreement-only legacy signup without chang
   );
   expect(entry).toMatchObject({
     phase: "agreement_signed",
-    canArchive: false,
+    canArchive: true,
     source: { kind: "agreement", id: agreement.id },
   });
   const detail = await request(coordinator)
@@ -617,7 +617,7 @@ it.each(["import", "website inquiry"])(
     );
     expect(entry).toMatchObject({
       phase: "invited",
-      canArchive: false,
+      canArchive: true,
       invitation: { id: first.body.id },
       source: fromInquiry ? null : { kind: "invitation", id: first.body.id },
     });
@@ -770,7 +770,7 @@ it("lists and restores the original archived contact without inviting, enrolling
   expect(await prisma.user.count({ where: { email: address } })).toBe(accountsBefore);
   expect(await prisma.invitation.count({ where: { email: address } })).toBe(0);
   expect(queue.length).toBe(queuedBefore);
-  expect(await prisma.auditEvent.count({ where: { entityId: original.id, action: "roster.inquiry_restored" } })).toBe(1);
+  expect(await prisma.auditEvent.count({ where: { entityId: original.id, action: "roster.agent_restored" } })).toBe(1);
   const detail = await request(coordinator).get(`/onboarding/roster/${original.id}`).expect(200);
   expect(detail.body).toMatchObject({ phase: "inquiry", hasAccount: false });
   expect(detail.body.inquiries).toContainEqual(expect.objectContaining({ id: inquiry.id }));
@@ -783,10 +783,10 @@ it("lists and restores the original archived contact without inviting, enrolling
 
 it("rejects stale restore revisions and restricts archived contacts to the coordinator", async () => {
   const { listArchivedRoster } = await import("../src/roster-read");
-  const { restoreRosterInquiry } = await import("../src/roster-write");
+  const { restoreRosterAgent } = await import("../src/roster-write");
   for (const role of ["agent", "client"] as const) {
     await expect(listArchivedRoster({ ...owner, role })).rejects.toMatchObject({ status: 403 });
-    await expect(restoreRosterInquiry({ ...owner, role }, "not-readable", { expectedRevision: 1 })).rejects.toMatchObject({ status: 403 });
+    await expect(restoreRosterAgent({ ...owner, role }, "not-readable", { expectedRevision: 1 })).rejects.toMatchObject({ status: 403 });
   }
   const entry = await prisma.rosterAgent.create({ data: { name: "Archived revision fixture", email: email("restore-stale"), normalizedEmail: email("restore-stale"), business: "weatherly", archivedAt: new Date() } });
   await prisma.rosterAgent.update({ where: { id: entry.id }, data: { name: "New saved name", revision: { increment: 1 } } });
@@ -864,4 +864,74 @@ it("keeps personal-test invitations away from existing accounts, transaction ass
   const other = express(); other.use(express.json()); other.use((req, _res, next) => { req.principal = { ...owner, role: "agent" }; next(); });
   other.use("/identity", createIdentityRouter(createAuth())); other.use(errors);
   await request(other).post("/identity/invitations").send(invite).expect(403);
+});
+
+it("archives an invited test contact, expires the link, cancels its email job, and restores the same record", async () => {
+  const testInvites = personalInvitationServer();
+  const address = email("archive-invited");
+  const entry = await request(coordinator).post("/onboarding/roster").send({ name: "Future test cleanup", email: address, business: "weatherly" }).expect(201);
+  const invite = await request(testInvites).post("/identity/invitations").send({ email: address, role: "agent", rosterAgentId: entry.body.id, personalTest: { ownEmailConfirmed: true } }).expect(201);
+  const job = await prisma.outboxJob.create({ data: { topic: "agent.invitation.email", idempotencyKey: `system-invitation:${invite.body.id}`, payload: { invitationId: invite.body.id } } });
+  const before = queue.length;
+  const unconfirmed = await request(coordinator).post(`/onboarding/roster/${entry.body.id}/archive`).send({ expectedRevision: entry.body.revision }).expect(409);
+  expect(unconfirmed.body.code).toBe("ARCHIVE_CONFIRMATION_REQUIRED");
+  const archived = await request(coordinator).post(`/onboarding/roster/${entry.body.id}/archive`).send({ expectedRevision: entry.body.revision, confirmed: true }).expect(200);
+  expect(archived.body).toMatchObject({ archived: true, portalAccessDisabled: false, cancelledInvitations: 1 });
+  expect((await prisma.outboxJob.findUniqueOrThrow({ where: { id: job.id } })).state).toBe("cancelled");
+  await request(testInvites).post("/identity/invitations/register").send({ token: invite.body.acceptanceToken, name: "Expired signup", password }).expect(400);
+  expect(queue.length).toBe(before);
+  const list = await request(coordinator).get("/onboarding/roster").expect(200);
+  expect(list.body.some((row: { id: string }) => row.id === entry.body.id)).toBe(false);
+  const stored = await prisma.rosterAgent.findUniqueOrThrow({ where: { id: entry.body.id } });
+  await request(coordinator).post(`/onboarding/roster/${entry.body.id}/restore`).send({ expectedRevision: stored.revision }).expect(200);
+  expect((await prisma.invitation.findUniqueOrThrow({ where: { id: invite.body.id } })).expiresAt.valueOf()).toBeLessThanOrEqual(Date.now());
+  expect(await prisma.rosterAgent.count({ where: { normalizedEmail: address } })).toBe(1);
+  await prisma.outboxJob.delete({ where: { id: job.id } });
+});
+
+it("archives an active agent while preserving files and agreements, and restores entry and access separately", async () => {
+  const address = email("archive-active");
+  const userId = randomUUID();
+  await prisma.user.create({ data: { id: userId, name: "Active archive fixture", email: address, role: "agent", emailVerified: true } });
+  await prisma.account.create({ data: { id: randomUUID(), userId, accountId: userId, providerId: "credential", password: await hashPassword(password) } });
+  const agreement = await legacyAgreement(userId);
+  const entry = await request(coordinator).post("/onboarding/roster").send({ name: "Active archive fixture", email: address, business: "weatherly" }).expect(201);
+  const file = await prisma.matter.create({ data: { title: "Preserve this transaction", propertyAddress: "Synthetic history lane", side: "buyer", packageCode: "essentials", agentId: userId, agentRosterId: entry.body.id, tasks: { create: { title: "Keep completed step", status: "completed", visibility: "client" } } } });
+  rows.fileIds.push(file.id);
+  const signIn = () => request(authenticated).post("/api/auth/sign-in/email").set("x-weatherly-client-ip", "192.0.2.84").send({ email: address, password });
+  const login = await signIn().expect(200);
+  await request(authenticated).get("/api/v1/session").set("Cookie", login.headers["set-cookie"]).expect(200);
+  const { createHash, randomBytes } = await import("node:crypto");
+  const { getPublicChecklist } = await import("../../matters/src/checklist-sharing");
+  const token = randomBytes(32).toString("base64url");
+  await prisma.checklistShare.create({ data: { matterId: file.id, issuedById: userId, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 3600000) } });
+  expect((await getPublicChecklist(token)).matter.id).toBe(file.id);
+  await request(coordinator).post(`/onboarding/roster/${entry.body.id}/archive`).send({ expectedRevision: entry.body.revision, confirmed: true }).expect(200);
+  expect(await prisma.session.count({ where: { userId } })).toBe(0);
+  const oldSession = await request(authenticated).get("/api/v1/session").set("Cookie", login.headers["set-cookie"]);
+  expect([401, 403]).toContain(oldSession.status);
+  await expect(getPublicChecklist(token)).rejects.toMatchObject({ status: 404 });
+  const kept = await prisma.matter.findUniqueOrThrow({ where: { id: file.id }, include: { tasks: true } });
+  expect(kept).toMatchObject({ title: file.title, agentId: userId, agentRosterId: entry.body.id, tasks: [expect.objectContaining({ status: "completed" })] });
+  expect(await prisma.agreement.findUniqueOrThrow({ where: { id: agreement.id } })).toMatchObject({ documentId: agreement.documentId, status: "approved" });
+  const list = await request(coordinator).get("/onboarding/roster").expect(200);
+  expect(list.body.some((row: { email: string }) => row.email === address)).toBe(false);
+  const stored = await prisma.rosterAgent.findUniqueOrThrow({ where: { id: entry.body.id } });
+  await request(coordinator).post(`/onboarding/roster/${entry.body.id}/restore`).send({ expectedRevision: stored.revision }).expect(200);
+  const detail = await request(coordinator).get(`/onboarding/roster/${entry.body.id}`).expect(200);
+  expect(detail.body).toMatchObject({ phase: "access_revoked", portalUserId: userId, files: [expect.objectContaining({ id: file.id })] });
+  const blockedLogin = await signIn().expect(200);
+  await request(authenticated).get("/api/v1/session").set("Cookie", blockedLogin.headers["set-cookie"]).expect(403);
+  await request(coordinator).post(`/identity/users/${userId}/access`).send({ enabled: true, reason: "Explicit restoration after reviewing the roster" }).expect(200);
+  const restoredLogin = await signIn().expect(200);
+  await request(authenticated).get("/api/v1/session").set("Cookie", restoredLogin.headers["set-cookie"]).expect(200);
+});
+
+it("prevents coordinator archival and rejects noncoordinator archive requests", async () => {
+  const row = await prisma.rosterAgent.create({ data: { name: "Coordinator safety fixture", email: email("coordinator-safety"), normalizedEmail: email("coordinator-safety"), userId: owner.id, business: "weatherly" } });
+  const denied = await request(coordinator).post(`/onboarding/roster/${row.id}/archive`).send({ expectedRevision: row.revision, confirmed: true }).expect(422);
+  expect(denied.body.code).toBe("COORDINATOR_ARCHIVE_DENIED");
+  expect((await prisma.rosterAgent.findUniqueOrThrow({ where: { id: row.id } })).archivedAt).toBeNull();
+  const { archiveRosterAgent } = await import("../src/roster-write");
+  for (const role of ["agent", "client"] as const) await expect(archiveRosterAgent({ ...owner, role }, row.id, { expectedRevision: row.revision, confirmed: true })).rejects.toMatchObject({ status: 403 });
 });

@@ -232,3 +232,23 @@
     justify-content: start;
   }
 }
+
+.confirmDialog {
+  background: var(--weatherly-color-surface, #fff);
+  color: inherit;
+  border: 1px solid var(--weatherly-color-border, #ded5c8);
+  border-radius: var(--weatherly-radius-panel, 8px);
+  padding: 24px;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+}
+.confirmDialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+.confirmDialog h2 {
+  margin: 0 0 16px;
+}
+.confirmDialog p {
+  margin: 0 0 24px;
+  line-height: 1.6;
+}

@@ -355,14 +355,8 @@ async function loadRoster(
           signed.length === 0 &&
           !!invitation &&
           personalTestInviteIds.has(invitation.id),
-        canArchive:
-          phase === "inquiry" &&
-          !candidate.userId &&
-          !account &&
-          !invitation &&
-          !attachedAgreements.some((record) =>
-            ["received", "approved"].includes(record.status),
-          ),
+        portalUserId: account?.id ?? null,
+        canArchive: true,
         phase,
         phaseOn,
         agreementSentOn: sentOn,
@@ -392,7 +386,16 @@ export async function canArchiveRosterInquiry(
   row: StoredCandidate,
 ) {
   const [entry] = await loadRoster(db, row);
-  return entry?.canArchive === true;
+  return (
+    !!entry &&
+    entry.phase === "inquiry" &&
+    !entry.userId &&
+    !entry.hasAccount &&
+    !entry.invitation &&
+    !entry.agreementHistory.some((item) =>
+      ["received", "approved"].includes(item.status),
+    )
+  );
 }
 
 export async function listRoster(actor: Principal) {

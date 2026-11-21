@@ -1,0 +1,275 @@
+.page {
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: 46% 54%;
+  background: #f6f3ee;
+  color: #1e1c1a;
+  font-family: var(--weatherly-montserrat), Arial, sans-serif;
+}
+.story {
+  min-width: 0;
+  padding: 54px 11%;
+  background: #1b1a18;
+  color: #f6f3ee;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 60px;
+}
+.brand {
+  display: block;
+  width: min(100%, 320px);
+  background: #f6f3ee;
+  padding: 16px 22px;
+}
+.brand img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.statement {
+  font:
+    500 clamp(46px, 5.2vw, 76px)/1.08 var(--weatherly-serif),
+    Georgia,
+    serif;
+  letter-spacing: -0.015em;
+  margin: 45px 0;
+  max-width: 560px;
+}
+.signature {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: #c4beb4;
+}
+.signature img {
+  width: 80px;
+  height: auto;
+}
+.formSide {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 64px 36px;
+}
+.form {
+  width: 100%;
+  max-width: 490px;
+}
+.eyebrow {
+  color: #77614c;
+  text-transform: uppercase;
+  letter-spacing: 0.21em;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.form h1 {
+  font:
+    600 46px/1.15 var(--weatherly-serif),
+    Georgia,
+    serif;
+  margin: 0 0 32px;
+  letter-spacing: -0.015em;
+}
+.form .signInHeading {
+  white-space: nowrap;
+  font-size: clamp(25px, 2.9vw, 39px);
+}
+.field {
+  display: grid;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 20px 0;
+}
+.field small {
+  color: #6b625a;
+  font-size: 13px;
+  font-weight: 400;
+}
+.input,
+.password {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid #e3dbcf;
+  border-radius: 7px;
+  background: white;
+  color: #1e1c1a;
+}
+.input {
+  padding: 14px 16px;
+  font: inherit;
+}
+.input[readonly] {
+  background: #eee9e1;
+  color: #625b53;
+}
+.input:focus-visible,
+.password:focus-within {
+  outline: 2px solid #79634d;
+  outline-offset: 2px;
+}
+.labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.labelRow a {
+  font-weight: 400;
+  text-underline-offset: 3px;
+}
+.password {
+  display: flex;
+  overflow: hidden;
+}
+.password input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 14px 16px;
+  font: inherit;
+  color: inherit;
+}
+.password button {
+  border: 0;
+  border-left: 1px solid #f0eae3;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 18px;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+.remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #5e574f;
+  margin: 20px 0 30px;
+}
+.remember input {
+  accent-color: #1e1c1a;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+.button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 15px 12px;
+  border: 1px solid #1e1c1a;
+  border-radius: 7px;
+  color: white;
+  background: #1e1c1a;
+  font:
+    600 16px/1.5 var(--weatherly-montserrat),
+    Arial,
+    sans-serif;
+  text-decoration: none;
+  margin-top: 30px;
+}
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.help,
+.contact {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #6b625a;
+  margin: 28px 0 0;
+}
+.help {
+  text-align: center;
+}
+.help a {
+  font-weight: 600;
+  color: #1e1c1a;
+}
+.contact a,
+.help a {
+  text-underline-offset: 3px;
+}
+.error {
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 12px;
+  border: 1px solid #dbb2a3;
+  border-radius: 6px;
+  color: #8a3525;
+  background: #fff2ec;
+  overflow-wrap: anywhere;
+}
+.sub {
+  color: #6b625a;
+  line-height: 1.7;
+  font-size: 14px;
+}
+.secondary {
+  background: transparent;
+  border: 0;
+  padding: 12px 0;
+  color: #1e1c1a;
+  text-decoration: underline;
+  font-size: 14px;
+}
+@media (max-width: 760px) {
+  .page {
+    display: block;
+  }
+  .story {
+    padding: 28px 6%;
+    gap: 24px;
+  }
+  .brand {
+    width: 250px;
+    padding: 12px 16px;
+  }
+  .statement {
+    font-size: clamp(30px, 7.7vw, 44px);
+    line-height: 1.12;
+    margin: 0 0 8px;
+    max-width: 560px;
+  }
+  .signature {
+    display: none;
+  }
+  .formSide {
+    padding: 30px 6% 70px;
+    min-height: 68svh;
+    align-items: flex-start;
+  }
+  .form {
+    max-width: 560px;
+  }
+  .eyebrow {
+    font-size: clamp(11px, 2.7vw, 14px);
+  }
+  .form h1 {
+    font-size: clamp(34px, 8vw, 46px);
+    margin-bottom: 30px;
+  }
+  .form .signInHeading {
+    font-size: clamp(21px, 5.5vw, 34px);
+  }
+  .field {
+    font-size: 14px;
+  }
+  .button {
+    font-size: clamp(13px, 3.3vw, 16px);
+  }
+  .contact {
+    font-size: 12px;
+  }
+}

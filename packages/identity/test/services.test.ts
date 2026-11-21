@@ -538,6 +538,23 @@ describe("real PostgreSQL services and Better Auth", () => {
         "Synthetic test exception approved by coordinator",
     });
     expect(invited.status, invited.text).toBe(201);
+    const preview = await request(app)
+      .post("/identity/invitations/preview")
+      .send({ token: invited.body.acceptanceToken })
+      .expect(200);
+    expect(preview.body).toEqual({ email });
+    expect(preview.headers["cache-control"]).toContain("no-store");
+    expect(
+      (
+        await prisma.invitation.findUniqueOrThrow({
+          where: { id: invited.body.id },
+        })
+      ).acceptedAt,
+    ).toBeNull();
+    await request(app)
+      .post("/identity/invitations/preview")
+      .send({ token: "invalid-token-that-is-long-enough" })
+      .expect(400);
     const registered = await request(app)
       .post("/identity/invitations/register")
       .send({
@@ -548,6 +565,26 @@ describe("real PostgreSQL services and Better Auth", () => {
     expect(registered.status, registered.text).toBe(201);
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
     ids.push(user.id);
+    // Account creation can immediately establish the normal authenticated session.
+    const auth = createAuth();
+    const login = express();
+    login.all("/api/auth/*splat", authHandler(auth));
+    login.use(express.json());
+    login.use(sessionMiddleware(auth));
+    login.use("/api/v1", createIdentityRouter(auth));
+    const signed = await request(login)
+      .post("/api/auth/sign-in/email")
+      .send({ email, password: "Synthetic-Test-2026!", rememberMe: true })
+      .expect(200);
+    const session = await request(login)
+      .get("/api/v1/session")
+      .set("Cookie", signed.headers["set-cookie"])
+      .expect(200);
+    expect(session.body.user).toMatchObject({ id: user.id, role: "agent" });
+    await request(app)
+      .post("/identity/invitations/preview")
+      .send({ token: invited.body.acceptanceToken })
+      .expect(400);
     expect(
       await prisma.auditEvent.count({
         where: { entityId: user.id, action: "agent.access_override" },
@@ -578,6 +615,10 @@ describe("real PostgreSQL services and Better Auth", () => {
         name: "Expired Client",
         password: "Synthetic-Test-2026!",
       })
+      .expect(400);
+    await request(app)
+      .post("/identity/invitations/preview")
+      .send({ token: expiredToken })
       .expect(400);
   });
   it("allows password-only production access, preserves enrolled MFA challenges, and revokes sessions", async () => {

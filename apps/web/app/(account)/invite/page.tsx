@@ -2,141 +2,153 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@weatherly/ui";
-import s from "../login/login.module.css";
+import { AuthFrame } from "../_components/AuthFrame";
+import { PasswordField } from "../_components/PasswordField";
+import s from "../_components/auth.module.css";
+
 export default function Page() {
   const [token, setToken] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [created, setCreated] = useState(false);
   useEffect(() => {
-    setToken(new URLSearchParams(window.location.search).get("token") || "");
+    const value =
+      new URLSearchParams(window.location.search).get("token") || "";
+    setToken(value);
+    if (!value) {
+      setError("Open the complete invitation link from your coordinator.");
+      setLoading(false);
+      return;
+    }
+    let current = true;
+    api<{ email: string }>("/api/v1/invitations/preview", {
+      method: "POST",
+      body: JSON.stringify({ token: value }),
+    })
+      .then((data) => {
+        if (current) setEmail(data.email);
+      })
+      .catch((failure) => {
+        if (current) setError(failure.message);
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
   }, []);
   return (
-    <div className={s.page}>
-      <aside className={s.story}>
-        <Link className={s.brand} href="/">
-          <strong>WEATHERLY</strong>
-          <small>TRANSACTION CO.</small>
-        </Link>
-        <div>
-          <h1>Welcome to Weatherly.</h1>
-          <p>
-            Use your invitation to open the transaction files shared with you.
+    <AuthFrame>
+      <p className={s.eyebrow}>Your personal invitation</p>
+      <h1>{created ? "Your account is ready" : "Create your account"}</h1>
+      {created ? (
+        <>
+          <p className={s.sub}>
+            Your invitation has been accepted and your account is created.
+            Automatic sign-in could not finish. Sign in with the password you
+            just chose.
           </p>
-        </div>
-      </aside>
-      <div className={s.formSide}>
-        <div className={s.form}>
-          <p className={s.eyebrow}>Your personal invitation</p>
-          <h2>{done ? "Account created." : "Create your account."}</h2>
-          {done ? (
-            <>
-              <p className={s.sub}>
-                Your invitation has been accepted. Sign in with your email and
-                the password you just chose.
-              </p>
-              <Link className={s.button} href="/login">
-                Continue to sign in
-              </Link>
-            </>
-          ) : (
-            <>
-              <p className={s.sub}>
-                Create your account using the invitation shared by your
-                coordinator.
-              </p>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const f = new FormData(e.currentTarget);
-                  setBusy(true);
-                  setError("");
-                  try {
-                    await api("/api/v1/invitations/register", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        token,
-                        name: String(f.get("name")),
-                        password: String(f.get("password")),
-                      }),
-                    });
-                    setDone(true);
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                <label className={s.field}>
-                  Your name
-                  <input
-                    className={s.input}
-                    name="name"
-                    required
-                    autoComplete="name"
-                  />
-                </label>
-                <label className={s.field}>
-                  Choose a password
-                  <input
-                    className={s.input}
-                    name="password"
-                    type="password"
-                    minLength={12}
-                    maxLength={128}
-                    required
-                    autoComplete="new-password"
-                  />
-                  <small>At least 12 characters.</small>
-                </label>
-                {!token && (
-                  <p className={s.error}>
-                    Open the complete invitation link from your coordinator.
-                  </p>
-                )}
-                {error && (
-                  <p className={s.error} role="alert">
-                    {error}
-                  </p>
-                )}
-                <button className={s.button} disabled={busy || !token}>
-                  {busy
-                    ? "Creating your account…"
-                    : "Accept invitation & create account"}
-                </button>
-              </form>
-              <p className={s.help}>
-                Already have an account? Sign in first, then{" "}
-                <button
-                  className={s.demo}
-                  disabled={!token || busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    setError("");
-                    try {
-                      await api("/api/v1/invitations/accept", {
-                        method: "POST",
-                        body: JSON.stringify({ token }),
-                      });
-                      window.location.href = "/portal";
-                    } catch (e) {
-                      setError((e as Error).message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Accept for signed-in account
-                </button>
-              </p>
-            </>
-          )}
-          <Link className={s.back} href="/contact">
-            Need help? Contact Ireland.
+          <Link className={s.button} href="/login">
+            Sign in
           </Link>
-        </div>
-      </div>
-    </div>
+        </>
+      ) : (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            setBusy(true);
+            setError("");
+            let registered = false;
+            try {
+              const result = await api<{ email: string }>(
+                "/api/v1/invitations/register",
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    token,
+                    name: String(form.get("name")),
+                    password,
+                  }),
+                },
+              );
+              registered = true;
+              await api("/api/auth/sign-in/email", {
+                method: "POST",
+                body: JSON.stringify({
+                  email: result.email,
+                  password,
+                  rememberMe: true,
+                }),
+              });
+              setPassword("");
+              window.location.replace("/portal");
+            } catch (failure) {
+              if (registered) setCreated(true);
+              setError((failure as Error).message);
+            } finally {
+              setPassword("");
+              setBusy(false);
+            }
+          }}
+        >
+          <label className={s.field}>
+            Email
+            <input
+              className={s.input}
+              type="email"
+              value={email}
+              readOnly
+              autoComplete="username"
+              placeholder={loading ? "Checking your invitation…" : ""}
+            />
+          </label>
+          <label className={s.field}>
+            Your name
+            <input
+              className={s.input}
+              name="name"
+              required
+              maxLength={150}
+              autoComplete="name"
+              placeholder="First and last name"
+            />
+          </label>
+          <PasswordField creating value={password} onChange={setPassword} />
+          <button className={s.button} disabled={busy || loading || !email}>
+            {busy
+              ? "Opening your portal…"
+              : "Accept invitation & create account"}
+          </button>
+        </form>
+      )}
+      {error && (
+        <p className={s.error} role="alert">
+          {error}
+        </p>
+      )}
+      {!created && (
+        <p className={s.help}>
+          Already have an account?{" "}
+          <Link
+            href={
+              token
+                ? `/login?invitation=${encodeURIComponent(token)}`
+                : "/login"
+            }
+          >
+            Sign in
+          </Link>
+        </p>
+      )}
+      <p className={s.contact}>
+        Questions? Email Ireland at{" "}
+        <a href="mailto:ireland@weatherlytc.com">ireland@weatherlytc.com</a>
+      </p>
+    </AuthFrame>
   );
 }

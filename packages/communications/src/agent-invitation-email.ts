@@ -8,6 +8,11 @@ import {
 import { z } from "zod";
 import { communicationsConfig, type CommunicationsConfig } from "./gateway";
 import type { CommunicationsService } from "./service";
+import {
+  invitationFrom,
+  invitationSubject,
+  renderAgentInvitation,
+} from "./agent-invitation-template";
 
 export const agentInvitationEmailTopic = "agent.invitation.email";
 const sendWindowMs = 23 * 60 * 60 * 1000;
@@ -122,6 +127,27 @@ export async function sendQueuedAgentInvitation(
       "INVITATION_CHANGED",
       "The invitation no longer matches the queued email.",
     );
+  const [settings, roster, account] = await Promise.all([
+    prisma.mergeFieldSettings.findUnique({
+      where: { ownerId: invite.invitedById },
+      select: { signature: true },
+    }),
+    invite.rosterAgentId
+      ? prisma.rosterAgent.findUnique({
+          where: { id: invite.rosterAgentId },
+          select: { name: true },
+        })
+      : null,
+    prisma.user.findUnique({
+      where: { email: invite.email },
+      select: { name: true },
+    }),
+  ]);
+  const message = renderAgentInvitation({
+    url,
+    name: roster?.name || account?.name,
+    signature: settings?.signature,
+  });
   const response = await service.fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -130,10 +156,11 @@ export async function sendQueuedAgentInvitation(
       "Idempotency-Key": key,
     },
     body: JSON.stringify({
-      from: service.config.systemFrom,
+      from: invitationFrom,
+      reply_to: "ireland@weatherlytc.com",
       to: [invite.email],
-      subject: "Your Weatherly agent portal invitation",
-      text: `Ireland invited you to set up your Weatherly agent portal.\n\nAccept your invitation: ${url}\n\nContact Ireland if you need a fresh link.`,
+      subject: invitationSubject,
+      ...message,
     }),
     signal: AbortSignal.timeout(30000),
   });

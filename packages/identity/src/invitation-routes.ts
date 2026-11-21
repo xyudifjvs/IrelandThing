@@ -260,6 +260,28 @@ export function registerInvitationRoutes(
       res.set("Cache-Control", "private, no-store").status(201).json(result);
     }),
   );
+  // Only a valid bearer invitation reveals its recipient; never cache token responses.
+  r.post(
+    "/invitations/preview",
+    rateLimit({
+      windowMs: 60000,
+      limit: 20,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+    }),
+    asyncHandler(async (req, res) => {
+      const { token } = z
+        .object({ token: z.string().min(30).max(200) })
+        .strict()
+        .parse(req.body);
+      const invitation = await prisma.$transaction((tx) =>
+        openInvitation(tx, token),
+      );
+      res
+        .set("Cache-Control", "private, no-store")
+        .json({ email: invitation.email });
+    }),
+  );
   // Only possession of an unexpired coordinator-created invitation permits account registration.
   r.post(
     "/invitations/register",

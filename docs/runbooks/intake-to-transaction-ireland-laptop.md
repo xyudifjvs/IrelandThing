@@ -1,5 +1,11 @@
 # Ireland’s Weatherly handoff
 
+## November 21, 2026: compact agent filter-button styling
+
+Ireland requested Active / Closed / Terminated keep the compact footprint of the agent portal while borrowing the account navigation design from her second screenshot. The shared agent control now has three separate ivory `#FFFDF8` buttons with thin tan `#D8CBB8` borders, rounded corners and uppercase lettering. The selected button is near-black with white text; unselected text is near-black, retaining Ireland’s earlier rejection of brown label text. The enclosing gray strip is removed. The control measures 240 × 42 CSS pixels on desktop and 390px phone; the Terminated button has extra room so every label fits. Both agent businesses use this shared style.
+
+This is scoped CSS presentation only. Filter semantics, saved browse state, transaction badges, account navigation, permissions and stored data are unchanged. Validation: production web build (including TypeScript) and whitespace checks passed. Synthetic local browser checks exercised all three selected states, verified label fit and the 240 × 42 dimensions on desktop/phone, and saved both previews. No new tests were added for this reversible styling change. No live data or outgoing messages were changed. Only the web service needs deployment; no migration, provider setting, API or worker change is required. Rollout receipt follows after deployment.
+
 ## November 21, 2026: agent-facing transaction-history stages
 
 Ireland requested removing Closing for both HTO and Weatherly TC agents, and Listing only for Weatherly TC agents. Account → Transaction history now receives the agent business from the existing authenticated session. Agent choices exclude Closing; Listing is present only for HTO. Coordinator choices retain both stages. Existing retained files and lifecycle permissions are not changed.

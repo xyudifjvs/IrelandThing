@@ -145,7 +145,8 @@ export function RosterWorkspace({
         <div>
           <h1>Agent roster</h1>
           <p className={s.subtitle}>
-            New sign-ups appear here until their portal account is active.
+            Track interested agents, sign-up progress, and active agents in one
+            place.
           </p>
         </div>
         <button
@@ -207,6 +208,7 @@ export function RosterWorkspace({
                       >
                         <span>
                           <strong>{agent.name}</strong>
+                          {agent.personalTest && <small>Personal test</small>}
                           {agent.brokerage ? ` · ${agent.brokerage}` : ""}
                         </span>
                         <small>
@@ -255,7 +257,7 @@ export function RosterWorkspace({
                 }
               />
               <AgentGroup
-                title="Weatherly TC clients"
+                title="Weatherly agents"
                 rows={active}
                 selectedId={selected.id}
                 onSelect={select}
@@ -363,6 +365,7 @@ function AgentGroup({
               >
                 <span>
                   <strong>{agent.name}</strong>
+                  {agent.personalTest && <small>Personal test</small>}
                   {agent.email || agent.phone ? (
                     <small>
                       {[agent.email, agent.phone].filter(Boolean).join(" · ")}
@@ -375,9 +378,11 @@ function AgentGroup({
                         : "No agreement on file"}
                     </small>
                   )}
-                  {agent.phase === "access_revoked" && (
-                    <small>Portal access revoked</small>
-                  )}
+                  <small>
+                    {agent.phase === "access_revoked"
+                      ? "Portal access revoked"
+                      : phaseLabel[agent.phase]}
+                  </small>
                 </span>
                 <small>
                   {agent.activeFileCount} active · {agent.closedFileCount}{" "}

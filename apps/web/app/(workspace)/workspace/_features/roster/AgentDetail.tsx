@@ -8,6 +8,7 @@ import s from "../../_components/workspace.module.css";
 import styles from "./roster.module.css";
 import { AgentContactForm } from "./AgentContactForm";
 import { AgentSignupActions } from "./AgentSignupActions";
+import { PersonalTestInvitation } from "./PersonalTestInvitation";
 import { AgreementEvidence } from "./AgreementEvidence";
 import {
   nextRosterAction,
@@ -125,6 +126,9 @@ function AgentProfile({
         <p className={styles.business}>
           {agent.business === "hto" ? "Home Team Ohio" : "Weatherly TC"}
         </p>
+        {agent.personalTest && (
+          <p>Personal test · No signed agreement recorded</p>
+        )}
         {agent.brokerage && <p>{agent.brokerage}</p>}
         {agent.email && (
           <p>
@@ -220,6 +224,15 @@ function AgentProfile({
             onSaved={onRefresh}
           />
         )}
+        {!agent.source &&
+          agent.email &&
+          agent.business === "weatherly" &&
+          !agent.hasAccount &&
+          !agent.agreementOnFile &&
+          (!agent.invitation || agent.personalTest) &&
+          agent.files.length === 0 && (
+            <PersonalTestInvitation agent={agent} onSaved={onRefresh} />
+          )}
         {agent.canArchive && (
           <button
             className={styles.quiet}

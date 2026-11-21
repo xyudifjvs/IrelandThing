@@ -66,6 +66,7 @@ async function loadRoster(
     files,
     revoked,
     overrides,
+    personalTestInvites,
   ] = await Promise.all([
     selected
       ? [selected]
@@ -179,6 +180,14 @@ async function loadRoster(
       distinct: ["entityId"],
       select: { entityId: true },
     }),
+    db.auditEvent.findMany({
+      where: {
+        entityType: "Invitation",
+        action: "invitation.created",
+        details: { path: ["personalTest"], equals: true },
+      },
+      select: { entityId: true },
+    }),
   ]);
   const candidates: Candidate[] = roster
     .filter(({ archivedAt }) => !archivedAt)
@@ -194,6 +203,9 @@ async function loadRoster(
     revoked.map((event) => [event.entityId, event.action]),
   );
   const overrideIds = new Set(overrides.map((event) => event.entityId));
+  const personalTestInviteIds = new Set(
+    personalTestInvites.map((event) => event.entityId),
+  );
   function legacyCandidate(
     record: { id: string; email: string; name: string; createdAt: Date },
     kind: LegacySource["kind"],
@@ -339,6 +351,10 @@ async function loadRoster(
         ...candidate,
         business: candidate.business ?? ("weatherly" as const),
         hasAccount: !!account,
+        personalTest:
+          signed.length === 0 &&
+          !!invitation &&
+          personalTestInviteIds.has(invitation.id),
         canArchive:
           phase === "inquiry" &&
           !candidate.userId &&

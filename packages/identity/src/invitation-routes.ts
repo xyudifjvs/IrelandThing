@@ -54,10 +54,27 @@ export function registerInvitationRoutes(
             .min(10)
             .max(1000)
             .optional(),
+          personalTest: z
+            .object({ ownEmailConfirmed: z.literal(true) })
+            .strict()
+            .optional(),
           expiresInHours: z.number().int().min(1).max(168).default(72),
         })
         .strict()
         .parse(req.body);
+      if (
+        data.personalTest &&
+        (data.role !== "agent" ||
+          !data.rosterAgentId ||
+          data.matterId ||
+          data.agreementId ||
+          data.approvalOverrideReason)
+      )
+        throw new HttpError(
+          422,
+          "PERSONAL_TEST_SCOPE",
+          "Personal tests require an unassigned Weatherly roster entry and confirmation that this is your own email.",
+        );
       if (data.matterId) await requireMatter(actor, data.matterId, true);
       const token = randomBytes(32).toString("base64url");
       const result = await prisma.$transaction(async (tx) => {
@@ -115,6 +132,7 @@ export function registerInvitationRoutes(
         const [prior] = priorInvitations;
         let approvedAgreementId: string | undefined;
         let approvalOverrideReason = data.approvalOverrideReason;
+        let personalTest = !!data.personalTest;
         if (data.role === "agent" && roster?.business !== "hto") {
           const agreement = await tx.agreement.findFirst({
             where: {
@@ -135,14 +153,45 @@ export function registerInvitationRoutes(
             (!data.matterId || data.matterId === prior.matterId)
           ) {
             const approval = await getInvitationApproval(tx, prior.id);
-            if (!approval?.approvedAgreementId)
+            if (!approval?.approvedAgreementId) {
               approvalOverrideReason = approval?.approvalOverrideReason;
+              personalTest ||= approval?.personalTest === true;
+            }
           }
+          if (personalTest && !approvedAgreementId)
+            approvalOverrideReason =
+              "Coordinator confirmed this is their personal test email. No signed service agreement was recorded or approved.";
           if (!approvedAgreementId && !approvalOverrideReason)
             throw new HttpError(
               422,
               "AGREEMENT_REQUIRED",
               "Approve signed agreement evidence, or record a coordinator exception reason",
+            );
+        }
+
+        if (personalTest) {
+          if (
+            !roster ||
+            roster.business !== "weatherly" ||
+            invitedUser ||
+            approvedAgreementId ||
+            priorInvitations.some((invite) => !!invite.matterId)
+          )
+            throw new HttpError(
+              422,
+              "PERSONAL_TEST_NOT_AVAILABLE",
+              "Use a Weatherly contact with no existing account, approved agreement, or transaction invitation for a personal test.",
+            );
+          if (
+            await tx.matter.findFirst({
+              where: { agentRosterId: roster.id },
+              select: { id: true },
+            })
+          )
+            throw new HttpError(
+              409,
+              "PERSONAL_TEST_HAS_FILES",
+              "Personal test invitations require a roster entry with no assigned transactions.",
             );
         }
 
@@ -198,6 +247,7 @@ export function registerInvitationRoutes(
             entityType: "Invitation",
             entityId: invitation.id,
             details: {
+              personalTest,
               approvedAgreementId: approvedAgreementId || null,
               approvalOverrideReason: approvalOverrideReason || null,
               ...(prior ? { priorInvitationId: prior.id } : {}),
@@ -205,7 +255,7 @@ export function registerInvitationRoutes(
             },
           },
         });
-        return { ...payload, role: invitation.role, delivery };
+        return { ...payload, role: invitation.role, delivery, personalTest };
       });
       res.set("Cache-Control", "private, no-store").status(201).json(result);
     }),
@@ -473,6 +523,27 @@ async function applyWeatherlyApproval(
     return;
   }
   if (details?.approvalOverrideReason) {
+    if (details.personalTest) {
+      if (
+        !invitation.rosterAgentId ||
+        invitation.matterId ||
+        (await tx.matter.findFirst({
+          where: {
+            OR: [
+              { agentRosterId: invitation.rosterAgentId },
+              { agentId: userId },
+              { participants: { some: { userId, revokedAt: null } } },
+            ],
+          },
+          select: { id: true },
+        }))
+      )
+        throw new HttpError(
+          409,
+          "PERSONAL_TEST_HAS_FILES",
+          "This test invitation can only activate an account with no assigned transactions. Ask Ireland to review the roster entry.",
+        );
+    }
     await tx.auditEvent.create({
       data: {
         actorId: invitation.invitedById,
@@ -480,6 +551,7 @@ async function applyWeatherlyApproval(
         entityType: "User",
         entityId: userId,
         details: {
+          personalTest: details.personalTest === true,
           reason: details.approvalOverrideReason,
           invitationId: invitation.id,
         },
@@ -507,6 +579,10 @@ async function getInvitationApproval(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
   return decision?.details as
-    | { approvedAgreementId?: string; approvalOverrideReason?: string }
+    | {
+        approvedAgreementId?: string;
+        approvalOverrideReason?: string;
+        personalTest?: boolean;
+      }
     | undefined;
 }

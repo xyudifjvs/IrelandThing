@@ -23,6 +23,7 @@ export type RosterEntry = {
     id: string;
   } | null;
   hasAccount: boolean;
+  personalTest?: boolean;
   canArchive: boolean;
   phase: AgentPhase;
   phaseOn: string;

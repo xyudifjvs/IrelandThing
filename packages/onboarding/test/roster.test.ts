@@ -801,3 +801,67 @@ it("rejects stale restore revisions and restricts archived contacts to the coord
   await request(noAuth).get("/onboarding/roster/archived").expect(401);
   await request(noAuth).post(`/onboarding/roster/${entry.id}/restore`).send({ expectedRevision: result.body.revision }).expect(401);
 });
+
+function personalInvitationServer() {
+  const server = express();
+  server.use(express.json());
+  server.use((req, _res, next) => { req.principal = owner; next(); });
+  server.use("/identity", createIdentityRouter(createAuth(), { queueAgentInvitation: async (_tx, invite) => { queue.push({ id: invite.id, email: invite.email }); return true; } }));
+  server.use(errors);
+  return server;
+}
+
+it("sends a labeled personal-test invitation and activates an unassigned agent without asserting a signed agreement", async () => {
+  const testInvites = personalInvitationServer();
+  const address = email("personal-test");
+  const saved = await request(coordinator).post("/onboarding/roster").send({ name: "Personal test", email: address, business: "weatherly" }).expect(201);
+  const invite = { email: address, role: "agent", rosterAgentId: saved.body.id };
+  await request(testInvites).post("/identity/invitations").send(invite).expect(422);
+  await request(testInvites).post("/identity/invitations").send({ ...invite, personalTest: { ownEmailConfirmed: false } }).expect(400);
+  const first = await request(testInvites).post("/identity/invitations").send({ ...invite, personalTest: { ownEmailConfirmed: true } }).expect(201);
+  expect(first.body).toMatchObject({ delivery: "queued", personalTest: true });
+  expect(queue.at(-1)).toMatchObject({ email: address });
+  const pending = await request(coordinator).get(`/onboarding/roster/${saved.body.id}`).expect(200);
+  expect(pending.body).toMatchObject({ phase: "invited", personalTest: true, hasAccount: false, agreementOnFile: false, files: [] });
+  const resent = await request(testInvites).post("/identity/invitations").send(invite).expect(201);
+  expect(resent.body.personalTest).toBe(true);
+  await request(testInvites).post("/identity/invitations/register").send({ token: first.body.acceptanceToken, name: "Test agent", password }).expect(400);
+  await request(testInvites).post("/identity/invitations/register").send({ token: resent.body.acceptanceToken, name: "Test agent", password }).expect(201);
+  const user = await prisma.user.findUniqueOrThrow({ where: { email: address } });
+  expect(user.role).toBe("agent");
+  expect(await prisma.agreement.count({ where: { OR: [{ rosterAgentId: saved.body.id }, { userId: user.id }, { userId: address }] } })).toBe(0);
+  expect(await prisma.matter.count({ where: { OR: [{ agentRosterId: saved.body.id }, { agentId: user.id }, { participants: { some: { userId: user.id } } }] } })).toBe(0);
+  expect(await prisma.auditEvent.findFirst({ where: { entityId: user.id, action: "agent.access_override" } })).toMatchObject({ details: { personalTest: true, invitationId: resent.body.id } });
+  const active = await request(coordinator).get(`/onboarding/roster/${saved.body.id}`).expect(200);
+  expect(active.body).toMatchObject({ phase: "active", personalTest: true, hasAccount: true, agreementOnFile: false, files: [] });
+  const { hasAgentAgreementAccess } = await import("../../identity/src/agent-membership");
+  expect(await hasAgentAgreementAccess(user.id)).toBe(true);
+  expect(await getAgentMembership(user.id)).toMatchObject({ business: "weatherly", rosterAgentId: saved.body.id });
+});
+
+it("keeps personal-test invitations away from existing accounts, transaction assignments and client roles", async () => {
+  const testInvites = personalInvitationServer();
+  const address = email("test-scope");
+  const saved = await request(coordinator).post("/onboarding/roster").send({ name: "Test scope", email: address, business: "weatherly" }).expect(201);
+  const invite = { email: address, role: "agent", rosterAgentId: saved.body.id, personalTest: { ownEmailConfirmed: true } };
+  await request(testInvites).post("/identity/invitations").send({ ...invite, role: "client" }).expect(422);
+  await request(testInvites).post("/identity/invitations").send({ ...invite, matterId: "untrusted-file" }).expect(422);
+  await request(testInvites).post("/identity/invitations").send({ ...invite, approvalOverrideReason: "Do not allow an arbitrary bypass" }).expect(422);
+  const file = await prisma.matter.create({ data: { title: "Synthetic test guard", propertyAddress: "Synthetic lane", side: "buyer", packageCode: "essentials", agentRosterId: saved.body.id } });
+  rows.fileIds.push(file.id);
+  const denied = await request(testInvites).post("/identity/invitations").send(invite).expect(409);
+  expect(denied.body.code).toBe("PERSONAL_TEST_HAS_FILES");
+  await prisma.matter.update({ where: { id: file.id }, data: { agentRosterId: null } });
+  const valid = await request(testInvites).post("/identity/invitations").send(invite).expect(201);
+  await prisma.matter.update({ where: { id: file.id }, data: { agentRosterId: saved.body.id } });
+  const drift = await request(testInvites).post("/identity/invitations/register").send({ token: valid.body.acceptanceToken, name: "Blocked before activation", password }).expect(409);
+  expect(drift.body.code).toBe("PERSONAL_TEST_HAS_FILES");
+  expect(await prisma.user.findUnique({ where: { email: address } })).toBeNull();
+  expect((await prisma.invitation.findUniqueOrThrow({ where: { id: valid.body.id } })).acceptedAt).toBeNull();
+  const coordinatorContact = await request(coordinator).post("/onboarding/roster").send({ name: "Coordinator must stay coordinator", email: owner.email, business: "weatherly" }).expect(201);
+  await request(testInvites).post("/identity/invitations").send({ email: owner.email, role: "agent", rosterAgentId: coordinatorContact.body.id, personalTest: { ownEmailConfirmed: true } }).expect(422);
+  expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role).toBe("coordinator");
+  const other = express(); other.use(express.json()); other.use((req, _res, next) => { req.principal = { ...owner, role: "agent" }; next(); });
+  other.use("/identity", createIdentityRouter(createAuth())); other.use(errors);
+  await request(other).post("/identity/invitations").send(invite).expect(403);
+});

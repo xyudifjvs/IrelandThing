@@ -13,6 +13,7 @@ import {
   phaseLabel,
   rosterDate,
   rosterEndpoint,
+  type ArchivedRosterEntry,
   type RosterAction,
   type RosterEntry,
 } from "./model";
@@ -23,6 +24,8 @@ export function RosterWorkspace({
   initialAgentId: string | null;
 }) {
   const roster = useData<RosterEntry[]>(rosterEndpoint);
+  const archived = useData<ArchivedRosterEntry[]>(`${rosterEndpoint}/archived`);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [visible, setVisible] = useState(true);
@@ -68,6 +71,7 @@ export function RosterWorkspace({
     (row) =>
       !query ||
       row.name.toLowerCase().includes(query) ||
+      row.email?.toLowerCase().includes(query) ||
       row.brokerage?.toLowerCase().includes(query),
   );
   const team = matches.filter((row) => row.business === "hto");
@@ -79,6 +83,35 @@ export function RosterWorkspace({
   const signingUp = matches.filter(
     (row) => row.business === "weatherly" && !active.includes(row),
   );
+
+  const archivedMatches = (archived.data ?? []).filter(
+    (row) =>
+      !query ||
+      [row.name, row.email, row.brokerage].some((value) =>
+        value?.toLowerCase().includes(query),
+      ),
+  );
+
+  async function restoreArchived(agent: ArchivedRosterEntry) {
+    setRestoringId(agent.id);
+    setError("");
+    try {
+      await mutate(`${rosterEndpoint}/${agent.id}/restore`, {
+        expectedRevision: agent.revision,
+      });
+      setSearch("");
+      select(agent.id);
+      await Promise.all([roster.refresh(), archived.refresh()]);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not restore this entry.",
+      );
+    } finally {
+      setRestoringId(null);
+    }
+  }
 
   async function archive(agent: RosterEntry) {
     setArchiveId(agent.id);
@@ -94,7 +127,7 @@ export function RosterWorkspace({
         expectedRevision: row.revision,
       });
       if (selected.id === agent.id) select(null);
-      await roster.refresh();
+      await Promise.all([roster.refresh(), archived.refresh()]);
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -128,13 +161,13 @@ export function RosterWorkspace({
       </header>
       <div className={styles.toolbar}>
         <label className={styles.visuallyHidden} htmlFor="roster-search">
-          Search agents by name or brokerage
+          Search agents by name, email or brokerage
         </label>
         <input
           className={s.input}
           id="roster-search"
           type="search"
-          placeholder="Search agents by name or brokerage"
+          placeholder="Search agents by name, email or brokerage"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -229,6 +262,46 @@ export function RosterWorkspace({
                 empty={query ? "No agents match." : "No active agents yet."}
               />
             </>
+          )}
+          {(!!archived.data?.length || archived.error) && (
+            <details className={styles.group}>
+              <summary>Archived agents ({archived.data?.length ?? 0})</summary>
+              <p>
+                Restore an entry to use its saved contact information and
+                history.
+              </p>
+              {archived.error && (
+                <p role="alert">
+                  Could not load archived agents.{" "}
+                  <button type="button" onClick={() => void archived.refresh()}>
+                    Retry
+                  </button>
+                </p>
+              )}
+              <ul>
+                {archivedMatches.map((agent) => (
+                  <li className={styles.row} key={agent.id}>
+                    <span>
+                      <strong>{agent.name}</strong>
+                      <br />
+                      <small>{agent.email}</small>
+                    </span>
+                    <button
+                      className={s.buttonSmall}
+                      type="button"
+                      disabled={restoringId !== null || archiveId !== null}
+                      aria-label={`Restore ${agent.name}`}
+                      onClick={() => void restoreArchived(agent)}
+                    >
+                      {restoringId === agent.id ? "Restoring…" : "Restore"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {query && !archivedMatches.length && (
+                <p>No archived agents match.</p>
+              )}
+            </details>
           )}
         </div>
         <div ref={detailRef}>

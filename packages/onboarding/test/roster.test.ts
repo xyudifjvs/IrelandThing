@@ -747,3 +747,57 @@ it.each(["import", "website inquiry"])(
     }
   },
 );
+
+it("lists and restores the original archived contact without inviting, enrolling, or replacing its history", async () => {
+  const address = email("restore");
+  const inquiry = await createInquiry({ name: "Restore Synthetic Agent", email: address, kind: "contact", payload: { message: "Keep this inquiry history" } });
+  const storedInquiry = await prisma.inquiry.findUniqueOrThrow({ where: { id: inquiry.id } });
+  const original = await prisma.rosterAgent.findUniqueOrThrow({ where: { id: storedInquiry.rosterAgentId! } });
+  await request(coordinator).post(`/onboarding/roster/${original.id}/archive`).send({ expectedRevision: original.revision }).expect(200);
+  const archived = await prisma.rosterAgent.findUniqueOrThrow({ where: { id: original.id } });
+  const active = await request(coordinator).get("/onboarding/roster").expect(200);
+  expect(active.body.some((row: { id: string }) => row.id === original.id)).toBe(false);
+  const hidden = await request(coordinator).get("/onboarding/roster/archived").expect(200);
+  expect(hidden.body).toContainEqual(expect.objectContaining({ id: original.id, email: address, revision: archived.revision }));
+  const duplicate = await request(coordinator).post("/onboarding/roster").send({ name: "Do not replace the existing name", email: address.toUpperCase(), business: "weatherly" }).expect(409);
+  expect(duplicate.body.code).toBe("ROSTER_EMAIL_ARCHIVED");
+  const accountsBefore = await prisma.user.count({ where: { email: address } });
+  const queuedBefore = queue.length;
+  const restored = await request(coordinator).post(`/onboarding/roster/${original.id}/restore`).send({ expectedRevision: archived.revision }).expect(200);
+  expect(restored.body).toMatchObject({ id: original.id, name: original.name, email: address, userId: null, archivedAt: null, revision: archived.revision + 1 });
+  expect(await prisma.rosterAgent.count({ where: { normalizedEmail: address } })).toBe(1);
+  expect((await prisma.inquiry.findUniqueOrThrow({ where: { id: inquiry.id } })).rosterAgentId).toBe(original.id);
+  expect(await prisma.user.count({ where: { email: address } })).toBe(accountsBefore);
+  expect(await prisma.invitation.count({ where: { email: address } })).toBe(0);
+  expect(queue.length).toBe(queuedBefore);
+  expect(await prisma.auditEvent.count({ where: { entityId: original.id, action: "roster.inquiry_restored" } })).toBe(1);
+  const detail = await request(coordinator).get(`/onboarding/roster/${original.id}`).expect(200);
+  expect(detail.body).toMatchObject({ phase: "inquiry", hasAccount: false });
+  expect(detail.body.inquiries).toContainEqual(expect.objectContaining({ id: inquiry.id }));
+  const noLongerArchived = await request(coordinator).get("/onboarding/roster/archived").expect(200);
+  expect(noLongerArchived.body.some((row: { id: string }) => row.id === original.id)).toBe(false);
+  await request(coordinator).post(`/onboarding/roster/${original.id}/restore`).send({ expectedRevision: archived.revision }).expect(409);
+  const stillDuplicate = await request(coordinator).post("/onboarding/roster").send({ name: "Duplicate", email: address, business: "weatherly" }).expect(409);
+  expect(stillDuplicate.body.code).toBe("ROSTER_EMAIL_EXISTS");
+});
+
+it("rejects stale restore revisions and restricts archived contacts to the coordinator", async () => {
+  const { listArchivedRoster } = await import("../src/roster-read");
+  const { restoreRosterInquiry } = await import("../src/roster-write");
+  for (const role of ["agent", "client"] as const) {
+    await expect(listArchivedRoster({ ...owner, role })).rejects.toMatchObject({ status: 403 });
+    await expect(restoreRosterInquiry({ ...owner, role }, "not-readable", { expectedRevision: 1 })).rejects.toMatchObject({ status: 403 });
+  }
+  const entry = await prisma.rosterAgent.create({ data: { name: "Archived revision fixture", email: email("restore-stale"), normalizedEmail: email("restore-stale"), business: "weatherly", archivedAt: new Date() } });
+  await prisma.rosterAgent.update({ where: { id: entry.id }, data: { name: "New saved name", revision: { increment: 1 } } });
+  await request(coordinator).post(`/onboarding/roster/${entry.id}/restore`).send({ expectedRevision: entry.revision }).expect(409);
+  expect((await prisma.rosterAgent.findUniqueOrThrow({ where: { id: entry.id } })).archivedAt).not.toBeNull();
+  const result = await request(coordinator).post(`/onboarding/roster/${entry.id}/restore`).send({ expectedRevision: entry.revision + 1 }).expect(200);
+  expect(result.body.name).toBe("New saved name");
+  const noAuth = express();
+  noAuth.use(express.json());
+  noAuth.use("/onboarding", createOnboardingRouter());
+  noAuth.use(errors);
+  await request(noAuth).get("/onboarding/roster/archived").expect(401);
+  await request(noAuth).post(`/onboarding/roster/${entry.id}/restore`).send({ expectedRevision: result.body.revision }).expect(401);
+});

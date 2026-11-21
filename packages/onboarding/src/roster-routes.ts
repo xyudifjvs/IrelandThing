@@ -1,9 +1,10 @@
 import type { Router } from "express";
 import { asyncHandler, principal } from "@weatherly/platform";
-import { getRosterAgent, listRoster } from "./roster-read";
+import { getRosterAgent, listArchivedRoster, listRoster } from "./roster-read";
 import {
   addRosterAgent,
   archiveRosterInquiry,
+  restoreRosterInquiry,
   importRosterAgent,
   markAgreementSent,
   updateRosterAgent,
@@ -30,6 +31,24 @@ export function registerRosterRoutes(router: Router) {
     "/roster/import",
     asyncHandler(async (req, res) =>
       res.json(await importRosterAgent(principal(req), req.body)),
+    ),
+  );
+  router.get(
+    "/roster/archived",
+    asyncHandler(async (req, res) =>
+      res.json(await listArchivedRoster(principal(req))),
+    ),
+  );
+  router.post(
+    "/roster/:id/restore",
+    asyncHandler(async (req, res) =>
+      res.json(
+        await restoreRosterInquiry(
+          principal(req),
+          String(req.params.id),
+          req.body,
+        ),
+      ),
     ),
   );
   router.get(

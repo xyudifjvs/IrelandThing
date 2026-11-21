@@ -38,6 +38,14 @@ export type RosterEntry = {
   closedFileCount: number;
 };
 
+export type ArchivedRosterEntry = Pick<
+  RosterEntry,
+  "id" | "name" | "email" | "brokerage" | "business"
+> & {
+  revision: number;
+  archivedAt: string;
+};
+
 export type RosterDetail = RosterEntry & {
   agreementHistory: {
     id: string;

@@ -1,5 +1,15 @@
 # Ireland’s Weatherly handoff
 
+## November 21, 2026: archived roster recovery
+
+A saved, archived roster entry still reserves its normalized email, but the previous UI hid archived entries and offered no restore path. The coordinator roster now has a separate **Archived agents** section with explicit **Restore** controls, and name/email/brokerage search covers both active and archived entries. The duplicate-email error distinguishes an archived record and directs Ireland to restore it. Active duplicate protection remains in place.
+
+Coordinator-only `GET /api/v1/onboarding/roster/archived` returns a minimal contact list. Revision-checked `POST /api/v1/onboarding/roster/:id/restore` clears only the archive flag, increments the revision, and audits the restoration. It preserves the original identity, contact data, business and history. Restoring does not create or link an account, change roles, assign files, create an invitation, approve an agreement, or queue email. Archived records remain absent from ordinary assignment pickers. No schema migration or provider-setting change is required.
+
+Validation: **474 tests passed across 72 files**, root TypeScript passed, and the production web build passed. The existing six backup/recovery tests remain excluded because local pg_dump/pg_restore are unavailable. New regression cases cover preserved history, normalized-email duplicates before/after restore, stale revisions, coordinator-only access, and no invitation/account creation. A synthetic local browser check confirmed email search, explicit restoration, and opening the original record. Deployment receipt follows after the API and web rollout. The worker does not need this UI/API-only update.
+
+Ireland’s personal-email portal test remains a separate action after the original record is recovered. The current Weatherly roster invitation path still requires approved signed-agreement evidence; this recovery change does not bypass it or manufacture an agreement.
+
 ## November 17, 2026: checklist dates and Remedies follow-up
 
 Ireland requested real dates plus optional display text during creation with or without an intake, shared with both agents and clients. She also requested three separate checkboxes: Home Inspections, Remedies, and Remedies Negotiated. This follow-up is live at https://www.weatherlytc.com on API, worker and web release `2a012c717121b611c95000e3ec025ed17f240a46`. The Remedies migration succeeded, all services are healthy, no staged work remains, and the served web bundles contain the new controls and wording. Implementation, migration, validation and deployment IDs are in the [checklist follow-up record](../checklist-dates-2026-11-17.md). Display text stays separate from reminders, date calculations and completion status. The previous merge-field release below remains useful provider and feature history. Hosted account edits and real outgoing emails were not exercised by this follow-up.

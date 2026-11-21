@@ -52,8 +52,14 @@ export async function addRosterAgent(actor: Principal, raw: unknown) {
       input.email &&
       (await tx.rosterAgent.findUnique({
         where: { normalizedEmail: input.email },
-        select: { id: true },
+        select: { id: true, archivedAt: true },
       }));
+    if (existing && existing.archivedAt)
+      throw new HttpError(
+        409,
+        "ROSTER_EMAIL_ARCHIVED",
+        "This email belongs to an archived roster entry. Restore it from Archived agents instead of adding it again.",
+      );
     if (existing)
       throw new HttpError(
         409,
@@ -310,5 +316,44 @@ export async function archiveRosterInquiry(
     });
     await audit(tx, actor, "roster.inquiry_archived", "RosterAgent", id, null);
     return { archived: true };
+  });
+}
+
+/** Restore the original contact and history without creating an account or invitation. */
+export async function restoreRosterInquiry(
+  actor: Principal,
+  id: string,
+  raw: unknown,
+) {
+  assertCoordinator(actor);
+  const { expectedRevision } = archiveInput.parse(raw);
+  return prisma.$transaction(async (tx) => {
+    const initial = await tx.rosterAgent.findUnique({
+      where: { id },
+      select: { normalizedEmail: true },
+    });
+    if (initial?.normalizedEmail)
+      await lockRosterEmail(tx, initial.normalizedEmail);
+    await tx.$queryRaw`SELECT id FROM "RosterAgent" WHERE id = ${id} FOR UPDATE`;
+    const row = await tx.rosterAgent.findUnique({ where: { id } });
+    if (!row)
+      throw new HttpError(
+        404,
+        "ROSTER_AGENT_NOT_FOUND",
+        "Agent not found on the roster.",
+      );
+    requireRevision(row.revision, expectedRevision);
+    if (!row.archivedAt)
+      throw new HttpError(
+        409,
+        "ROSTER_ALREADY_ACTIVE",
+        "This agent is already on the roster. Refresh to see the current record.",
+      );
+    const saved = await tx.rosterAgent.update({
+      where: { id },
+      data: { archivedAt: null, revision: { increment: 1 } },
+    });
+    await audit(tx, actor, "roster.inquiry_restored", "RosterAgent", id, null);
+    return saved;
   });
 }

@@ -287,7 +287,8 @@ async function loadRoster(
       const pendingInvitation = recipientInvitations.find(
         (record) => !record.acceptedAt,
       );
-      const invitation = pendingInvitation ?? recipientInvitations.at(0) ?? null;
+      const invitation =
+        pendingInvitation ?? recipientInvitations.at(0) ?? null;
       const sentRecord = attachedAgreements.find(
         (record) => record.status === "sent",
       );
@@ -391,6 +392,24 @@ export async function listRoster(actor: Principal) {
       ...row
     }) => row,
   );
+}
+
+/** Archived contact records stay private and separate from active agent choices. */
+export async function listArchivedRoster(actor: Principal) {
+  assertCoordinator(actor);
+  return prisma.rosterAgent.findMany({
+    where: { archivedAt: { not: null } },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      brokerage: true,
+      business: true,
+      revision: true,
+      archivedAt: true,
+    },
+    orderBy: [{ archivedAt: "desc" }, { id: "asc" }],
+  });
 }
 
 export async function getRosterAgent(actor: Principal, id: string) {

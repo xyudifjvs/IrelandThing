@@ -23,13 +23,7 @@ import s from "../_components/portal.module.css";
 const tabs = ["Timeline", "Documents"] as const;
 type Tab = (typeof tabs)[number];
 
-export function AgentFile({
-  id,
-  receivedAt,
-}: {
-  id: string;
-  receivedAt?: string;
-}) {
+export function AgentFile({ id }: { id: string }) {
   const { id: actorId } = usePortalSession();
   const query = useLiveData<PortalFile>(
     `/api/v1/matters/${encodeURIComponent(id)}`,
@@ -89,7 +83,7 @@ export function AgentFile({
   if (file.stage === "pending_review")
     return (
       <section className={s.panel} aria-label="Intake receipt">
-        <h2>{fileAddress(file)}</h2>
+        <h1 className={s.fileTitle}>{fileAddress(file)}</h1>
         <p>
           <span className={`${s.badge} ${s.received}`}>
             {fileStatus(file.stage)}
@@ -97,8 +91,8 @@ export function AgentFile({
         </p>
         <p>
           Ireland is reviewing your intake
-          {receivedAt ? ` (sent ${shortDate(receivedAt)})` : ""}. The timeline
-          appears once she creates the file.
+          {file.createdAt ? ` (sent ${shortDate(file.createdAt)})` : ""}. The
+          timeline appears once she creates the file.
         </p>
         {!!file.documents?.length && (
           <PortalDocuments documents={file.documents} />
@@ -124,7 +118,7 @@ export function AgentFile({
       <section className={s.panel} aria-label="Transaction file">
         <div className={s.fileHeading}>
           <div>
-            <h2>{fileAddress(file)}</h2>
+            <h1 className={s.fileTitle}>{fileAddress(file)}</h1>
             <p>
               {[
                 file.side ? displayLabel(file.side) + " side" : "",

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useLiveData } from "../../../_components/useLiveData";
-import { AgentWorkspace } from "./AgentWorkspace";
+import { AgentFile } from "./AgentFile";
 import { ClientFile } from "./ClientFile";
 import { usePortalSession } from "./portal-session";
 import type { PortalFile as File } from "./portal-model";
@@ -11,7 +11,12 @@ import s from "../_components/portal.module.css";
 export function PortalFile({ id }: { id: string }) {
   const session = usePortalSession();
   return session.role === "agent" ? (
-    <AgentWorkspace key={id} id={id} />
+    <div className={s.main}>
+      <p className={s.agentBack}>
+        <Link href="/portal">← Back to all files</Link>
+      </p>
+      <AgentFile key={id} id={id} />
+    </div>
   ) : (
     <ClientPreview key={id} id={id} back />
   );

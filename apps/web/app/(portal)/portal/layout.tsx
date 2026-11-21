@@ -9,6 +9,7 @@ import { useLiveData } from "../../_components/useLiveData";
 import { PortalBrand } from "./_views/PortalBrand";
 import { ClientHeader } from "./_views/ClientFile";
 import { PortalSessionContext } from "./_views/portal-session";
+import { AgentBrowseProvider } from "./_views/AgentBrowseState";
 import s from "./_components/portal.module.css";
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -105,7 +106,7 @@ function AuthenticatedPortal({ children }: { children: ReactNode }) {
             value={{ ...user, role: user.role }}
             key={user.id}
           >
-            {children}
+            <AgentBrowseProvider>{children}</AgentBrowseProvider>
           </PortalSessionContext.Provider>
         )}
       </main>

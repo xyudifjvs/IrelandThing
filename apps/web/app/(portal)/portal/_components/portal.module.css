@@ -230,6 +230,11 @@
   color: var(--weatherly-receipt-color);
 }
 
+.underContract {
+  background: #ede2d2;
+  color: var(--weatherly-color-text);
+}
+
 .closed {
   color: var(--weatherly-color-success);
   background: var(--weatherly-color-success-surface);
@@ -269,9 +274,18 @@
   margin-bottom: 9px;
 }
 
-.fileHeading h2 {
+.fileTitle {
   font-size: var(--weatherly-type-file-title);
+  line-height: 1.06;
+  margin-top: 0;
   margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.agentBack {
+  margin: 0 0 20px;
+}
+.agentBack a {
+  text-underline-offset: 4px;
 }
 .fileHeading p:empty {
   display: none;

@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useAllMatters } from "../../../(workspace)/workspace/_components/data";
-import { AgentFile } from "./AgentFile";
+import { useAgentBrowse } from "./AgentBrowseState";
 import {
   fileAddress,
   fileGroup,
   fileStatus,
   nextDatedStep,
   shortDate,
-  type FileGroup,
   type PortalFile,
 } from "./portal-model";
 import s from "../_components/portal.module.css";
@@ -21,7 +20,7 @@ const groups = [
   { id: "terminated", label: "Terminated" },
 ] as const;
 
-function FileCard({ file, selected }: { file: PortalFile; selected: boolean }) {
+function FileCard({ file }: { file: PortalFile }) {
   const received = file.stage === "pending_review";
   const next = nextDatedStep(file.tasks);
   const receivedOn = shortDate(file.createdAt);
@@ -29,11 +28,10 @@ function FileCard({ file, selected }: { file: PortalFile; selected: boolean }) {
   return (
     <Link
       href={`/portal/transactions/${encodeURIComponent(file.id)}`}
-      aria-current={selected ? "page" : undefined}
-      className={`${s.fileCard} ${selected ? s.selected : ""}`}
+      className={s.fileCard}
     >
       <span
-        className={`${s.badge} ${received ? s.received : file.stage === "closed" ? s.closed : ""}`}
+        className={`${s.badge} ${received ? s.received : file.stage === "closed" ? s.closed : file.stage === "under_contract" || file.stage === "closing" ? s.underContract : ""}`}
       >
         {fileStatus(file.stage)}
       </span>
@@ -57,13 +55,10 @@ function FileCard({ file, selected }: { file: PortalFile; selected: boolean }) {
   );
 }
 
-export function AgentWorkspace({ id }: { id?: string }) {
+export function AgentWorkspace() {
   const query = useAllMatters();
   const files: PortalFile[] = query.data;
-  const current = files.find((file) => file.id === id);
-  const [group, setGroup] = useState<FileGroup | null>(null);
-  const [search, setSearch] = useState("");
-  const filter = group ?? fileGroup(current?.stage);
+  const { group: filter, setGroup, search, setSearch } = useAgentBrowse();
   const needle = search.trim().toLowerCase();
   const matches = files
     .filter(
@@ -78,11 +73,6 @@ export function AgentWorkspace({ id }: { id?: string }) {
         Number(left.stage === "pending_review") -
         Number(right.stage === "pending_review"),
     );
-  const selectedId =
-    group === null && !needle
-      ? id || matches[0]?.id
-      : matches.find((file) => file.id === id)?.id || matches[0]?.id;
-  const selected = files.find((file) => file.id === selectedId);
   const refresh = query.refresh;
   useEffect(() => {
     let disposed = false;
@@ -149,11 +139,7 @@ export function AgentWorkspace({ id }: { id?: string }) {
       ) : matches.length ? (
         <div className={s.fileGrid}>
           {matches.map((file) => (
-            <FileCard
-              key={file.id}
-              file={file}
-              selected={file.id === selectedId}
-            />
+            <FileCard key={file.id} file={file} />
           ))}
         </div>
       ) : query.loading && !files.length ? (
@@ -162,13 +148,6 @@ export function AgentWorkspace({ id }: { id?: string }) {
         <p className={s.muted}>
           {needle ? "No files match your search." : `No ${filter} files.`}
         </p>
-      )}
-      {selectedId && (
-        <AgentFile
-          key={selectedId}
-          id={selectedId}
-          receivedAt={selected?.createdAt}
-        />
       )}
     </div>
   );

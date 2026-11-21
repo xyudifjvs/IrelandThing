@@ -1,5 +1,13 @@
 # Ireland’s Weatherly handoff
 
+## November 21, 2026: agent file overview and focused transaction view
+
+Ireland approved showing transaction cards on the overview, opening only the selected property’s timeline/documents/people, and returning with “← Back to all files” while keeping the prior filter and search. The overview no longer opens the first file automatically; the detail route renders only its requested file. The selected address is the page heading. Pending intakes still show their receipt and sent date, without a premature timeline. Existing client views and coordinator-only lifecycle commands are unchanged.
+
+An authenticated layout provider keeps the agent’s filter/search in memory across portal navigation. It is scoped to the current signed-in identity, clears on account changes/full reload, and does not store search terms in URLs or browser storage. Under-contract and closing-stage cards use warm sand `#EDE2D2` with the existing near-black text `#1E1C1A`. Ireland explicitly rejected brown text. Intake blue and closed green are preserved; the palette change is scoped to the Under contract badge.
+
+Validation: root TypeScript, the production web build and whitespace checks passed. Synthetic local browser checks used ten active cards plus closed/terminated fixtures. They verified cards-only overview, one-file detail, Back preserving the Lake search and Closed filter, closed-file label, pending-intake receipt/date, 390px phone layout, and rendered badge colors `rgb(237, 226, 210)` / `rgb(30, 28, 26)`. No broad backend test rerun was needed for this presentation/navigation change; the prior 481-test result belongs to the earlier invitation release. No real transactions, accounts or emails were changed during verification. No migration, API/worker release, or provider-setting change is required. Deployment receipt follows after the web rollout.
+
 ## November 21, 2026: agent invitation and sign-in design
 
 Ireland supplied `Codex_prompt_agent_portal_invitation.md` and five screenshots as the design source, replacing the inaccessible design link. The invitation and sign-in pages now share a near-black Weatherly panel, cream form area, existing wordmark/signature assets, locally hosted Cormorant Garamond and Montserrat, and stacked phone layout with identical wording. The sign-in heading stays on one line. Show/Hide controls, a live 12-character signup hint, read-only invitation email, and a default-checked persistent-session option are functional. Existing coordinator/client routing, OAuth return restrictions, password recovery and enrolled MFA remain supported.

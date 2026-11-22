@@ -7,6 +7,7 @@ import { fileReviewPending } from "../file-review";
 import { approvedWorkflowTaskDates } from "../rules";
 import { projectTaskFields, agentMatterDetails } from "./task-fields";
 import { canonicalPortalTimeline } from "./canonical-timeline";
+import { legacyClientPresentation } from "./client-timeline-layout";
 import { documentAudienceWhere } from "./document-audience";
 import { peopleAudienceWhere, portalPersonSelect } from "../people/projection";
 import {
@@ -177,8 +178,12 @@ export async function listMatters(
                 })
               : m.tasks
                   .filter(({ status }) => status !== "not_applicable")
-                  .map(({ details: _, note: _note, ...t }, position) => ({
+                  .map(({ details, note: _note, ...t }, position) => ({
                     ...t,
+                    ...legacyClientPresentation(
+                      { ...t, details },
+                      { side: m.side, timeZone: m.deadlineTimeZone },
+                    ),
                     position,
                   })),
           deadlines: m.deadlines.map(
@@ -349,9 +354,13 @@ export async function getMatter(actor: Principal, id: string) {
       tasks: matter.tasks
         .filter(({ status }) => status !== "not_applicable")
         .map((task, position) => {
-          const { details: _, note: _note, ...t } = projectTaskFields(task);
+          const { details, note: _note, ...t } = projectTaskFields(task);
           return {
             ...t,
+            ...legacyClientPresentation(
+              { ...t, details },
+              { side: matter.side, timeZone: matter.deadlineTimeZone },
+            ),
             position,
           };
         }),

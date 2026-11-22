@@ -4,14 +4,14 @@ import { PortalDocuments } from "./PortalDocuments";
 import { PortalTimeline } from "./PortalTimeline";
 import { PortalPeople } from "./PortalPeople";
 import {
-  clientStepDate,
   closingTask,
   completed,
   fileAddress,
   fileGroup,
   fileStatus,
-  nextDatedStep,
-  notNeeded,
+  nextClientStep,
+  clientTimelineTasks,
+  clientStepDetail,
   shortDate,
   type PortalFile,
   type PortalTask,
@@ -50,9 +50,7 @@ export function ClientFile({
   file: PortalFile;
   bearer?: string;
 }) {
-  const visibleTasks = (file.tasks || []).filter(
-    (task) => !notNeeded(task) && task.kind !== "client_request",
-  );
+  const visibleTasks = clientTimelineTasks(file.tasks || [], file.side);
   // Legacy files can still carry separate confirmed dates. Include only the
   // existing role-approved dates that don't duplicate a shared task.
   const historicDates: PortalTask[] = (file.deadlines || [])
@@ -72,11 +70,14 @@ export function ClientFile({
       status: "pending",
       dueDate: deadline.date,
     }));
-  const tasks = [...visibleTasks, ...historicDates];
+  const tasks = clientTimelineTasks(
+    [...visibleTasks, ...historicDates],
+    file.side,
+  );
   const closing = closingTask(tasks);
   const finished = fileGroup(file.stage) !== "active";
-  const next = !finished ? nextDatedStep(tasks) : null;
-  const done = visibleTasks.filter(completed).length;
+  const next = !finished ? nextClientStep(tasks) : null;
+  const done = tasks.filter(completed).length;
   const closingDate = finished
     ? shortDate(file.closedOn || closing?.dueDate)
     : closing?.dateLabel || shortDate(closing?.dueDate);
@@ -94,10 +95,10 @@ export function ClientFile({
               <progress
                 aria-label="Timeline progress"
                 value={done}
-                max={visibleTasks.length}
+                max={tasks.length}
               />
               <small>
-                {done} of {visibleTasks.length} steps complete
+                {done} of {tasks.length} steps complete
               </small>
             </>
           )}
@@ -110,12 +111,17 @@ export function ClientFile({
         >
           <p className={s.eyebrow}>What’s next</p>
           <h2>{next.title}</h2>
-          <p>{clientStepDate(next)}</p>
+          <p>{clientStepDetail(next, file.side)}</p>
         </section>
       )}
       <section className={s.panel} aria-label="Your timeline">
         <h2>Your timeline</h2>
-        <PortalTimeline tasks={tasks} client />
+        <PortalTimeline
+          tasks={tasks}
+          client
+          side={file.side}
+          showNext={!finished}
+        />
       </section>
       <PortalDocuments
         documents={file.documents || []}

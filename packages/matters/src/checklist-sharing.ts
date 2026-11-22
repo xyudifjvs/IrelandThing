@@ -23,6 +23,7 @@ import {
 } from "./projections/deadline-fields";
 import { fileReviewPending } from "./file-review";
 import { canonicalPortalTimeline } from "./projections/canonical-timeline";
+import { legacyClientPresentation } from "./projections/client-timeline-layout";
 import {
   documentAudienceWhere,
   portalDocumentSelect,
@@ -415,7 +416,15 @@ export async function getPublicChecklist(token: string) {
           position,
         ) => {
           const { note: _note, ...appointment } = sharedTaskFields(_details);
-          return { ...task, ...appointment, position };
+          return {
+            ...task,
+            ...appointment,
+            ...legacyClientPresentation(
+              { ...task, stepKey: _key, details: _details },
+              { side, timeZone: deadlineTimeZone },
+            ),
+            position,
+          };
         },
       );
       const requestIds = new Set(

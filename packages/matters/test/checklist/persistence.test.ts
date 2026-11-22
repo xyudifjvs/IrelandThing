@@ -160,7 +160,7 @@ describe("canonical checklist persistence", () => {
       await prisma.task.count({
         where: { matterId: matter.id, stepKey: { not: null } },
       }),
-    ).toBe(17);
+    ).toBe(18);
     expect(
       await prisma.task.findUnique({ where: { id: legacyTask.id } }),
     ).toMatchObject({
@@ -308,7 +308,7 @@ describe("canonical checklist persistence", () => {
     });
     expect(
       await prisma.task.count({ where: { matterId: matter.id, stepKey: { not: null } } }),
-    ).toBe(17);
+    ).toBe(18);
   });
 
   it("records actual HOA delivery and completion atomically, with hook failure rolling both back", async () => {

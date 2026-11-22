@@ -466,6 +466,7 @@ describe("canonical client checklist sharing", () => {
     ).toEqual([0, 1, 2]);
     for (const task of result.tasks)
       expect(Object.keys(task).sort()).toEqual([
+        ...(task.dueDate ? ["dateLabel"] : []),
         "dueDate",
         "id",
         "position",
@@ -1395,7 +1396,7 @@ describe("canonical client checklist sharing", () => {
           position: 1,
           details: {
             scheduled: true,
-            appointmentPlace: "AGENT-INSPECTION-PLACE",
+            appointmentPlace: "Client-visible inspection place",
             note: "AGENT-NOTE",
             showNoteToAgent: true,
           },
@@ -1472,7 +1473,7 @@ describe("canonical client checklist sharing", () => {
       people: [expect.objectContaining({ name: "Client-visible title rep" })],
     });
     expect(bearer.tasks.map((task) => task.title)).toEqual([
-      "Inspections",
+      "Home Inspections",
       "Closing",
     ]);
     expect(JSON.stringify(bearer)).not.toMatch(

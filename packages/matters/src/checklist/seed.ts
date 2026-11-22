@@ -37,11 +37,7 @@ export function buildChecklistSeed(input: ChecklistSeed) {
         "Checklist date keys must be distinct.",
       );
     const template = templatesByKey.get(date.key);
-    if (
-      !template &&
-      date.key !== remediesAnchorKey &&
-      !(input.side === "seller" && date.key === "title_commitment")
-    )
+    if (!template && date.key !== remediesAnchorKey)
       throw new ChecklistDateError(
         "UNKNOWN_DATE_ANCHOR",
         `That date key does not belong to this checklist: ${date.key}.`,
@@ -72,18 +68,7 @@ export function buildChecklistSeed(input: ChecklistSeed) {
   const graph = resolveChecklistDates({
     acceptance: input.acceptance,
     timeZone: input.timeZone,
-    nodes: [
-      ...templates.map(node),
-      ...(input.side === "seller"
-        ? [
-            node({
-              key: "title_commitment",
-              dateCapable: true,
-              notNeeded: false,
-            }),
-          ]
-        : []),
-    ],
+    nodes: templates.map(node),
   });
   const resolved = new Map(graph.nodes.map((item) => [item.key, item]));
   return {

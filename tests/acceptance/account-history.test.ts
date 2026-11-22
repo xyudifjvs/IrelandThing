@@ -1256,17 +1256,17 @@ describe("portal refresh and appointment regressions", () => {
           }),
         );
       const fallback = render(null);
-      expect(
-        fallback.match(
-          /Sun, Nov 22 · Details to come · Synthetic Title Office/g,
-        ),
-      ).toHaveLength(2);
+      expect(fallback).toContain("By 11/22/26");
+      expect(fallback.match(/Scheduled details to come/g)).toHaveLength(1);
+      expect(fallback).not.toContain("Scheduled for");
 
       const scheduled = render("2026-11-23T16:00:00Z");
-      expect(scheduled).not.toContain("Details to come");
+      expect(scheduled).not.toContain("Scheduled details to come");
       expect(
-        scheduled.match(/Mon, Nov 23, 11:00 AM EST · Synthetic Title Office/g),
-      ).toHaveLength(2);
+        scheduled.match(
+          /Scheduled for Mon, Nov 23 at 11:00 AM · Synthetic Title Office/g,
+        ),
+      ).toHaveLength(1);
     },
   );
 });
@@ -1364,5 +1364,125 @@ describe("portal not-needed grouping and shared contact details", () => {
       }
       expect(html).not.toContain("undefined");
     }
+  });
+});
+
+describe("client timeline mockup behavior", () => {
+  const render = (
+    side: string,
+    tasks: PortalFile["tasks"],
+    stage = "under_contract",
+  ) =>
+    renderToStaticMarkup(
+      createElement(ClientFile, {
+        file: {
+          id: "mockup",
+          propertyAddress: "214 Synthetic Street",
+          stage,
+          side,
+          tasks,
+        },
+      }),
+    );
+  const step = (
+    stepKey: string,
+    extra: Partial<NonNullable<PortalFile["tasks"]>[number]> = {},
+  ) => ({
+    id: stepKey,
+    stepKey,
+    title: stepKey,
+    status: "pending",
+    dueDate: "2026-08-25",
+    ...extra,
+  });
+  it("uses the next open displayed step in portal order and excludes hidden rows from progress", () => {
+    const html = render("buyer", [
+      step("preapproval_pof", { status: "completed", title: "Pre-Approval" }),
+      step("loan_application", { dueDate: null }),
+      step("earnest_money_due", { dueDate: "2026-08-01" }),
+      step("home_warranty_ordered"),
+      step("attorney_review", { status: "not_applicable" }),
+    ]);
+    expect(html).toContain("1 of 3 steps complete");
+    expect(html).toMatch(/What’s next<\/p><h2>Loan Application<\/h2>/);
+    expect(html.match(/Up next/g)).toHaveLength(1);
+    expect(html).not.toContain("Home Warranty");
+    expect(html).not.toContain("Attorney Review");
+    expect(html).toMatch(/<h3>Pre-Approval<\/h3><p>Done<\/p>/);
+  });
+  it.each(["buyer", "seller"])(
+    "separates date/appointment lines on %s and removes them on completion",
+    (side) => {
+      for (const key of ["inspections", "final_walkthrough", "closing"]) {
+        const task = step(key, {
+          dateLabel: "Within 3 days before closing",
+          scheduled: true,
+          appointmentAt: "2026-09-19T15:12:00Z",
+          appointmentPlace: "Sample Office",
+        });
+        const html = render(side, [task]);
+        expect(html).toMatch(
+          /<p>Within 3 days before closing<\/p><p class="bookedAppointment">Scheduled for Sat, Sep 19 at 11:12 AM · Sample Office<\/p>/,
+        );
+        expect(html).not.toContain("By Within");
+        const done = render(side, [{ ...task, status: "completed" }]);
+        expect(done).toContain("tickDone");
+        expect(done).toContain("<p>Done</p>");
+        expect(done).not.toContain("Scheduled for");
+        expect(done).not.toContain("Up next");
+        expect(done).not.toContain("What’s next");
+        expect(done).toContain("1 of 1 steps complete");
+      }
+    },
+  );
+  it.each(["buyer", "seller"])(
+    "shows updates instead of dates for open appraisal and clear-to-close steps on %s",
+    (side) => {
+      for (const key of ["appraisal_ordered", "appraisal", "clear_to_close"]) {
+        const html = render(side, [
+          step(key, {
+            dateLabel: "Received",
+            appointmentAt: "2026-09-08T15:00:00Z",
+          }),
+        ]);
+        expect(html).toContain("We&#x27;ll update you");
+        expect(html).not.toContain("Received");
+        expect(html).not.toContain("Scheduled for");
+      }
+    },
+  );
+  it("retains only the seller Appraisal Ordered appointment after checkoff", () => {
+    const task = step("appraisal_ordered", {
+      status: "completed",
+      dateLabel: "By 8/25/26",
+      scheduled: true,
+    });
+    const waiting = render("seller", [task]);
+    expect(waiting).toMatch(
+      /<h3>Appraisal Ordered<\/h3><p>Done<\/p><p>Scheduled details to come<\/p>/,
+    );
+    expect(waiting).not.toContain("By 8/25/26");
+    const booked = render("seller", [
+      { ...task, appointmentAt: "2026-09-08T15:00:00Z" },
+    ]);
+    expect(booked).toMatch(
+      /<p>Done<\/p><p class="bookedAppointment">Scheduled for Tue, Sep 8 at 11:00 AM<\/p>/,
+    );
+    const buyer = render("buyer", [
+      { ...task, appointmentAt: "2026-09-08T15:00:00Z" },
+    ]);
+    expect(buyer).toContain("<p>Done</p>");
+    expect(buyer).not.toContain("Scheduled for");
+  });
+  it("retains the timeline for closed files with no Up next marker", () => {
+    const html = render(
+      "seller",
+      [step("closing", { status: "completed" }), step("possession")],
+      "closed",
+    );
+    expect(html).toContain("Your timeline");
+    expect(html).toContain("<p>Done</p>");
+    expect(html).not.toContain("Up next");
+    expect(html).not.toContain("What’s next");
   });
 });

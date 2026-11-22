@@ -1,3 +1,7 @@
+import {
+  clientStepKey,
+  selectClientTimeline,
+} from "../../../../../../packages/matters/src/projections/client-timeline-layout";
 import type { Matter } from "../../../(workspace)/workspace/_components/data";
 
 export type PortalTask = {
@@ -11,6 +15,7 @@ export type PortalTask = {
   scheduled?: boolean;
   appointmentAt?: string | null;
   appointmentPlace?: string;
+  appointmentTimeZone?: string;
   note?: string;
   dateLabel?: string;
 };
@@ -130,19 +135,65 @@ export function appointment(task: PortalTask) {
     .join(" · ");
 }
 
+/** The API supplies exact display wording or a client-specific By date label. */
 export function clientStepDate(task: PortalTask) {
-  if (task.dateLabel)
-    return [task.dateLabel, appointment(task)].filter(Boolean).join(" · ");
-  const day = shortDate(task.dueDate);
-  if (!scheduledStep(task)) return day;
-  const time = appointmentTime(task);
-  return (
-    time
-      ? [time, task.appointmentPlace]
-      : [day, "Details to come", task.appointmentPlace]
-  )
+  if (task.dateLabel) return task.dateLabel;
+  const match = task.dueDate?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match
+    ? `By ${Number(match[2])}/${Number(match[3])}/${match[1].slice(-2)}`
+    : "";
+}
+
+export function clientTimelineTasks(
+  tasks: readonly PortalTask[],
+  side?: string,
+) {
+  return selectClientTimeline(
+    tasks.filter((task) => !notNeeded(task) && task.kind !== "client_request"),
+    side,
+  );
+}
+
+export function nextClientStep(tasks: readonly PortalTask[]) {
+  return tasks.find((task) => !completed(task) && !notNeeded(task));
+}
+
+export function clientStepDetail(task: PortalTask, side?: string) {
+  const key = clientStepKey(task);
+  return !completed(task) &&
+    ["appraisal_ordered", "appraisal", "clear_to_close"].includes(key || "")
+    ? "We'll update you"
+    : clientStepDate(task);
+}
+
+export function clientAppointment(task: PortalTask) {
+  if (!task.appointmentAt) return "Scheduled details to come";
+  const instant = new Date(task.appointmentAt);
+  if (!Number.isFinite(instant.valueOf())) return "Scheduled details to come";
+  const timeZone = task.appointmentTimeZone || "America/New_York";
+  const day = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(instant);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(instant);
+  return [`Scheduled for ${day} at ${time}`, task.appointmentPlace]
     .filter(Boolean)
     .join(" · ");
+}
+
+export function clientScheduledStep(task: PortalTask, side?: string) {
+  const key = clientStepKey(task);
+  return (
+    ["inspections", "final_walkthrough", "closing"].includes(key || "") ||
+    (side === "seller" && key === "appraisal_ordered" && completed(task))
+  );
 }
 
 export function scheduledStep(task: PortalTask) {

@@ -17,6 +17,7 @@ import {
   createChecklistShare,
   getPublicChecklist,
 } from "../../src/checklist-sharing";
+import { clientTimelineLayout } from "../../src/projections/client-timeline-layout";
 import { mergeFields } from "../../../communications/src/merge-fields";
 const prefix = `unified-${randomUUID()}`;
 const owner: Principal = {
@@ -66,7 +67,7 @@ async function file() {
   });
   return matter.id;
 }
-it("creates the same master checklist for either side while retaining the current seller client timeline in account and shared-link access", async () => {
+it("creates the same master checklist for either side with its separate seller client timeline in account and shared-link access", async () => {
   const id = await file();
   await prisma.$transaction((tx) =>
     seedMatterChecklist(tx, id, {
@@ -89,13 +90,13 @@ it("creates the same master checklist for either side while retaining the curren
     checklistTemplate("buyer", "financed").map((task) => task.title),
   );
   expect(view.tasks.map((task) => task.title)).toEqual(
-    clientChecklistTemplate("seller", "financed").map((task) => task.title),
+    clientTimelineLayout("seller").map(([, title]) => title),
   );
   expect(
-    view.tasks.find((task) => task.stepKey === "title_commitment")?.dueDate,
-  ).toBe("2026-12-05");
+    view.tasks.find((task) => task.stepKey === "title_commitment"),
+  ).toBeUndefined();
   expect(view.tasks.some((task) => task.stepKey === "appraisal_ordered")).toBe(
-    false,
+    true,
   );
   const list = await listMatters(client);
   expect(
@@ -110,7 +111,7 @@ it("creates the same master checklist for either side while retaining the curren
     /dateRule|clientPosition|checklistDateAnchors|coordinatorChecklistUnified/,
   );
 });
-it("backfills old seller working lists without losing dates, private notes, custom steps, client order or title rules, and is idempotent", async () => {
+it("backfills old seller working lists without losing dates, private notes, custom steps, existing client dates or title rules, and is idempotent", async () => {
   const id = await file();
   await prisma.matter.update({
     where: { id },
@@ -157,23 +158,33 @@ it("backfills old seller working lists without losing dates, private notes, cust
     ),
     "utf8",
   );
+  const titleSql = await readFile(
+    new URL(
+      "../../../db/prisma/migrations/20261122010200_title_commitment_step/migration.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   const connection = new pg.Client({
     connectionString: process.env.DATABASE_URL,
   });
   await connection.connect();
   try {
     await connection.query(sql);
+    await connection.query(titleSql);
   } finally {
     await connection.end();
   }
   const coordinator = await getMatter(owner, id),
     view = await getMatter(client, id);
-  expect(coordinator.tasks.slice(0, 17).map((task) => task.title)).toEqual(
+  expect(coordinator.tasks.slice(0, 18).map((task) => task.title)).toEqual(
     checklistTemplate("buyer", "financed").map((task) => task.title),
   );
-  expect(coordinator.tasks[17].id).toBe(custom.id);
+  expect(coordinator.tasks[18].id).toBe(custom.id);
   expect(
-    view.tasks.map((task) => [task.id, task.title, task.status, task.dueDate]),
+    view.tasks
+      .filter((task) => task.stepKey !== "appraisal_ordered")
+      .map((task) => [task.id, task.title, task.status, task.dueDate]),
   ).toEqual(
     before.tasks.map((task) => [
       task.id,
@@ -217,11 +228,12 @@ it("backfills old seller working lists without losing dates, private notes, cust
     (await mergeFields(owner, id)).find(
       (field) => field.key === "title_commitment_deadline",
     )?.value,
-  ).toBe("12/5/26");
+  ).toBe("By December 5");
   const again = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await again.connect();
   try {
     await again.query(sql);
+    await again.query(titleSql);
   } finally {
     await again.end();
   }

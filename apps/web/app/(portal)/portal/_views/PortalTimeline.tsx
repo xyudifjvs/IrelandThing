@@ -1,9 +1,12 @@
 import { Check } from "lucide-react";
 import {
   appointment,
-  clientStepDate,
+  clientTimelineTasks,
+  nextClientStep,
+  clientStepDetail,
+  clientScheduledStep,
+  clientAppointment,
   completed,
-  nextDatedStep,
   notNeeded,
   shortDate,
   type PortalTask,
@@ -13,12 +16,16 @@ import s from "../_components/portal.module.css";
 export function PortalTimeline({
   tasks,
   client = false,
+  side,
+  showNext = true,
 }: {
   tasks: readonly PortalTask[];
   client?: boolean;
+  side?: string;
+  showNext?: boolean;
 }) {
   const rows = client
-    ? tasks.filter((task) => !notNeeded(task) && task.kind !== "client_request")
+    ? clientTimelineTasks(tasks, side)
     : tasks.filter((task) => !notNeeded(task));
   const skippedRows = client ? [] : tasks.filter(notNeeded);
   if (!rows.length && !skippedRows.length)
@@ -27,22 +34,19 @@ export function PortalTimeline({
         Timeline details will appear here when they’re available.
       </p>
     );
-  const next = client
-    ? (nextDatedStep(rows) ?? rows.find((task) => !completed(task)))
-    : null;
+  const next = client && showNext ? nextClientStep(rows) : null;
   return (
     <>
       {rows.length > 0 && (
-        <ol className={s.timeline}>
+        <ol className={`${s.timeline} ${client ? s.clientTimeline : ""}`}>
           {rows.map((task) => {
             const done = completed(task);
             const skipped = notNeeded(task);
             const upcoming = client && task.id === next?.id;
             const day = shortDate(task.dueDate);
-            const detail =
-              client || task.dateLabel
-                ? clientStepDate(task)
-                : appointment(task);
+            const detail = [task.dateLabel, appointment(task)]
+              .filter(Boolean)
+              .join(" · ");
             return (
               <li key={task.id} className={s.timelineRow}>
                 <span
@@ -53,18 +57,44 @@ export function PortalTimeline({
                 </span>
                 <div>
                   <h3>{task.title}</h3>
-                  {detail && <p>{detail}</p>}
+                  {client ? (
+                    <>
+                      {done ? (
+                        <p>Done</p>
+                      ) : (
+                        clientStepDetail(task, side) && (
+                          <p>{clientStepDetail(task, side)}</p>
+                        )
+                      )}
+                      {(!done ||
+                        (side === "seller" &&
+                          task.stepKey === "appraisal_ordered")) &&
+                        clientScheduledStep(task, side) && (
+                          <p
+                            className={
+                              task.appointmentAt
+                                ? s.bookedAppointment
+                                : undefined
+                            }
+                          >
+                            {clientAppointment(task)}
+                          </p>
+                        )}
+                    </>
+                  ) : (
+                    detail && <p>{detail}</p>
+                  )}
                   {!client && task.note && <p>{task.note}</p>}
                 </div>
-                <span className={s.timelineStatus}>
+                <span
+                  className={`${s.timelineStatus} ${client && upcoming ? s.upNext : ""}`}
+                >
                   {skipped
                     ? "Not needed"
                     : client
-                      ? done
-                        ? "Done"
-                        : upcoming
-                          ? "Up next"
-                          : ""
+                      ? upcoming
+                        ? "Up next"
+                        : ""
                       : task.dateLabel
                         ? done
                           ? "Done"

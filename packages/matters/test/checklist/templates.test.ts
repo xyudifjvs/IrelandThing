@@ -19,6 +19,7 @@ const buyerTitles = [
   "Appraisal Completed",
   "Home Warranty Ordered",
   "Financing Approved / Loan Commitment",
+  "Title Commitment",
   "Clear to Close",
   "Final Walkthrough",
   "Closing",
@@ -132,8 +133,7 @@ describe("official checklist templates", () => {
     });
     expect(seed.steps.map(({ title }) => title)).toEqual(buyerTitles);
     expect(
-      seed.hiddenAnchors.find(({ key }) => key === "title_commitment")?.due
-        ?.date,
+      seed.steps.find(({ key }) => key === "title_commitment")?.due?.date,
     ).toBe("2026-11-27");
     expect(
       seed.steps.find(({ key }) => key === "remedies_negotiated")?.due?.date,
@@ -141,9 +141,7 @@ describe("official checklist templates", () => {
     expect(seed.steps.find(({ key }) => key === "remedies")?.due?.date).toBe(
       "2026-11-19",
     );
-    expect(seed.hiddenAnchors.map(({ key }) => key)).toEqual([
-      "title_commitment",
-    ]);
+    expect(seed.hiddenAnchors).toEqual([]);
   });
 
   it("leaves remedies and title commitment unresolved without supplied terms", () => {
@@ -166,7 +164,7 @@ describe("official checklist templates", () => {
       ],
     });
     expect(
-      seed.hiddenAnchors.find(({ key }) => key === "title_commitment")?.due,
+      seed.steps.find(({ key }) => key === "title_commitment")?.due,
     ).toBeNull();
     expect(seed.steps.find(({ key }) => key === "remedies")?.due).toBeNull();
   });

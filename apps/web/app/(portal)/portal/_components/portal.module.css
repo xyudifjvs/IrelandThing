@@ -493,6 +493,21 @@
 .closingSummary progress {
   width: 100%;
   margin-top: 5px;
+  appearance: none;
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #4b4742;
+}
+.closingSummary progress::-webkit-progress-bar {
+  background: #4b4742;
+}
+.closingSummary progress::-webkit-progress-value {
+  background: #f7f4ee;
+}
+.closingSummary progress::-moz-progress-bar {
+  background: #f7f4ee;
 }
 .nextPanel h2 {
   margin-block: 5px;
@@ -600,4 +615,33 @@
 
 .replacement a {
   color: var(--weatherly-color-accent);
+}
+
+/* Client mockups: local text overrides leave agent and coordinator colors intact. */
+.clientFile {
+  --weatherly-color-secondary: #4e3b2a;
+}
+.clientTimeline p,
+.clientFile .nextPanel > p {
+  color: #4e3b2a;
+}
+.clientTimeline .tickDone {
+  background: #1e1c1a;
+  border-color: #1e1c1a;
+  color: #ffffff;
+}
+.clientTimeline .tickNext {
+  background: transparent;
+  border-color: var(--weatherly-color-border-strong);
+}
+.clientTimeline .bookedAppointment {
+  color: #1e1c1a;
+  font-weight: 500;
+}
+.clientTimeline .upNext {
+  color: #4e3b2a;
+  background: #f2ede7;
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
 }

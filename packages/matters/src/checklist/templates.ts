@@ -29,6 +29,7 @@ function step(
   };
 }
 
+/** Original definitions; current client presentation is in projections/client-timeline-layout. */
 export function clientChecklistTemplate(
   side: TransactionSide,
   purchaseType: PurchaseType,
@@ -94,7 +95,13 @@ export function checklistTemplate(
   side: TransactionSide,
   purchaseType: PurchaseType,
 ) {
-  return clientChecklistTemplate("buyer", purchaseType).map((item) => ({
+  const working = clientChecklistTemplate("buyer", purchaseType);
+  working.splice(
+    working.findIndex((item) => item.key === "clear_to_close"),
+    0,
+    step("title_commitment", "Title Commitment"),
+  );
+  return working.map((item) => ({
     ...item,
     // Retain the established seller warranty key so saved rules keep their anchor.
     key:

@@ -29,7 +29,7 @@ function step(
   };
 }
 
-export function checklistTemplate(
+export function clientChecklistTemplate(
   side: TransactionSide,
   purchaseType: PurchaseType,
 ) {
@@ -88,3 +88,24 @@ export function checklistTemplate(
 }
 
 export const remediesAnchorKey = "remedies";
+
+/** One working checklist for both sides; only client presentation is side-specific. */
+export function checklistTemplate(
+  side: TransactionSide,
+  purchaseType: PurchaseType,
+) {
+  return clientChecklistTemplate("buyer", purchaseType).map((item) => ({
+    ...item,
+    // Retain the established seller warranty key so saved rules keep their anchor.
+    key:
+      side === "seller" && item.key === "home_warranty_ordered"
+        ? "home_warranty"
+        : item.key,
+    scheduled:
+      item.key === "appraisal_ordered"
+        ? true
+        : item.key === "appraisal"
+          ? false
+          : item.scheduled,
+  }));
+}

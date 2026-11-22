@@ -139,6 +139,9 @@ export async function seedMatterChecklist(
       details: {
         ...detailsObject(matter.details),
         [hiddenAnchorsField]: hiddenAnchors,
+        ...(input.side === "seller"
+          ? { coordinatorChecklistUnified: true }
+          : {}),
       },
     },
   });

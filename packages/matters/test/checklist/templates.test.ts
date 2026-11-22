@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildChecklistSeed } from "../../src/checklist/seed";
-import { checklistTemplate } from "../../src/checklist/templates";
+import {
+  checklistTemplate,
+  clientChecklistTemplate,
+} from "../../src/checklist/templates";
 
 const buyerTitles = [
   "Pre-Approval",
@@ -44,7 +47,10 @@ describe("official checklist templates", () => {
     const buyer = checklistTemplate("buyer", "financed");
     const seller = checklistTemplate("seller", "financed");
     expect(buyer.map(({ title }) => title)).toEqual(buyerTitles);
-    expect(seller.map(({ title }) => title)).toEqual(sellerTitles);
+    expect(seller.map(({ title }) => title)).toEqual(buyerTitles);
+    expect(
+      clientChecklistTemplate("seller", "financed").map(({ title }) => title),
+    ).toEqual(sellerTitles);
     expect(
       buyer.filter((item) => !item.dateCapable).map(({ title }) => title),
     ).toEqual(["Clear to Close"]);
@@ -53,10 +59,20 @@ describe("official checklist templates", () => {
     ).toEqual(["Clear to Close"]);
     expect(
       buyer.filter(({ scheduled }) => scheduled).map(({ key }) => key),
-    ).toEqual(["inspections", "appraisal", "final_walkthrough", "closing"]);
+    ).toEqual([
+      "inspections",
+      "appraisal_ordered",
+      "final_walkthrough",
+      "closing",
+    ]);
     expect(
       seller.filter(({ scheduled }) => scheduled).map(({ key }) => key),
-    ).toEqual(["inspections", "appraisal", "final_walkthrough", "closing"]);
+    ).toEqual([
+      "inspections",
+      "appraisal_ordered",
+      "final_walkthrough",
+      "closing",
+    ]);
   });
 
   it("uses proof of funds for cash and skips only financing steps by default", () => {
@@ -114,15 +130,20 @@ describe("official checklist templates", () => {
         },
       ],
     });
-    expect(seed.steps.map(({ title }) => title)).toEqual(sellerTitles);
+    expect(seed.steps.map(({ title }) => title)).toEqual(buyerTitles);
     expect(
-      seed.steps.find(({ key }) => key === "title_commitment")?.due?.date,
+      seed.hiddenAnchors.find(({ key }) => key === "title_commitment")?.due
+        ?.date,
     ).toBe("2026-11-27");
     expect(
       seed.steps.find(({ key }) => key === "remedies_negotiated")?.due?.date,
     ).toBe("2026-11-22");
-    expect(seed.steps.find(({ key }) => key === "remedies")?.due?.date).toBe("2026-11-19");
-    expect(seed.hiddenAnchors).toEqual([]);
+    expect(seed.steps.find(({ key }) => key === "remedies")?.due?.date).toBe(
+      "2026-11-19",
+    );
+    expect(seed.hiddenAnchors.map(({ key }) => key)).toEqual([
+      "title_commitment",
+    ]);
   });
 
   it("leaves remedies and title commitment unresolved without supplied terms", () => {
@@ -145,7 +166,7 @@ describe("official checklist templates", () => {
       ],
     });
     expect(
-      seed.steps.find(({ key }) => key === "title_commitment")?.due,
+      seed.hiddenAnchors.find(({ key }) => key === "title_commitment")?.due,
     ).toBeNull();
     expect(seed.steps.find(({ key }) => key === "remedies")?.due).toBeNull();
   });

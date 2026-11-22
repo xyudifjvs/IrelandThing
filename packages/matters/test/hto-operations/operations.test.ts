@@ -4,7 +4,10 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@weatherly/db";
 import { HttpError, sanitizeError, type Principal } from "@weatherly/platform";
-import { seedMatterChecklist } from "../../src/checklist/persistence";
+import {
+  seedMatterChecklist,
+  readChecklistSnapshot,
+} from "../../src/checklist/persistence";
 import { formatHtoAddress } from "../../src/hto-operations/address";
 import {
   applyLinkedClosingDate,
@@ -516,17 +519,17 @@ describe("HTO operations", () => {
     ).rejects.toMatchObject({ code: "PREVIEW_CONFLICT" });
     await applyLinkedClosingDate(actor, row.id, apply);
     expect((await view()).rows[0]).toMatchObject({ closeDate: "2025-12-26" });
-    const task = await prisma.task.findUniqueOrThrow({
-      where: {
-        matterId_stepKey: {
-          matterId: canonical.id,
-          stepKey: "title_commitment",
-        },
-      },
+    const source = await prisma.matter.findUniqueOrThrow({
+      where: { id: canonical.id },
     });
-    expect(task).toMatchObject({
-      dueDate: "2025-12-07",
-      dateRule: { kind: "fixed" },
+    const { snapshot } = await prisma.$transaction((tx) =>
+      readChecklistSnapshot(tx, source),
+    );
+    expect(
+      snapshot.nodes.find((node) => node.key === "title_commitment"),
+    ).toMatchObject({
+      due: { date: "2025-12-07", instant: null },
+      rule: { kind: "fixed" },
     });
     await expect(
       applyLinkedClosingDate(actor, row.id, apply),

@@ -1,7 +1,5 @@
 import type { CreationProposal } from "../../../../../../../packages/ai/src/creation-extraction/proposal";
-import {
-  checklistTemplate,
-} from "../../../../../../../packages/matters/src/checklist/templates";
+import { checklistTemplate } from "../../../../../../../packages/matters/src/checklist/templates";
 import { buildChecklistSeed } from "../../../../../../../packages/matters/src/checklist/seed";
 import type {
   ChecklistDateInput,
@@ -169,7 +167,11 @@ export function assembleDates(
   dates: ChecklistDateInput[],
   proposal: CreationProposal | null,
 ): ChecklistDateInput[] {
-  return reviewDates(facts).flatMap(({ key }) => {
+  // A seller's signed title deadline remains a date-graph anchor even though
+  // the shared working checklist no longer has a separate Title step.
+  const keys = reviewDates(facts).map(({ key }) => key);
+  if (facts.side === "seller") keys.push("title_commitment");
+  return keys.flatMap((key) => {
     const saved = dates.find((item) => item.key === key);
     if (saved) return [saved];
     const suggested = proposal?.dates.find((item) => item.key === key);

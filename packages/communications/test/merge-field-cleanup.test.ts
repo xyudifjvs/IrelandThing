@@ -542,7 +542,7 @@ it("renders every scheduled merge field with the file timezone, weekday and any 
     inspections: "inspection_scheduled",
     final_walkthrough: "walkthrough_scheduled",
     closing: "closing_scheduled",
-    appraisal: "appraisal_scheduled",
+    appraisal_ordered: "appraisal_scheduled",
   };
   const instant = "2026-09-19T13:10:25.123Z";
   for (const [stepKey] of Object.entries(keys)) {

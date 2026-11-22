@@ -384,6 +384,8 @@ export async function getPublicChecklist(token: string) {
           matter: portalMatter,
           tasks: canonicalPortalTimeline(tasks, "client", {
             timeZone: deadlineTimeZone,
+            side,
+            details,
           }),
           clientRequests: [],
           deadlines: [],

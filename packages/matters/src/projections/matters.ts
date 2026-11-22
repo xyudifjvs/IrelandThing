@@ -172,6 +172,8 @@ export async function listMatters(
             m.checklistVersion !== null
               ? canonicalPortalTimeline(m.tasks, "client", {
                   timeZone: m.deadlineTimeZone,
+                  side: m.side,
+                  details: m.details,
                 })
               : m.tasks
                   .filter(({ status }) => status !== "not_applicable")
@@ -200,6 +202,8 @@ export async function listMatters(
             matter.checklistVersion !== null
               ? canonicalPortalTimeline(matter.tasks, "agent", {
                   timeZone: matter.deadlineTimeZone,
+                  side: matter.side,
+                  details: matter.details,
                 })
               : matter.tasks.map(legacyAgentTask),
           deadlines: matter.deadlines.map(
@@ -281,6 +285,8 @@ export async function getMatter(actor: Principal, id: string) {
       closedOn: portalClosedDate(matter, matter.tasks, actor.role),
       tasks: canonicalPortalTimeline(matter.tasks, actor.role, {
         timeZone: matter.deadlineTimeZone,
+        side: matter.side,
+        details: matter.details,
       }),
       deadlines: [],
       notes: [],

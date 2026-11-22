@@ -165,7 +165,16 @@ export async function resolveMergeFields(
           }
         : field(definition, null);
     }
-    const candidates = getTasks(source.stepKey).filter(
+    // The appraisal appointment belongs to Ordered on checklists with both
+    // milestones. Keep the completion deadline and single-step older files intact.
+    const sourceKey =
+      source.property === "schedule" &&
+      source.stepKey === "appraisal" &&
+      matter.checklistVersion !== null &&
+      tasks.some((task) => task.stepKey === "appraisal_ordered")
+        ? "appraisal_ordered"
+        : source.stepKey;
+    const candidates = getTasks(sourceKey).filter(
       (task) => task.status !== "not_applicable",
     );
     if (!candidates.length && source.property === "date") {

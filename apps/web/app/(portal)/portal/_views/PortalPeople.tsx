@@ -24,7 +24,7 @@ export function PortalPeople({
                 <strong>{person.name}</strong>
                 <p>{displayLabel(person.role)}</p>
                 {person.phone && <p>{person.phone}</p>}
-                {!client && mail && <a href={mail}>{person.email}</a>}
+                {mail && <a href={mail}>{person.email}</a>}
               </div>
               {client && mail && (
                 <a

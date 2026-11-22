@@ -1270,3 +1270,99 @@ describe("portal refresh and appointment regressions", () => {
     },
   );
 });
+
+describe("portal not-needed grouping and shared contact details", () => {
+  const PortalTimeline = loadView(
+    "apps/web/app/(portal)/portal/_views/PortalTimeline.tsx",
+  )
+    .PortalTimeline as typeof import("../../apps/web/app/(portal)/portal/_views/PortalTimeline").PortalTimeline;
+  const PortalPeople = loadView(
+    "apps/web/app/(portal)/portal/_views/PortalPeople.tsx",
+  )
+    .PortalPeople as typeof import("../../apps/web/app/(portal)/portal/_views/PortalPeople").PortalPeople;
+  const tasks = [
+    {
+      id: "active",
+      title: "Home Inspections",
+      status: "pending",
+      dueDate: "2026-11-28",
+      dateLabel: "on or before 11/28/26",
+      note: "Shared step note",
+    },
+    { id: "skipped", title: "Attorney Review", status: "not_applicable" },
+    { id: "done", title: "Remedies", status: "completed" },
+    { id: "legacy-skipped", title: "HOA Review", status: "not_needed" },
+  ];
+  it("folds both not-needed statuses below the unchanged agent timeline, without granting editing controls", () => {
+    const html = renderToStaticMarkup(createElement(PortalTimeline, { tasks }));
+    const [active, folded] = html.split('<details class="notNeeded">');
+    expect(active).toContain("Home Inspections");
+    expect(active).toContain("on or before 11/28/26");
+    expect(active).toContain("Shared step note");
+    expect(active).toContain("Remedies");
+    expect(active).not.toContain("Attorney Review");
+    expect(active).not.toContain("HOA Review");
+    expect(folded).toContain("2 not needed");
+    expect(folded).toContain("Attorney Review");
+    expect(folded).toContain("HOA Review");
+    expect(html).not.toMatch(/<details[^>]*\bopen/);
+    expect(html).not.toMatch(/<button|<input/);
+  });
+  it("supports all-skipped and empty agent timelines and leaves client filtering unchanged", () => {
+    const skipped = renderToStaticMarkup(
+      createElement(PortalTimeline, { tasks: [tasks[1]] }),
+    );
+    expect(skipped).toContain("1 not needed");
+    expect(skipped).not.toContain("Timeline details will appear");
+    const empty = renderToStaticMarkup(
+      createElement(PortalTimeline, { tasks: [] }),
+    );
+    expect(empty).toContain("Timeline details will appear");
+    expect(empty).not.toContain("<details");
+    const client = renderToStaticMarkup(
+      createElement(PortalTimeline, { tasks, client: true }),
+    );
+    expect(client).not.toContain("Attorney Review");
+    expect(client).not.toContain("HOA Review");
+    expect(client).not.toContain("Shared step note");
+    expect(client).not.toContain("<details");
+    expect(client).toContain("Home Inspections");
+  });
+  it("writes each supplied client contact's phone and email beneath its name while retaining Email buttons", () => {
+    const people = [
+      {
+        id: "lender",
+        name: "Jamie Lender",
+        role: "lender",
+        phone: "555-0101",
+        email: "lender@example.test",
+      },
+      {
+        id: "agent",
+        name: "Taylor Agent",
+        role: "my_agent",
+        phone: "555-0102",
+        email: "agent@example.test",
+      },
+      {
+        id: "title",
+        name: "Sam Title",
+        role: "title_rep",
+        phone: "555-0103",
+        email: "title@example.test",
+      },
+    ];
+    for (const client of [true, false]) {
+      const html = renderToStaticMarkup(
+        createElement(PortalPeople, { people, client }),
+      );
+      for (const person of people) {
+        expect(html).toContain(`<strong>${person.name}</strong>`);
+        expect(html).toContain(`<p>${person.phone}</p>`);
+        expect(html).toContain(`>${person.email}</a>`);
+        if (client) expect(html).toContain(`aria-label="Email ${person.name}"`);
+      }
+      expect(html).not.toContain("undefined");
+    }
+  });
+});

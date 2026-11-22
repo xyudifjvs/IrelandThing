@@ -374,6 +374,33 @@
   color: var(--weatherly-color-secondary);
   text-align: right;
 }
+.notNeeded {
+  margin-top: 6px;
+  border-top: 1px solid var(--weatherly-color-border);
+  color: var(--weatherly-color-secondary);
+  font-size: var(--weatherly-type-small);
+}
+.notNeeded > summary {
+  padding: 11px 0;
+  cursor: pointer;
+}
+.notNeededRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--weatherly-color-border);
+  overflow-wrap: anywhere;
+}
+.notNeededTag {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #f2ede7;
+  color: #6f665b;
+  font-size: var(--weatherly-type-small);
+}
 .tick {
   width: 18px;
   height: 18px;

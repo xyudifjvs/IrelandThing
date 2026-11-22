@@ -536,3 +536,47 @@ it("uses checklist possession wording and a per-transaction buyer-agent commissi
     ),
   ).toBe("2 days after closing");
 });
+
+it("renders every scheduled merge field with the file timezone, weekday and any minute, preserving place and exact timestamps", async () => {
+  const keys = {
+    inspections: "inspection_scheduled",
+    final_walkthrough: "walkthrough_scheduled",
+    closing: "closing_scheduled",
+    appraisal: "appraisal_scheduled",
+  };
+  const instant = "2026-09-19T13:10:25.123Z";
+  for (const [stepKey] of Object.entries(keys)) {
+    const task = await prisma.task.findFirstOrThrow({
+      where: { matterId: buyer, stepKey },
+    });
+    await updateTask(actor, buyer, task.id, {
+      expectedRevision: task.revision,
+      appointmentAt: instant,
+      appointmentPlace: "Synthetic Office",
+    });
+  }
+  const fields = await mergeFields(actor, buyer);
+  for (const key of Object.values(keys))
+    expect(fields.find((field) => field.key === key)?.value).toBe(
+      "Sat, Sep 19 at 9:10 AM · Synthetic Office",
+    );
+  const rendered = await renderEmailFields(
+    actor,
+    buyer,
+    "Appointment details",
+    Object.values(keys)
+      .map((key) => `{{${key}}}`)
+      .join("\n"),
+  );
+  expect(rendered.body.split("\n")).toEqual(
+    Array(4).fill("Sat, Sep 19 at 9:10 AM · Synthetic Office"),
+  );
+  expect(rendered.missingFields).toEqual([]);
+  expect(rendered.unknownFields).toEqual([]);
+  const saved = await prisma.task.findFirstOrThrow({
+    where: { matterId: buyer, stepKey: "closing" },
+  });
+  expect((saved.details as Record<string, unknown>).appointmentAt).toBe(
+    instant,
+  );
+});

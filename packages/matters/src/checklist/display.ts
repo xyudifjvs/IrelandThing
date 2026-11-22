@@ -99,3 +99,26 @@ export function checklistDateLabel(
     return label;
   }
 }
+
+/** Concise appointment label; the stored instant and timezone remain unchanged. */
+export function scheduledAppointment(
+  value: string | Date | null | undefined,
+  timeZone = "America/New_York",
+) {
+  if (!value) return "";
+  const at = new Date(value);
+  if (!Number.isFinite(at.valueOf())) return "";
+  const date = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(at);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(at);
+  return `${date} at ${time}`;
+}

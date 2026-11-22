@@ -6,8 +6,7 @@
 }
 
 .heading,
-.acceptance,
-.stepLine {
+.acceptance {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -54,13 +53,13 @@
 }
 
 .step {
-  padding: 0.65rem 0;
+  padding: 0.8rem 0;
   border-top: 1px solid var(--line);
 }
 
 .stepLine > input,
 .skippedCheck {
-  margin: 0.3rem 0 0;
+  margin: 1.25rem 0 0;
   inline-size: 1rem;
   block-size: 1rem;
   flex: none;
@@ -72,7 +71,6 @@
 }
 
 .stepBody {
-  flex: 1;
   min-inline-size: 0;
   overflow-wrap: anywhere;
 }
@@ -126,6 +124,8 @@
 .menu summary {
   cursor: pointer;
   list-style: none;
+  min-inline-size: 2rem;
+  text-align: center;
   font-size: 1.25rem;
   line-height: 1;
 }
@@ -133,10 +133,12 @@
 .menuActions {
   position: absolute;
   inset-inline-end: 0;
-  z-index: 1;
+  z-index: 5;
   display: grid;
   gap: 0.25rem;
-  min-inline-size: max-content;
+  min-inline-size: 13rem;
+  max-inline-size: min(19rem, 80vw);
+  box-shadow: 0 8px 24px #1e1c1a18;
   padding: 0.4rem;
   border: 1px solid var(--line);
   border-radius: 0.4rem;
@@ -179,12 +181,144 @@
   margin: 0;
 }
 
+.stepLine {
+  display: grid;
+  grid-template-columns: 1rem 3.6rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+}
+.stepLine > input,
+.skippedCheck {
+  align-self: center;
+  margin: 0;
+}
+.stepBody {
+  grid-column: 3;
+}
+.stepActions {
+  grid-column: 4;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+.titleLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+}
+.dateSlot {
+  grid-column: 2;
+}
+.dateBox {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  inline-size: 3.6rem;
+  min-block-size: 3.9rem;
+  padding: 0.25rem;
+  border: 1px solid #1e1c1a;
+  border-radius: 0.45rem;
+  background: #1e1c1a;
+  color: #f6f3ee;
+  line-height: 1.1;
+  text-align: center;
+}
+button.dateBox:not(:disabled) {
+  cursor: pointer;
+}
+.dateBox:disabled {
+  opacity: 1;
+  cursor: wait;
+}
+.dateMonth {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.dateDay {
+  color: #fff;
+  font-family: var(--weatherly-serif, Georgia), serif;
+  font-size: 1.65rem;
+  line-height: 1.05;
+}
+.dateWeekday {
+  font-size: 0.7rem;
+}
+.emptyDate {
+  font-size: 0.75rem;
+  font-weight: 600;
+  max-inline-size: 2.8rem;
+}
+.duePill {
+  padding: 0.16rem 0.65rem;
+  border-radius: 999px;
+  background: #f2ede7;
+  color: #6f665b;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.menuActions button {
+  border: 0;
+  text-align: start;
+  background: transparent;
+}
+.menuActions button:hover:not(:disabled) {
+  background: #f2ede7;
+}
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+.notNeeded {
+  margin-top: 0.6rem;
+}
+.notNeeded > summary {
+  cursor: pointer;
+  text-align: end;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+.clockFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.appointmentZone {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
 @media (max-width: 600px) {
-  .stepLine {
+  .heading {
     flex-wrap: wrap;
   }
-
-  .stepBody {
-    flex: 1 0 80%;
+  .stepLine {
+    grid-template-columns: 1rem 3.3rem minmax(0, 1fr) 2rem;
+    gap: 0.5rem;
+  }
+  .dateBox {
+    inline-size: 3.3rem;
+  }
+  .stepActions {
+    display: contents;
+  }
+  .duePill {
+    grid-column: 3;
+    justify-self: start;
+    grid-row: 2;
+  }
+  .menu {
+    grid-column: 4;
+    grid-row: 1;
+    align-self: start;
+  }
+  .stepActions > button {
+    grid-column: 3 / -1;
+    justify-self: end;
+  }
+  .menuActions {
+    min-inline-size: 12rem;
   }
 }

@@ -9,7 +9,13 @@ import {
   clientCanSee,
   audienceVisibility,
 } from "../../../../_lib/checklist-audiences";
-import { mutate, label, date, type Matter, type Task } from "../../_components/data";
+import {
+  mutate,
+  label,
+  date,
+  type Matter,
+  type Task,
+} from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import {
   BusyForm,
@@ -98,31 +104,31 @@ export function TransactionChecklistPanel({
         </div>
       </div>
       <div className={s.sectionBody}>
-        {sharedTasks.length ? (
-          sharedTasks.map((t, index) => (
-            <ChecklistTask
-              key={t.id}
-              task={t}
-              matterId={id}
-              busy={!!busy}
-              act={act}
-              moveUp={
-                index > 0
-                  ? () => moveTask(t.id, sharedTasks[index - 1].id)
-                  : undefined
-              }
-              moveDown={
-                index < sharedTasks.length - 1
-                  ? () => moveTask(t.id, sharedTasks[index + 1].id)
-                  : undefined
-              }
-            />
-          ))
-        ) : !standaloneDates && (
-          <div className={s.empty}>
-            No checklist steps yet. Add the first step below.
-          </div>
-        )}
+        {sharedTasks.length
+          ? sharedTasks.map((t, index) => (
+              <ChecklistTask
+                key={t.id}
+                task={t}
+                matterId={id}
+                busy={!!busy}
+                act={act}
+                moveUp={
+                  index > 0
+                    ? () => moveTask(t.id, sharedTasks[index - 1].id)
+                    : undefined
+                }
+                moveDown={
+                  index < sharedTasks.length - 1
+                    ? () => moveTask(t.id, sharedTasks[index + 1].id)
+                    : undefined
+                }
+              />
+            ))
+          : !standaloneDates && (
+              <div className={s.empty}>
+                No checklist steps yet. Add the first step below.
+              </div>
+            )}
         {standaloneDates}
         <BusyForm
           busy={!!busy}

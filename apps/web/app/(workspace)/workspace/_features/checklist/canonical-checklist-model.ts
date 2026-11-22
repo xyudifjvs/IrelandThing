@@ -98,8 +98,7 @@ export function targetLabel(
 ) {
   if (target.kind === "acceptance") return "Acceptance date";
   const title =
-    labels[target.key] ||
-    (target.key === "remedies" ? "Remedies" : target.key);
+    labels[target.key] || (target.key === "remedies" ? "Remedies" : target.key);
   return target.kind === "actual" ? `Actual date for ${title}` : title;
 }
 

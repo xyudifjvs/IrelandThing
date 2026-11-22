@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { mutate } from "../../_components/data";
 import type { TransactionAction } from "../../_components/transaction-controls";
 import { CanonicalChecklistStep } from "./CanonicalChecklistStep";
@@ -28,6 +28,16 @@ export function CanonicalChecklistPanel({
   onComplete?: (stepKey: string) => void;
   renderAfterStep?: (task: ChecklistTaskRecord) => ReactNode;
 }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const update = () => setNow(new Date());
+    const interval = window.setInterval(update, 30_000);
+    window.addEventListener("focus", update);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", update);
+    };
+  }, []);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [dateDraft, setDateDraft] = useState<DateEditorDraft | null>(null);
   const [adding, setAdding] = useState(false);
@@ -78,6 +88,34 @@ export function CanonicalChecklistPanel({
       expectedRevision: matter.revision,
       taskIds,
     });
+  }
+
+  function renderTask(task: ChecklistTaskRecord) {
+    const index = tasks.findIndex((item) => item.id === task.id);
+    const afterStep = renderAfterStep?.(task);
+    if (hideCompleted && !afterStep && isComplete(task)) return null;
+    return (
+      <CanonicalChecklistStep
+        key={task.id}
+        task={task}
+        matterId={matter.id}
+        timeZone={matter.deadlineTimeZone}
+        labels={labels}
+        now={now}
+        busy={busy}
+        readOnly={readOnly}
+        act={act}
+        editDate={setDateDraft}
+        onComplete={onComplete}
+        afterStep={afterStep}
+        moveUp={index ? () => moveTask(index, index - 1) : undefined}
+        moveDown={
+          index < tasks.length - 1
+            ? () => moveTask(index, index + 1)
+            : undefined
+        }
+      />
+    );
   }
 
   return (
@@ -145,36 +183,9 @@ export function CanonicalChecklistPanel({
         />
       )}
       <ol className={s.steps}>
-        {tasks.map((task, index) => {
-          const afterStep = renderAfterStep?.(task);
-          if (
-            hideCompleted &&
-            !afterStep &&
-            (isComplete(task) || task.status === "not_applicable")
-          )
-            return null;
-          return (
-            <CanonicalChecklistStep
-              key={task.id}
-              task={task}
-              matterId={matter.id}
-              timeZone={matter.deadlineTimeZone}
-              labels={labels}
-              busy={busy}
-              readOnly={readOnly}
-              act={act}
-              editDate={setDateDraft}
-              onComplete={onComplete}
-              afterStep={afterStep}
-              moveUp={index ? () => moveTask(index, index - 1) : undefined}
-              moveDown={
-                index < tasks.length - 1
-                  ? () => moveTask(index, index + 1)
-                  : undefined
-              }
-            />
-          );
-        })}
+        {tasks
+          .filter((task) => task.status !== "not_applicable")
+          .map(renderTask)}
       </ol>
       {!readOnly &&
         (adding ? (
@@ -218,6 +229,16 @@ export function CanonicalChecklistPanel({
             + Add step
           </button>
         ))}
+      {skipped > 0 && (
+        <details className={s.notNeeded}>
+          <summary>{skipped} not needed</summary>
+          <ol className={s.steps}>
+            {tasks
+              .filter((task) => task.status === "not_applicable")
+              .map(renderTask)}
+          </ol>
+        </details>
+      )}
     </section>
   );
 }

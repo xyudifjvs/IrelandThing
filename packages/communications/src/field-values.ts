@@ -39,6 +39,7 @@ export {
 import {
   checklistMoney as emailMoney,
   checklistWording,
+  scheduledAppointment,
 } from "../../matters/src/checklist/display";
 
 export async function resolveMergeFields(
@@ -218,14 +219,10 @@ export async function resolveMergeFields(
         const at = new Date(value);
         if (!Number.isFinite(at.valueOf())) return "";
         return [
-          new Intl.DateTimeFormat("en-US", {
-            timeZone: matter.deadlineTimeZone || "America/New_York",
-            year: "2-digit",
-            month: "numeric",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          }).format(at),
+          scheduledAppointment(
+            at,
+            matter.deadlineTimeZone || "America/New_York",
+          ),
           text(data.appointmentPlace),
         ]
           .filter(Boolean)

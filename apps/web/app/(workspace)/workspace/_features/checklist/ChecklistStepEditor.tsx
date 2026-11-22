@@ -7,6 +7,12 @@ import { mutate } from "../../_components/data";
 import type { TransactionAction } from "../../_components/transaction-controls";
 import type { ChecklistTaskRecord } from "./canonical-checklist-model";
 import s from "./canonical-checklist.module.css";
+import {
+  appointmentClock,
+  clockWallTime,
+  emptyClock,
+  type AppointmentClock,
+} from "./checklist-presentation";
 
 export type StepEditorKind =
   "title" | "note" | "appointment" | "money" | "wording";
@@ -15,6 +21,7 @@ export function ChecklistStepEditor({
   kind,
   task,
   matterId,
+  timeZone: fileTimeZone,
   busy,
   act,
   onClose,
@@ -22,21 +29,30 @@ export function ChecklistStepEditor({
   kind: StepEditorKind;
   task: ChecklistTaskRecord;
   matterId: string;
+  timeZone: string | null;
   busy: boolean;
   act: TransactionAction;
   onClose: () => void;
 }) {
   const [expectedRevision] = useState(task.revision);
   const stale = expectedRevision !== task.revision;
-  const [timeZone] = useState(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-  );
+  const timeZone = fileTimeZone || "America/New_York";
   const savedAppointment = task.appointmentAt ?? task.details?.appointmentAt;
-  const [wallTime, setWallTime] = useState(() =>
+  const [initialWallTime] = useState(() =>
     kind === "appointment" && savedAppointment
       ? (localWallTime(savedAppointment, timeZone) ?? "")
       : "",
   );
+  const [clock, setClock] = useState(() => appointmentClock(initialWallTime));
+  const [clockEdited, setClockEdited] = useState(false);
+  // A place-only edit must retain any seconds/fractions on an existing appointment.
+  const wallTime = clockEdited ? clockWallTime(clock) : initialWallTime || null;
+  const incompleteClock = wallTime === "";
+  function changeClock(field: keyof AppointmentClock, value: string) {
+    setClock((current) => ({ ...current, [field]: value }));
+    setClockEdited(true);
+    setOccurrence("");
+  }
   const [occurrence, setOccurrence] = useState(() =>
     savedAppointment && wallTime
       ? new Date(savedAppointment).toISOString()
@@ -56,7 +72,12 @@ export function ChecklistStepEditor({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
-    if (stale || (kind === "appointment" && wallTime && !appointmentAt)) return;
+    if (
+      stale ||
+      (kind === "appointment" &&
+        (incompleteClock || (!!wallTime && !appointmentAt)))
+    )
+      return;
     const patch =
       kind === "title"
         ? { title: String(values.get("title") || "").trim() }
@@ -183,20 +204,68 @@ export function ChecklistStepEditor({
       )}
       {kind === "appointment" && (
         <div className={s.fields}>
+          <p className={s.appointmentZone}>Appointment timezone: {timeZone}</p>
           <label>
-            Appointment (your local time)
+            Appointment date
             <input
-              name="appointment"
-              type="datetime-local"
-              step="0.001"
-              value={wallTime}
-              aria-invalid={invalidWallTime}
-              onChange={(event) => {
-                setWallTime(event.target.value);
-                setOccurrence("");
-              }}
+              type="date"
+              value={clock.date}
+              onChange={(event) => changeClock("date", event.target.value)}
             />
           </label>
+          <div className={s.clockFields}>
+            <label>
+              Hour
+              <select
+                value={clock.hour}
+                onChange={(event) => changeClock("hour", event.target.value)}
+              >
+                <option value="">Hour</option>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((hour) => (
+                  <option key={hour} value={hour}>
+                    {hour}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Minute
+              <input
+                type="number"
+                min="0"
+                max="59"
+                step="1"
+                placeholder="00–59"
+                value={clock.minute}
+                onChange={(event) => changeClock("minute", event.target.value)}
+              />
+            </label>
+            <label>
+              AM/PM
+              <select
+                value={clock.period}
+                onChange={(event) => changeClock("period", event.target.value)}
+              >
+                <option value="">AM/PM</option>
+                <option>AM</option>
+                <option>PM</option>
+              </select>
+            </label>
+          </div>
+          <button
+            type="button"
+            className={s.textButton}
+            onClick={() => {
+              setClock({ ...emptyClock });
+              setClockEdited(true);
+              setOccurrence("");
+            }}
+          >
+            Clear appointment date and time
+          </button>
+          {incompleteClock && (
+            <p role="alert">Choose a date, hour, minute, and AM or PM.</p>
+          )}
           {invalidWallTime && (
             <p role="alert">
               This time does not occur in {timeZone}. Choose another time.
@@ -237,7 +306,17 @@ export function ChecklistStepEditor({
         </p>
       )}
       <div className={s.actions}>
-        <button disabled={busy || stale || !expectedRevision}>Save</button>
+        <button
+          disabled={
+            busy ||
+            stale ||
+            !expectedRevision ||
+            (kind === "appointment" &&
+              (incompleteClock || (!!wallTime && !appointmentAt)))
+          }
+        >
+          Save
+        </button>
         <button type="button" disabled={busy} onClick={onClose}>
           Cancel
         </button>

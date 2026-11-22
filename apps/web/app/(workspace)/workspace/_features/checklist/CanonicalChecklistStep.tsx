@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { appointment, mutate } from "../../_components/data";
+import { useRef, useState, type ReactNode } from "react";
+import { mutate } from "../../_components/data";
 import type { TransactionAction } from "../../_components/transaction-controls";
 import type { DateEditorDraft } from "./ChecklistDateEditor";
 import {
@@ -15,9 +15,11 @@ import {
   type ChecklistTaskRecord,
 } from "./canonical-checklist-model";
 import s from "./canonical-checklist.module.css";
+import { dueDateParts, dueStatus } from "./checklist-presentation";
 import {
   checklistMoney,
   checklistWording,
+  scheduledAppointment,
 } from "../../../../../../../packages/matters/src/checklist/display";
 
 export function CanonicalChecklistStep({
@@ -33,6 +35,7 @@ export function CanonicalChecklistStep({
   moveDown,
   onComplete,
   afterStep,
+  now,
 }: {
   task: ChecklistTaskRecord;
   matterId: string;
@@ -46,12 +49,35 @@ export function CanonicalChecklistStep({
   moveDown?: () => Promise<unknown>;
   onComplete?: (stepKey: string) => void;
   afterStep?: ReactNode;
+  now: Date;
 }) {
   const [editor, setEditor] = useState<StepEditorKind | null>(null);
+  const menu = useRef<HTMLDetailsElement>(null);
+  function closeMenu(action: () => void) {
+    if (menu.current) {
+      menu.current.open = false;
+      menu.current.querySelector("summary")?.focus();
+    }
+    action();
+  }
+  function openEditor(kind: StepEditorKind) {
+    closeMenu(() => setEditor(kind));
+  }
   const done = isComplete(task);
   const skipped = task.status === "not_applicable";
   const due = dueDateValue(task);
   const actual = actualDateValue(task);
+  const dateParts = dueDateParts(task.dueDate);
+  const statusLabel = dueStatus(task.dueDate, done, now, timeZone);
+  const dueTime =
+    due?.instant && timeZone
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone,
+          hour: "numeric",
+          minute: "2-digit",
+          timeZoneName: "short",
+        }).format(new Date(due.instant))
+      : "";
   const note = task.note ?? task.details?.note;
   const scheduledAt = task.appointmentAt ?? task.details?.appointmentAt;
   const isHoaDelivery = task.stepKey === "condo_hoa_docs_provided";
@@ -128,58 +154,71 @@ export function CanonicalChecklistStep({
             }}
           />
         )}
+        {!skipped && task.dateCapable && (
+          <div className={s.dateSlot}>
+            {(() => {
+              const contents = dateParts ? (
+                <>
+                  <span className={s.dateMonth}>{dateParts.month}</span>
+                  <span className={s.dateDay}>{dateParts.day}</span>
+                  <span className={s.dateWeekday}>{dateParts.weekday}</span>
+                </>
+              ) : (
+                <span className={s.emptyDate}>
+                  {done || readOnly ? "No due date" : "Add due date"}
+                </span>
+              );
+              const label = `${task.title}: ${due ? `${displayDate(due, timeZone)} (${due.date})` : "No due date"}`;
+              return done || readOnly ? (
+                <span className={s.dateBox} aria-label={label} title={label}>
+                  {contents}
+                </span>
+              ) : (
+                <button
+                  className={s.dateBox}
+                  type="button"
+                  disabled={!mayEdit}
+                  aria-label={`Edit due date for ${task.title}`}
+                  title={label}
+                  onClick={() =>
+                    editDate({
+                      kind: "set",
+                      target: { kind: "step", key: task.stepKey },
+                      value: due,
+                    })
+                  }
+                >
+                  {contents}
+                </button>
+              );
+            })()}
+          </div>
+        )}
         <div className={s.stepBody}>
-          <strong className={s.stepTitle}>{task.title}</strong>
-          {skipped && <span className={s.tag}>Not needed</span>}
-          {!skipped &&
-            moneyStep &&
-            (readOnly ? (
-              moneyLine && <p className={s.subline}>{moneyLine}</p>
-            ) : (
-              <button
-                type="button"
-                className={s.textButton}
-                disabled={!mayEdit}
-                onClick={() => setEditor("money")}
-              >
-                {moneyLine ||
-                  (task.stepKey === "earnest_money_due"
-                    ? "+ Add amount and holder"
-                    : "+ Add warranty amount and company")}
-              </button>
-            ))}
+          <div className={s.titleLine}>
+            <strong className={s.stepTitle}>{task.title}</strong>
+            {!skipped && task.dateCapable && shownWording && (
+              <span>{shownWording}</span>
+            )}
+            {skipped && <span className={s.tag}>Not needed</span>}
+          </div>
+          {!skipped && moneyStep && moneyLine && (
+            <p className={s.subline}>{moneyLine}</p>
+          )}
+          {!skipped && dueTime && <p className={s.subline}>Due at {dueTime}</p>}
           {!skipped && !moneyStep && rule && (
             <p className={s.subline}>{rule}</p>
           )}
-          {!skipped &&
-            task.dateCapable &&
-            (readOnly ? (
-              shownWording && <p className={s.subline}>{shownWording}</p>
-            ) : (
-              <button
-                type="button"
-                className={s.textButton}
-                disabled={!mayEdit}
-                onClick={() => setEditor("wording")}
-              >
-                {shownWording || "+ Add date display text"}
-              </button>
-            ))}
           {!skipped && note && <p className={s.note}>{note}</p>}
-          {!readOnly && !skipped && (
-            <button
-              className={s.textButton}
-              type="button"
-              disabled={!mayEdit}
-              onClick={() => setEditor("note")}
-            >
-              {note ? "Edit note" : "+ Add note"}
-            </button>
-          )}
           {!skipped && task.details?.scheduled && (
             <p className={s.subline}>
               Scheduled ·{" "}
-              {scheduledAt ? appointment(scheduledAt) : "Details to come"}
+              {scheduledAt
+                ? scheduledAppointment(
+                    scheduledAt,
+                    timeZone || "America/New_York",
+                  )
+                : "Details to come"}
               {task.details.appointmentPlace &&
                 ` · ${task.details.appointmentPlace}`}
               {!readOnly && (
@@ -211,7 +250,7 @@ export function CanonicalChecklistStep({
           )}
         </div>
         <div className={s.stepActions}>
-          {skipped && !readOnly ? (
+          {skipped && !readOnly && (
             <button
               className={s.textButton}
               type="button"
@@ -220,45 +259,66 @@ export function CanonicalChecklistStep({
             >
               Needed after all
             </button>
-          ) : (
-            !skipped &&
-            task.dateCapable &&
-            (done || readOnly ? (
-              due && <span>{displayDate(due, timeZone)}</span>
-            ) : (
-              <button
-                className={s.dateButton}
-                type="button"
-                disabled={!mayEdit}
-                aria-label={`Edit due date for ${task.title}`}
-                onClick={() =>
-                  editDate({
-                    kind: "set",
-                    target: { kind: "step", key: task.stepKey },
-                    value: due,
-                  })
-                }
-              >
-                {due ? displayDate(due, timeZone) : "Add due date"}
-              </button>
-            ))
+          )}
+          {!skipped && statusLabel && (
+            <span className={s.duePill}>{statusLabel}</span>
           )}
           {!readOnly && (
-            <details className={s.menu}>
+            <details
+              ref={menu}
+              className={s.menu}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") closeMenu(() => {});
+              }}
+            >
               <summary aria-label={`Actions for ${task.title}`}>⋯</summary>
               <div className={s.menuActions}>
                 <button
                   type="button"
                   disabled={!mayEdit}
-                  onClick={() => setEditor("title")}
+                  onClick={() => openEditor("title")}
                 >
                   Edit step
                 </button>
+                {!skipped && task.dateCapable && (
+                  <button
+                    type="button"
+                    disabled={!mayEdit}
+                    onClick={() => openEditor("wording")}
+                  >
+                    {task.details?.dateWording
+                      ? "Edit date display text"
+                      : "Add date display text"}
+                  </button>
+                )}
                 {!skipped && (
                   <button
                     type="button"
                     disabled={!mayEdit}
-                    onClick={() => updateStatus("not_applicable")}
+                    onClick={() => openEditor("note")}
+                  >
+                    {note ? "Edit note" : "Add note"}
+                  </button>
+                )}
+                {!skipped && moneyStep && (
+                  <button
+                    type="button"
+                    disabled={!mayEdit}
+                    onClick={() => openEditor("money")}
+                  >
+                    {money || company ? "Edit" : "Add"}{" "}
+                    {task.stepKey === "earnest_money_due"
+                      ? "amount and holder"
+                      : "warranty amount and company"}
+                  </button>
+                )}
+                {!skipped && (
+                  <button
+                    type="button"
+                    disabled={!mayEdit}
+                    onClick={() =>
+                      closeMenu(() => updateStatus("not_applicable"))
+                    }
                   >
                     Mark not needed
                   </button>
@@ -268,7 +328,9 @@ export function CanonicalChecklistStep({
                     type="button"
                     disabled={!mayEdit}
                     onClick={() =>
-                      editDate({ kind: "extend", key: task.stepKey })
+                      closeMenu(() =>
+                        editDate({ kind: "extend", key: task.stepKey }),
+                      )
                     }
                   >
                     Extend
@@ -278,7 +340,7 @@ export function CanonicalChecklistStep({
                   <button
                     type="button"
                     disabled={!mayEdit}
-                    onClick={() => void act(task.id, moveUp)}
+                    onClick={() => closeMenu(() => void act(task.id, moveUp))}
                   >
                     Move up
                   </button>
@@ -287,7 +349,7 @@ export function CanonicalChecklistStep({
                   <button
                     type="button"
                     disabled={!mayEdit}
-                    onClick={() => void act(task.id, moveDown)}
+                    onClick={() => closeMenu(() => void act(task.id, moveDown))}
                   >
                     Move down
                   </button>
@@ -303,6 +365,7 @@ export function CanonicalChecklistStep({
           kind={editor}
           task={task}
           matterId={matterId}
+          timeZone={timeZone}
           busy={busy}
           act={act}
           onClose={() => setEditor(null)}

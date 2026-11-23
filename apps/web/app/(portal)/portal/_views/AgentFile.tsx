@@ -7,6 +7,7 @@ import { DocumentUploadQueue } from "../../../_components/DocumentUploadQueue";
 import { useTransactionDocumentUploads } from "../../../_components/useTransactionDocumentUploads";
 import { PortalDocuments } from "./PortalDocuments";
 import { PortalTimeline } from "./PortalTimeline";
+import { AppointmentConfirmations } from "./AppointmentConfirmations";
 import { AgentSidebar } from "./AgentSidebar";
 import { usePortalSession } from "./portal-session";
 import {
@@ -62,7 +63,10 @@ export function AgentFile({ id }: { id: string }) {
 
   if (!file)
     return (
-      <section className={s.panel} aria-label="Transaction file">
+      <section
+        className={`${s.panel} ${s.agentFile}`}
+        aria-label="Transaction file"
+      >
         {query.loading ? (
           <p role="status">Opening your file…</p>
         ) : (
@@ -114,8 +118,11 @@ export function AgentFile({ id }: { id: string }) {
     )
     .map(({ name }) => name);
   return (
-    <div className={s.columns}>
-      <section className={s.panel} aria-label="Transaction file">
+    <div className={`${s.columns} ${s.agentFile}`}>
+      <section
+        className={`${s.panel} ${s.agentFile}`}
+        aria-label="Transaction file"
+      >
         <div className={s.fileHeading}>
           <div>
             <h1 className={s.fileTitle}>{fileAddress(file)}</h1>
@@ -175,7 +182,10 @@ export function AgentFile({ id }: { id: string }) {
           tabIndex={0}
         >
           {tab === "Timeline" ? (
-            <PortalTimeline tasks={file.tasks || []} />
+            <>
+              <AppointmentConfirmations email={file.coordinatorEmail} />
+              <PortalTimeline tasks={file.tasks || []} />
+            </>
           ) : (
             <>
               <PortalDocuments

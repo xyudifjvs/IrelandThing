@@ -89,7 +89,7 @@ it.each(["buyer", "seller"] as const)(
     const agent = canonicalPortalTimeline(source, "agent", { side });
     expect(agent.map((t) => t.title)).toEqual(source.map((t) => t.title));
     expect(agent.find((t) => t.stepKey === "inspections")).toMatchObject({
-      dateLabel: "8/25/26",
+      dateLabel: "By 8/25/26",
       note: "PRIVATE",
     });
   },

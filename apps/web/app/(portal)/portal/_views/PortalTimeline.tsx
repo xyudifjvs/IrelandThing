@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import {
-  appointment,
+  agentStepDetail,
+  agentShowsAppointment,
   clientTimelineTasks,
   nextClientStep,
   clientStepDetail,
@@ -8,7 +9,6 @@ import {
   clientAppointment,
   completed,
   notNeeded,
-  shortDate,
   type PortalTask,
 } from "./portal-model";
 import s from "../_components/portal.module.css";
@@ -38,15 +38,13 @@ export function PortalTimeline({
   return (
     <>
       {rows.length > 0 && (
-        <ol className={`${s.timeline} ${client ? s.clientTimeline : ""}`}>
+        <ol
+          className={`${s.timeline} ${client ? s.clientTimeline : s.agentTimeline}`}
+        >
           {rows.map((task) => {
             const done = completed(task);
             const skipped = notNeeded(task);
             const upcoming = client && task.id === next?.id;
-            const day = shortDate(task.dueDate);
-            const detail = [task.dateLabel, appointment(task)]
-              .filter(Boolean)
-              .join(" · ");
             return (
               <li key={task.id} className={s.timelineRow}>
                 <span
@@ -82,28 +80,32 @@ export function PortalTimeline({
                         )}
                     </>
                   ) : (
-                    detail && <p>{detail}</p>
+                    <>
+                      {done ? (
+                        <p>Done</p>
+                      ) : (
+                        agentStepDetail(task) && <p>{agentStepDetail(task)}</p>
+                      )}
+                      {agentShowsAppointment(task) && (
+                        <p
+                          className={
+                            task.appointmentAt ? s.bookedAppointment : undefined
+                          }
+                        >
+                          {clientAppointment(task)}
+                        </p>
+                      )}
+                    </>
                   )}
-                  {!client && task.note && <p>{task.note}</p>}
+                  {!client && !done && task.note && <p>{task.note}</p>}
                 </div>
-                <span
-                  className={`${s.timelineStatus} ${client && upcoming ? s.upNext : ""}`}
-                >
-                  {skipped
-                    ? "Not needed"
-                    : client
-                      ? upcoming
-                        ? "Up next"
-                        : ""
-                      : task.dateLabel
-                        ? done
-                          ? "Done"
-                          : ""
-                        : day}
-                  {!client && done && !task.dateLabel && (
-                    <span className={s.visuallyHidden}>Done</span>
-                  )}
-                </span>
+                {client && (
+                  <span
+                    className={`${s.timelineStatus} ${upcoming ? s.upNext : ""}`}
+                  >
+                    {upcoming ? "Up next" : ""}
+                  </span>
+                )}
               </li>
             );
           })}

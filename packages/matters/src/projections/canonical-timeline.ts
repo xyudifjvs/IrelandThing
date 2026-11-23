@@ -5,7 +5,6 @@ import {
   selectClientTimeline,
   clientDateLabel,
 } from "./client-timeline-layout";
-import { checklistDateLabel } from "../checklist/display";
 
 type PortalTask = Pick<
   Prisma.TaskGetPayload<object>,
@@ -60,14 +59,7 @@ export function canonicalPortalTimeline(
             stepKey === "final_walkthrough" ||
             stepKey === "inspections" ||
             (context.side === "seller" && stepKey === "appraisal_ordered"));
-        const dateLabel =
-          role === "client"
-            ? clientDateLabel({ dueDate, details })
-            : checklistDateLabel(
-                { dueDate, dueAt, details, dateRule },
-                stepKey!,
-                context.timeZone || "America/New_York",
-              );
+        const dateLabel = clientDateLabel({ dueDate, details });
         return {
           id,
           stepKey,
@@ -77,9 +69,7 @@ export function canonicalPortalTimeline(
           dueAt,
           position,
           ...(dateLabel ? { dateLabel } : {}),
-          ...(role === "client"
-            ? { appointmentTimeZone: context.timeZone || "America/New_York" }
-            : {}),
+          appointmentTimeZone: context.timeZone || "America/New_York",
           ...(showSchedule
             ? {
                 scheduled: true,

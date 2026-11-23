@@ -645,3 +645,59 @@
   padding: 2px 10px;
   white-space: nowrap;
 }
+
+/* Portal header sizing only; the footer mark and other site logos stay unchanged. */
+.headerInner {
+  padding-block: 12px;
+}
+.header .wordmark {
+  width: 280px;
+  padding: 8px 10px;
+}
+.header .clientWordmark {
+  width: 250px;
+}
+.agentFile {
+  --weatherly-color-secondary: #4e3b2a;
+}
+.agentTimeline p,
+.agentFile .fileHeading p,
+.agentTimeline + .notNeeded {
+  color: #4e3b2a;
+}
+.agentTimeline .tickDone {
+  background: #1e1c1a;
+  border-color: #1e1c1a;
+  color: #ffffff;
+}
+.agentTimeline .bookedAppointment {
+  color: #1e1c1a;
+  font-weight: 500;
+}
+.agentFile .notNeededTag {
+  color: #4e3b2a;
+}
+.appointmentConfirmations {
+  margin: 0 0 4px;
+  padding: 12px;
+  border: 1px solid #e6dfd4;
+  border-radius: 8px;
+  background: #f6f1e8;
+  color: #4e3b2a;
+  font-size: var(--weatherly-type-small);
+  overflow-wrap: anywhere;
+}
+.appointmentConfirmations a {
+  color: inherit;
+}
+@media (max-width: 510px) {
+  .header .wordmark {
+    width: 200px;
+  }
+  .headerInner {
+    flex-wrap: wrap;
+  }
+  .headerInner > .nav {
+    margin-left: auto;
+  }
+}

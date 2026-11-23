@@ -28,7 +28,7 @@ export function ClientHeader({
   return (
     <header className={s.header}>
       <div className={`${s.headerInner} ${s.clientWidth}`}>
-        <PortalBrand />
+        <PortalBrand variant="client" />
         {children || (
           <span className={s.headerLabel}>
             {side === "seller"

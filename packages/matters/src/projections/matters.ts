@@ -6,6 +6,7 @@ import { deadlineProjection, audienceAllows } from "./deadline-fields";
 import { fileReviewPending } from "../file-review";
 import { approvedWorkflowTaskDates } from "../rules";
 import { projectTaskFields, agentMatterDetails } from "./task-fields";
+import { portalCoordinatorEmail } from "./coordinator-contact";
 import { canonicalPortalTimeline } from "./canonical-timeline";
 import { legacyClientPresentation } from "./client-timeline-layout";
 import { documentAudienceWhere } from "./document-audience";
@@ -40,12 +41,20 @@ function portalMatterSummary(matter: Prisma.MatterGetPayload<object>) {
   };
 }
 
-function legacyAgentTask<T extends { details: Prisma.JsonValue }>(
-  task: T,
-  position: number,
-) {
+function legacyAgentTask<
+  T extends {
+    details: Prisma.JsonValue;
+    title: string;
+    stepKey?: string | null;
+    dueDate?: string | null;
+  },
+>(task: T, position: number, timeZone?: string | null) {
   const { details: _, ...rest } = task;
-  return { ...rest, position };
+  return {
+    ...rest,
+    ...legacyClientPresentation(task, { side: "seller", timeZone }),
+    position,
+  };
 }
 
 export async function listMatters(
@@ -210,7 +219,9 @@ export async function listMatters(
                   side: matter.side,
                   details: matter.details,
                 })
-              : matter.tasks.map(legacyAgentTask),
+              : matter.tasks.map((task, index) =>
+                  legacyAgentTask(task, index, matter.deadlineTimeZone),
+                ),
           deadlines: matter.deadlines.map(
             ({ details: _, sourceDocumentId: __, ...deadline }) => deadline,
           ),
@@ -276,6 +287,8 @@ export async function getMatter(actor: Principal, id: string) {
   );
   if (!matter || (actor.role === "client" && fileReviewPending(matter)))
     throw new HttpError(404, "MATTER_NOT_FOUND", "Matter not found");
+  const coordinatorEmail =
+    actor.role === "agent" ? await portalCoordinatorEmail(matter) : undefined;
   if (matter.checklistVersion !== null) {
     if (actor.role === "coordinator")
       return {
@@ -312,6 +325,7 @@ export async function getMatter(actor: Principal, id: string) {
     return actor.role === "agent"
       ? {
           ...summary,
+          coordinatorEmail,
           business: matter.business,
           packageCode: matter.packageCode,
           clientNames: portalClientNames(matter.contacts),
@@ -376,6 +390,7 @@ export async function getMatter(actor: Principal, id: string) {
   return actor.role === "agent"
     ? {
         ...portalMatterSummary(matter),
+        coordinatorEmail,
         business: matter.business,
         packageCode: matter.packageCode,
         details: agentMatterDetails(matter.details, ownPendingIntake),
@@ -387,7 +402,9 @@ export async function getMatter(actor: Principal, id: string) {
         people: fileReviewPending(matter) ? [] : matter.contacts,
         notes: [],
         participants: [],
-        tasks: matter.tasks.map(legacyAgentTask),
+        tasks: matter.tasks.map((task, index) =>
+          legacyAgentTask(task, index, matter.deadlineTimeZone),
+        ),
         deadlines: matter.deadlines.map(
           ({ details: _, sourceDocumentId: __, ...deadline }) => deadline,
         ),

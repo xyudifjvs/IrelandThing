@@ -1486,3 +1486,123 @@ describe("client timeline mockup behavior", () => {
     expect(html).not.toContain("What’s next");
   });
 });
+
+describe("agent timeline mockup behavior", () => {
+  const Timeline = loadView(
+    "apps/web/app/(portal)/portal/_views/PortalTimeline.tsx",
+  )
+    .PortalTimeline as typeof import("../../apps/web/app/(portal)/portal/_views/PortalTimeline").PortalTimeline;
+  const Notice = loadView(
+    "apps/web/app/(portal)/portal/_views/AppointmentConfirmations.tsx",
+  ).AppointmentConfirmations as ComponentType<{ email?: string }>;
+  const step = (
+    stepKey: string,
+    extra: Partial<NonNullable<PortalFile["tasks"]>[number]> = {},
+  ) => ({
+    id: stepKey,
+    stepKey,
+    title: stepKey,
+    status: "pending",
+    dueDate: "2026-08-25",
+    dateLabel: "By 8/25/26",
+    ...extra,
+  });
+  const render = (tasks: NonNullable<PortalFile["tasks"]>) =>
+    renderToStaticMarkup(createElement(Timeline, { tasks }));
+  it("keeps both HOA steps, warranty and Title, and folds only not-needed rows without edit controls", () => {
+    const html = render([
+      step("home_warranty_ordered", { title: "Home Warranty Ordered" }),
+      step("title_commitment", { title: "Title Commitment" }),
+      step("condo_hoa_docs_provided", {
+        title: "Condo / HOA Document Provision",
+      }),
+      step("condo_hoa_doc_review", { title: "Condo / HOA Document Review" }),
+      step("attorney_review", {
+        title: "Attorney Review",
+        status: "not_applicable",
+      }),
+    ]);
+    const [active, folded] = html.split('<details class="notNeeded">');
+    for (const title of [
+      "Home Warranty Ordered",
+      "Title Commitment",
+      "Condo / HOA Document Provision",
+      "Condo / HOA Document Review",
+    ])
+      expect(active).toContain(title);
+    expect(active).not.toContain("Attorney Review");
+    expect(folded).toContain("1 not needed");
+    expect(folded).toContain("Attorney Review");
+    expect(html).not.toMatch(/<button|<input/);
+  });
+  it.each(["inspections", "final_walkthrough", "closing"])(
+    "uses distinct date/booking lines and Done-only completion for %s",
+    (key) => {
+      const task = step(key, {
+        title: "Step",
+        dateLabel: "Within 3 days before closing",
+        appointmentAt: "2026-11-17T14:30:00Z",
+        appointmentPlace: "Sample Title Office",
+      });
+      expect(render([task])).toMatch(
+        /<p>Within 3 days before closing<\/p><p class="bookedAppointment">Scheduled for Tue, Nov 17 at 9:30 AM · Sample Title Office<\/p>/,
+      );
+      const done = render([{ ...task, status: "completed" }]);
+      expect(done).toMatch(/<h3>Step<\/h3><p>Done<\/p>/);
+      expect(done).toContain("tickDone");
+      expect(done).not.toContain("timelineStatus");
+      expect(done).not.toContain("Scheduled for");
+      expect(render([{ ...task, appointmentAt: null }])).toContain(
+        "Scheduled details to come",
+      );
+    },
+  );
+  it.each(["appraisal_ordered", "appraisal", "clear_to_close"])(
+    "shows update wording on open %s and Done on completion",
+    (key) => {
+      const task = step(key, { title: "Step", dateLabel: "Received" });
+      expect(render([task])).toContain("We&#x27;ll update you");
+      expect(render([task])).not.toContain("Received");
+      expect(render([{ ...task, status: "completed" }])).toMatch(
+        /<h3>Step<\/h3><p>Done<\/p>/,
+      );
+    },
+  );
+  it("shows an Appraisal Ordered booking only after completion, with no placeholder when unbooked", () => {
+    const task = step("appraisal_ordered", {
+      title: "Appraisal Ordered",
+      status: "completed",
+    });
+    const empty = render([task]);
+    expect(empty).toContain("<p>Done</p>");
+    expect(empty).not.toContain("Scheduled details to come");
+    const booked = { ...task, appointmentAt: "2026-09-08T15:00:00Z" };
+    expect(render([booked])).toMatch(
+      /<p>Done<\/p><p class="bookedAppointment">Scheduled for Tue, Sep 8 at 11:00 AM<\/p>/,
+    );
+    expect(render([{ ...booked, status: "pending" }])).not.toContain(
+      "Scheduled for",
+    );
+  });
+  it("keeps exact date text, uses the configured TC email in the permanent note and falls back safely", () => {
+    const html = render([
+      step("remedies", { title: "Remedies", dateLabel: "Received" }),
+    ]);
+    expect(html).toContain("<p>Received</p>");
+    expect(html).not.toContain("By Received");
+    const note = renderToStaticMarkup(
+      createElement(Notice, { email: "custom.tc@example.test" }),
+    );
+    expect(note).toContain("<strong>Appointment confirmations:</strong>");
+    expect(note).toContain('href="mailto:custom.tc@example.test"');
+    expect(note).toContain("so I can keep everyone updated.");
+    expect(note).not.toMatch(/<button|dismiss/);
+    const unsafe = renderToStaticMarkup(
+      createElement(Notice, {
+        email: "test@example.test?bcc=other@example.test",
+      }),
+    );
+    expect(unsafe).toContain('href="mailto:ireland@weatherlytc.com"');
+    expect(unsafe).not.toContain("bcc=");
+  });
+});

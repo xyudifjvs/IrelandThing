@@ -215,17 +215,9 @@ describe("checklist date and display text", () => {
         const label = (key: string) =>
           tasks.find((t) => t.stepKey === key)?.dateLabel;
         expect(label("preapproval_pof")).toBe("Received");
-        expect(label("inspections")).toBe(
-          view === agentView || view === agentListView
-            ? "8/13/26"
-            : "By 8/13/26",
-        );
+        expect(label("inspections")).toBe("By 8/13/26");
         expect(label("remedies")).toBe("on or before 8/15/26");
-        expect(label("remedies_negotiated")).toBe(
-          view === agentView || view === agentListView
-            ? "8/18/26"
-            : "By 8/18/26",
-        );
+        expect(label("remedies_negotiated")).toBe("By 8/18/26");
         expect(label("final_walkthrough")).toBe("within 3 days of closing");
         expect(label("closing")).toBe("on or before 8/30/26");
         expect(label("possession")).toBe("date and time of closing");

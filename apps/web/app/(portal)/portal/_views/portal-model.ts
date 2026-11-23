@@ -43,6 +43,7 @@ export type FileService = {
 };
 
 export type PortalFile = Omit<Matter, "tasks" | "documents"> & {
+  coordinatorEmail?: string;
   business?: string;
   closedOn?: string | null;
   clientNames?: string[];
@@ -268,4 +269,27 @@ export function feeStatus(fee: FeeSummary) {
     default:
       return displayLabel(fee.status);
   }
+}
+
+/** Agent-only presentation: full working order, without changing the client rules. */
+export function agentStepDetail(task: PortalTask) {
+  const key = clientStepKey(task);
+  return ["appraisal_ordered", "appraisal", "clear_to_close"].includes(
+    key || "",
+  )
+    ? "We'll update you"
+    : clientStepDate(task);
+}
+export function agentShowsAppointment(task: PortalTask) {
+  const key = clientStepKey(task);
+  if (key === "appraisal_ordered")
+    return (
+      completed(task) &&
+      !!task.appointmentAt &&
+      Number.isFinite(new Date(task.appointmentAt).valueOf())
+    );
+  return (
+    !completed(task) &&
+    ["inspections", "final_walkthrough", "closing"].includes(key || "")
+  );
 }

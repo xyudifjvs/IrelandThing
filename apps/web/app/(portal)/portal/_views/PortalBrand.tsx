@@ -5,17 +5,21 @@ import s from "../_components/portal.module.css";
 export function PortalBrand({
   children,
   portalHome = false,
+  variant = "agent",
 }: {
   children?: React.ReactNode;
   portalHome?: boolean;
+  variant?: "agent" | "client";
 }) {
   const wordmark = (
-    <span className={`weatherly-brand-tile ${s.wordmark}`}>
+    <span
+      className={`weatherly-brand-tile ${s.wordmark} ${variant === "client" ? s.clientWordmark : ""}`}
+    >
       <Image
         src="/brand/handoffs/weatherly-wordmark.png"
         alt="Weatherly Transaction Co."
-        width={135}
-        height={32}
+        width={260}
+        height={61}
         priority
       />
     </span>

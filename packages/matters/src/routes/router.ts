@@ -29,6 +29,7 @@ import {
   revokeParticipantHandler,
 } from "./participants";
 import { reorderTasksHandler, registerChildRoutes } from "./children";
+import { updateFileFacts } from "../commands/file-facts";
 
 export function createMattersRouter({
   effects,
@@ -61,6 +62,23 @@ export function createMattersRouter({
       : createMatterHandler,
   );
   router.get("/:id", getMatterHandler);
+  router.patch(
+    "/:id/facts",
+    asyncHandler(async (req, res) => {
+      res
+        .set("Cache-Control", "private, no-store")
+        .json(
+          await prisma.$transaction((tx) =>
+            updateFileFacts(
+              tx,
+              principal(req),
+              String(req.params.id),
+              req.body,
+            ),
+          ),
+        );
+    }),
+  );
   router.patch("/:id", updateMatterHandler(Boolean(effects)));
   registerChildRoutes(router);
   router.post("/:id/participants", grantParticipantHandler);

@@ -10,6 +10,7 @@ import {
 } from "../checklist/canonical-checklist-model";
 
 export type TransactionFile = Matter & {
+  purchasePriceCents?: string | number | null;
   business?: TransactionBusiness["business"] | null;
   agentRosterId?: string | null;
   contacts?: FilePerson[];

@@ -11,6 +11,7 @@ import {
   type TransactionFile,
 } from "./file-model";
 import styles from "./file-workspace.module.css";
+import { FileDetailsEditor } from "./FileDetailsEditor";
 
 function ChangeBusiness({
   file,
@@ -134,6 +135,7 @@ export function FileHeader({
   act: TransactionAction;
 }) {
   const [editing, setEditing] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
   const clients = fileClientNames(file);
   const closing = closingDate(file);
   const next = nextChecklistDate(file);
@@ -182,6 +184,30 @@ export function FileHeader({
           </div>
         </dl>
       </div>
+      {canEdit && (
+        <div className={s.formRow}>
+          <button
+            type="button"
+            className={s.buttonSmall}
+            disabled={busy}
+            aria-expanded={editingDetails}
+            aria-controls="edit-transaction-details"
+            onClick={() => setEditingDetails(!editingDetails)}
+          >
+            {editingDetails
+              ? "Hide transaction details"
+              : "Edit transaction details"}
+          </button>
+        </div>
+      )}
+      {editingDetails && canEdit && (
+        <FileDetailsEditor
+          file={file}
+          busy={busy}
+          act={act}
+          close={() => setEditingDetails(false)}
+        />
+      )}
       {editing && canEdit && (
         <ChangeBusiness
           file={file}

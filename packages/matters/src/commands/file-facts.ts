@@ -15,6 +15,7 @@ import { fileReviewPending } from "../file-review";
 import { json } from "../validation/common";
 import { resolveAgentAssignment } from "./agent-assignment";
 import { fileClientsInput, writeFileClients } from "./file-fact-clients";
+import { adjustFilePurchaseType } from "./file-purchase-type";
 
 const addressInput = z
   .object({
@@ -28,9 +29,15 @@ const addressInput = z
 const updateFileFactsInput = transactionFactsSchema
   .pick({
     agentRosterId: true,
+    agentId: true,
     propertyAddress: true,
     side: true,
     purchasePriceCents: true,
+    purchaseType: true,
+    earnestMoneyCents: true,
+    earnestMoneyHolder: true,
+    homeWarrantyCents: true,
+    homeWarrantyCompany: true,
   })
   .extend({
     address: addressInput.nullable(),
@@ -123,11 +130,17 @@ export async function updateFileFacts(
     revision: { increment: 1 },
   };
 
-  if (facts.agentRosterId !== undefined) {
-    data.agentRosterId = facts.agentRosterId;
+  if (facts.agentRosterId !== undefined || facts.agentId !== undefined) {
+    const agentRosterId =
+      facts.agentRosterId !== undefined
+        ? facts.agentRosterId
+        : facts.agentId !== undefined
+          ? null
+          : matter.agentRosterId;
+    data.agentRosterId = agentRosterId;
     data.agentId = await resolveAgentAssignment(tx, {
-      agentId: null,
-      agentRosterId: facts.agentRosterId,
+      agentId: facts.agentId ?? null,
+      agentRosterId,
     });
   }
 
@@ -140,9 +153,12 @@ export async function updateFileFacts(
   if (
     address !== undefined ||
     propertyAddress !== undefined ||
-    clients !== undefined
+    clients !== undefined ||
+    facts.purchaseType !== undefined
   ) {
     const details = json.safeParse(matter.details).data ?? {};
+    if (facts.purchaseType !== undefined)
+      details.purchaseType = facts.purchaseType;
     if (address) details.structuredAddress = address;
     else if (address === null) delete details.structuredAddress;
     else if (propertyAddress !== undefined) {
@@ -160,11 +176,79 @@ export async function updateFileFacts(
     data.details = details;
   }
 
+  for (const [keys, amount, company, amountKey, companyKey, companyField] of [
+    [
+      ["earnest_money_due"],
+      facts.earnestMoneyCents,
+      facts.earnestMoneyHolder,
+      "earnestMoneyCents",
+      "earnestMoneyHolder",
+      "holder",
+    ],
+    [
+      ["home_warranty", "home_warranty_ordered"],
+      facts.homeWarrantyCents,
+      facts.homeWarrantyCompany,
+      "homeWarrantyCents",
+      "homeWarrantyCompany",
+      "company",
+    ],
+  ] as const) {
+    if (amount === undefined && company === undefined) continue;
+    if (matter.checklistVersion !== 1 || !activeStages.has(matter.stage))
+      throw new HttpError(
+        409,
+        "CHECKLIST_READ_ONLY",
+        "Use an active transaction's current checklist to edit earnest money or warranty details.",
+      );
+    const step = await tx.task.findFirst({
+      where: { matterId, stepKey: { in: [...keys] } },
+    });
+    if (!step)
+      throw new HttpError(
+        409,
+        "CHECKLIST_STEP_MISSING",
+        "The corresponding checklist step is unavailable. Refresh the file before editing its amount.",
+      );
+    const details = json.safeParse(step.details).data ?? {};
+    if (amount !== undefined) {
+      details.amountCents = amount;
+      delete details[amountKey];
+    }
+    if (company !== undefined) {
+      details[companyField] = company;
+      delete details[companyKey];
+    }
+    await tx.task.update({
+      where: { id: step.id },
+      data: { details, revision: { increment: 1 } },
+    });
+    await audit(tx, actor, "task.updated", "Task", step.id, matterId, {
+      before: JSON.parse(JSON.stringify(step)),
+      changes: {
+        ...(amount !== undefined ? { amountCents: amount } : {}),
+        ...(company !== undefined ? { [companyField]: company } : {}),
+      },
+    });
+  }
+
   const updated = await tx.matter.update({
     where: { id: matterId },
     data,
-    select: { revision: true },
   });
+  if (
+    facts.purchaseType !== undefined &&
+    facts.purchaseType !==
+      (json.safeParse(matter.details).data?.purchaseType ?? null)
+  ) {
+    if (!activeStages.has(matter.stage))
+      throw new HttpError(
+        409,
+        "CHECKLIST_READ_ONLY",
+        "Reopen this transaction before changing its purchase type.",
+      );
+    await adjustFilePurchaseType(tx, actor, updated, facts.purchaseType);
+  }
   const previousPurchasePriceCents =
     matter.purchasePriceCents?.toNumber() ?? null;
   const purchasePriceCents = facts.purchasePriceCents;

@@ -10,6 +10,7 @@ export type Template = {
   linkedStepKey?: string | null;
   recipientGroup?: string | null;
   recipientRoles?: string[];
+  hideNotNeededLines?: boolean | null;
   position?: number | null;
   isPlaceholder?: boolean | null;
 };

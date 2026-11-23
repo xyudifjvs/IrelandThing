@@ -119,6 +119,7 @@ export async function createDraft(
           data.body,
           tx,
           data.templateValues,
+          data.templateId,
         )
       : null;
     if (
@@ -296,6 +297,9 @@ export async function updateDraft(
           bodySource,
           tx,
           templateValues,
+          typeof details.templateId === "string"
+            ? details.templateId
+            : undefined,
         )
       : null;
     if (

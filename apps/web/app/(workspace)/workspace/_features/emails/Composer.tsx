@@ -102,7 +102,13 @@ export function Composer({
     [confirmed, setConfirmed] = useState(false),
     [template, setTemplate] = useState(initialTemplateId || ""),
     [recipientName, setRecipientName] = useState("");
-  const previewKey = JSON.stringify([matter, subject, body, customValues]);
+  const previewKey = JSON.stringify([
+    matter,
+    subject,
+    body,
+    customValues,
+    binding?.id,
+  ]);
   useEffect(() => {
     if (!matter) {
       setPreview(null);
@@ -125,6 +131,7 @@ export function Composer({
         subject,
         body,
         values: customValues,
+        ...(binding?.id ? { templateId: binding.id } : {}),
       })
         .then((filled) => {
           if (current) setPreview({ key: previewKey, ...filled });

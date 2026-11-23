@@ -596,6 +596,7 @@ model CommunicationTemplate {
   linkedStepKey  String?
   recipientGroup String?
   recipientRoles Json?
+  hideNotNeededLines Boolean?
   position       Int?
   isPlaceholder  Boolean?
   workItems      EmailWork[]

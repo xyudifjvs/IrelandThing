@@ -16,6 +16,7 @@ import {
 } from "./field-sources";
 import { legacyMergeFields, type MergeField } from "./merge-fields";
 import { asRecord } from "./policy";
+import { clientStepKey } from "../../matters/src/projections/client-timeline-layout";
 
 const text = (value: unknown): string =>
   typeof value === "string" ? value : "";
@@ -148,7 +149,10 @@ export async function resolveMergeFields(
       stepKey.startsWith("title:")
         ? normalized(task.title) === stepKey.slice(6)
         : (stepAliases[stepKey] ?? [stepKey]).includes(
-            task.stepKey || text(asRecord(task.details).workflowKey),
+            task.stepKey ||
+              text(asRecord(task.details).workflowKey) ||
+              clientStepKey(task) ||
+              "",
           ),
     );
   function taskValue(
@@ -156,6 +160,26 @@ export async function resolveMergeFields(
     source: Extract<FieldSource, { kind: "checklist" }>,
   ) {
     if (matter.checklistVersion === null && source.property === "date") {
+      const current = getTasks(source.stepKey).filter(
+        (task) => task.status !== "not_applicable",
+      );
+      if (
+        current.some((task) => text(asRecord(task.details).dateWording).trim())
+      ) {
+        const wording = unique(
+          current.map((task) =>
+            text(asRecord(task.details).dateWording).trim()
+              ? text(asRecord(task.details).dateWording)
+              : formatEmailDate(task.dueDate),
+          ),
+        );
+        return field(
+          definition,
+          wording.length === 1 ? wording[0] : null,
+          current.map((task) => task.id),
+          wording.length > 1,
+        );
+      }
       const legacy = oldByKey.get(definition.key);
       return legacy
         ? {
@@ -196,11 +220,9 @@ export async function resolveMergeFields(
     const values = candidates.map((task) => {
       const data = asRecord(task.details);
       if (source.property === "date")
-        return definition.key === "closing_date"
-          ? formatEmailDate(task.dueDate)
-          : text(data.dateWording).trim()
-            ? text(data.dateWording)
-            : formatEmailDate(task.dueDate);
+        return text(data.dateWording).trim()
+          ? text(data.dateWording)
+          : formatEmailDate(task.dueDate);
       if (source.property === "wording")
         return checklistWording(task, source.stepKey);
       if (source.property === "status")
@@ -263,7 +285,40 @@ export async function resolveMergeFields(
       return oldByKey.get(source.key) ?? field(definition, null);
     if (source.kind === "details")
       return field(definition, text(detailValues[source.key]));
-    if (source.kind === "checklist") return taskValue(definition, source);
+    if (source.kind === "checklist") {
+      const dateField = ["date", "wording", "schedule"].includes(
+        source.property,
+      );
+      if (dateField) {
+        const matches = getTasks(source.stepKey);
+        const anchors = Array.isArray(details.checklistDateAnchors)
+          ? details.checklistDateAnchors.map(asRecord)
+          : [];
+        const anchor = anchors.find((row) => row.key === source.stepKey);
+        if (
+          (matches.length > 0 &&
+            matches.every((task) => task.status === "not_applicable")) ||
+          (!matches.length && anchor?.status === "not_needed")
+        )
+          return {
+            ...field(
+              definition,
+              "N/A",
+              matches.length ? matches.map((task) => task.id) : [matter.id],
+            ),
+            checklistNotNeeded: true,
+            optionalBlank: true,
+          };
+      }
+      const result = taskValue(definition, source);
+      return dateField
+        ? {
+            ...result,
+            optionalBlank: result.status !== "ambiguous",
+            checklistNotNeeded: false,
+          }
+        : result;
+    }
     if (source.kind === "unsupported") return field(definition, null);
     if (source.kind === "transaction") {
       if (source.property === "propertyAddress")

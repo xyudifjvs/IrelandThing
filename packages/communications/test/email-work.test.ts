@@ -166,7 +166,7 @@ it("uses keyed dates and immutable file contacts for editable blank merge values
     matterId,
   });
   expect(rendered.body).toBe("Closing date . Thank you.");
-  expect(rendered.missingBodyFields).toEqual(["closing_date"]);
+  expect(rendered.missingBodyFields).toEqual([]);
   await prisma.task.create({
     data: {
       matterId,

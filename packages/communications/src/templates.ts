@@ -13,6 +13,9 @@ import { asRecord, assertReviewedMatter, validateMerge } from "./policy";
 import type { CommunicationsService } from "./service";
 import { ensureTemplateWork } from "./email-work";
 import { canonicalFieldKey, normalizeFieldCodes } from "./field-catalog";
+import { replaceFieldText } from "./field-renderer";
+import { hideNotNeededLines } from "./template-line-policy";
+import { omitNotNeededLines } from "./template-line-policy";
 import { listFieldDefinitions } from "./field-sources";
 import {
   listCustomMergeFields,
@@ -66,6 +69,7 @@ export async function saveTemplate(
         .optional(),
       position: z.number().int().min(0).max(10000).nullable().optional(),
       isPlaceholder: z.boolean().optional(),
+      hideNotNeededLines: z.boolean().optional(),
     })
     .strict();
   const parsed = id
@@ -128,6 +132,16 @@ export async function saveTemplate(
         position:
           data.position === undefined ? previous?.position : data.position,
         isPlaceholder: data.isPlaceholder ?? previous?.isPlaceholder ?? false,
+        hideNotNeededLines:
+          data.hideNotNeededLines ??
+          previous?.hideNotNeededLines ??
+          hideNotNeededLines({
+            recipientRoles: data.recipientRoles ?? previous?.recipientRoles,
+            recipientGroup:
+              data.recipientGroup === undefined
+                ? previous?.recipientGroup
+                : data.recipientGroup,
+          }),
         revision: next,
         active: true,
       },
@@ -335,22 +349,52 @@ export async function renderInDb(
   const missing = new Set<string>();
   const missingSubjectFields = new Set<string>();
   const missingBodyFields = new Set<string>();
+  const overrides = new Set(
+    custom.map((field) => canonicalFieldKey(field.key)),
+  );
+  const renderFields = [
+    ...fields
+      .filter((field) => !overrides.has(field.key))
+      .map((field) =>
+        Object.hasOwn(computed, field.key)
+          ? {
+              ...field,
+              value: computed[field.key],
+              status: "confirmed" as const,
+            }
+          : field,
+      ),
+    ...Object.entries(computed)
+      .filter(
+        ([key]) =>
+          overrides.has(key) || !fields.some((field) => field.key === key),
+      )
+      .map(([key, value]) => ({
+        key,
+        label: key,
+        value,
+        status: value.trim() ? ("confirmed" as const) : ("unknown" as const),
+        sourceIds: [],
+      })),
+  ];
   const render = (source: string, missingPart: Set<string>) => {
     validateMerge(source, customKeys);
-    return normalizeFieldCodes(source).replace(
-      /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
-      (_all, key: string) => {
-        if (!computed[key]?.trim()) {
-          missing.add(key);
-          missingPart.add(key);
-          return matter.checklistVersion !== null ? "" : `{{${key}}}`;
-        }
-        return computed[key];
-      },
-    );
+    const result = replaceFieldText(source, renderFields, true);
+    for (const key of result.missing) {
+      missing.add(key);
+      missingPart.add(key);
+    }
+    return result.output;
   };
   const subject = render(template.subject, missingSubjectFields),
-    body = render(template.body, missingBodyFields);
+    body = render(
+      omitNotNeededLines(
+        template.body,
+        renderFields,
+        hideNotNeededLines(template),
+      ),
+      missingBodyFields,
+    );
   if (/[\r\n]/.test(subject) || subject.length > 998)
     throw new HttpError(
       422,

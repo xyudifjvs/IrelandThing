@@ -702,7 +702,7 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
         .details,
     ).toMatchObject({ visibility: "coordinator" });
   });
-  it("versions templates without mutating sent content and requires every merge field", async () => {
+  it("versions templates without mutating sent content and permits only optional date blanks", async () => {
     const initial = await service.saveTemplate(owner, {
       name: `Closing ${suffix}`,
       side: "buyer",
@@ -710,10 +710,18 @@ describe("Gmail integration with fake providers and real PostgreSQL", () => {
       subject: "Closing {{propertyAddress}}",
       body: "Dear {{recipientName}}, closing is {{closingDate}}.",
     });
+    expect(
+      await service.renderTemplate(owner, initial.id, {
+        matterId: matterIds[0],
+        values: { recipientName: "Synthetic" },
+      }),
+    ).toMatchObject({
+      body: "Dear Synthetic, closing is .",
+      missingFields: [],
+    });
     await expect(
       service.renderTemplate(owner, initial.id, {
         matterId: matterIds[0],
-        values: { recipientName: "Synthetic" },
       }),
     ).rejects.toMatchObject({ code: "MISSING_MERGE_FIELD" });
     await expect(

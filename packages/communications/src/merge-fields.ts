@@ -14,6 +14,8 @@ export interface MergeField {
   value: string | null;
   status: "confirmed" | "unknown" | "ambiguous";
   sourceIds: string[];
+  optionalBlank?: boolean;
+  checklistNotNeeded?: boolean;
 }
 const normalize = (s: string) =>
   s

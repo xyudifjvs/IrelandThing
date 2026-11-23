@@ -72,6 +72,7 @@ export function registerMergeFieldRoutes(router: Router) {
           subject: z.string().max(998),
           body: z.string().max(100000),
           values: z.record(z.string(), z.string().max(8000)).optional(),
+          templateId: z.string().min(1).optional(),
         })
         .strict()
         .parse(req.body);
@@ -85,6 +86,7 @@ export function registerMergeFieldRoutes(router: Router) {
             data.body,
             undefined,
             data.values,
+            data.templateId,
           ),
         );
     }),

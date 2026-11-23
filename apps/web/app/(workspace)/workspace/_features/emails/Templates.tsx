@@ -9,6 +9,7 @@ import { checklistTemplate } from "../../../../../../../packages/matters/src/che
 import { CustomMergeFields } from "./CustomMergeFields";
 import { BuiltinMergeFields } from "./BuiltinMergeFields";
 import { AvailableFieldCodes } from "./AvailableFieldCodes";
+import { clientTemplateDefault } from "../../../../../../../packages/communications/src/template-line-policy";
 
 const templateGroups = [
   ["buyer_ctc", "Buyer · Contract to Close"],
@@ -25,6 +26,22 @@ export function Templates() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  const [linePolicy, setLinePolicy] = useState<{
+    id: string;
+    value: boolean;
+  } | null>(null);
+  const [audience, setAudience] = useState<{
+    id: string;
+    recipientRoles: string[];
+    recipientGroup: string | null;
+  } | null>(null);
+  const policyId = selected?.id || "new";
+  const currentAudience = audience?.id === policyId ? audience : selected;
+  const hideLines =
+    linePolicy?.id === policyId
+      ? linePolicy.value
+      : (selected?.hideNotNeededLines ??
+        clientTemplateDefault(currentAudience ?? {}));
   const visible = (q.data || []).filter((entry) =>
     selectedGroup === "legacy"
       ? !entry.serviceGroup
@@ -117,6 +134,8 @@ export function Templates() {
           onClick={() => {
             setSelected(null);
             setCreating(true);
+            setLinePolicy(null);
+            setAudience(null);
             setMessage("");
           }}
         >
@@ -239,6 +258,7 @@ export function Templates() {
                   .filter(Boolean),
                 linkedStepKey: String(f.get("linkedStepKey") || "") || null,
                 isPlaceholder: f.get("isPlaceholder") === "on",
+                hideNotNeededLines: f.get("hideNotNeededLines") === "on",
               };
               try {
                 const saved = await mutate<Template>(
@@ -319,6 +339,13 @@ export function Templates() {
                   className={s.input}
                   name="recipientGroup"
                   defaultValue={selected?.recipientGroup || ""}
+                  onChange={(event) =>
+                    setAudience({
+                      id: policyId,
+                      recipientGroup: event.target.value,
+                      recipientRoles: currentAudience?.recipientRoles ?? [],
+                    })
+                  }
                   placeholder="To buyer"
                   maxLength={100}
                 />
@@ -329,6 +356,16 @@ export function Templates() {
                   className={s.input}
                   name="recipientRoles"
                   defaultValue={selected?.recipientRoles?.join(", ") || ""}
+                  onChange={(event) =>
+                    setAudience({
+                      id: policyId,
+                      recipientRoles: event.target.value
+                        .split(",")
+                        .map((value) => value.trim())
+                        .filter(Boolean),
+                      recipientGroup: currentAudience?.recipientGroup ?? null,
+                    })
+                  }
                   placeholder="Client, lender"
                 />
               </label>
@@ -348,6 +385,22 @@ export function Templates() {
                 </select>
               </label>
             </div>
+            <label className={s.todo}>
+              <input
+                type="checkbox"
+                name="hideNotNeededLines"
+                checked={hideLines}
+                onChange={(event) =>
+                  setLinePolicy({ id: policyId, value: event.target.checked })
+                }
+              />
+              Hide not-needed lines
+            </label>
+            <p className={s.fieldHint}>
+              Hide an entire email line when it contains a checklist date marked
+              Not needed. On by default for buyer/client and seller/client
+              templates; off for agent, title and lender templates.
+            </p>
             <label className={s.todo}>
               <input
                 type="checkbox"

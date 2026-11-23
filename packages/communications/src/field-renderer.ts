@@ -12,7 +12,7 @@ export function replaceFieldText(
   const missing = new Set<string>(),
     unknown = new Set<string>();
   const normalized = normalizeFieldCodes(source);
-  const output = normalized.replace(
+  let output = normalized.replace(
     /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
     (_match, key: string) => {
       const field = known.get(key);
@@ -22,6 +22,7 @@ export function replaceFieldText(
         return `{{${key}}}`;
       }
       if (field.status !== "confirmed" || !field.value?.trim()) {
+        if (field.optionalBlank && field.status !== "ambiguous") return "";
         missing.add(key);
         return blankMissing ? "" : `{{${key}}}`;
       }
@@ -29,5 +30,19 @@ export function replaceFieldText(
       return field.value;
     },
   );
+  if (blankMissing) {
+    output = output.replace(/\{\{[\s\S]*?\}\}/g, (code) => {
+      const key =
+        /^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/.exec(code)?.[1] ?? "invalid_field";
+      missing.add(key);
+      unknown.add(key);
+      return "";
+    });
+    if (/\{\{|\}\}/.test(output)) {
+      missing.add("invalid_field");
+      unknown.add("invalid_field");
+      output = output.replace(/\{\{|\}\}/g, "");
+    }
+  }
   return { output, missing: [...missing], unknown: [...unknown], normalized };
 }

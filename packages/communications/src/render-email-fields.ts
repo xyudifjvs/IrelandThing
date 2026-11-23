@@ -8,6 +8,7 @@ import { replaceFieldText } from "./field-renderer";
 import { asRecord } from "./policy";
 import { prisma } from "@weatherly/db";
 import type { FieldDb } from "./field-sources";
+import { hideNotNeededLines, omitNotNeededLines } from "./template-line-policy";
 
 export async function renderEmailFields(
   actor: Principal,
@@ -16,6 +17,7 @@ export async function renderEmailFields(
   body: string,
   db: FieldDb = prisma,
   values: Record<string, string> = {},
+  templateId?: string,
 ) {
   assertCoordinator(actor);
   const [builtins, custom] = await Promise.all([
@@ -39,8 +41,22 @@ export async function renderEmailFields(
       };
     }),
   ];
-  const renderedSubject = replaceFieldText(subject, fields),
-    renderedBody = replaceFieldText(body, fields);
+  const template = templateId
+    ? await db.communicationTemplate.findUnique({ where: { id: templateId } })
+    : null;
+  if (templateId && !template?.active)
+    throw new HttpError(
+      409,
+      "TEMPLATE_CHANGED",
+      "Choose a current template and refresh the preview.",
+    );
+  const hide = template ? hideNotNeededLines(template) : false;
+  const renderedSubject = replaceFieldText(subject, fields, true),
+    renderedBody = replaceFieldText(
+      omitNotNeededLines(body, fields, hide),
+      fields,
+      true,
+    );
   if (/[\r\n]/.test(renderedSubject.output))
     throw new HttpError(
       422,
@@ -67,6 +83,7 @@ export async function renderEmailFields(
       JSON.stringify({
         subject: renderedSubject.output,
         body: renderedBody.output,
+        hideNotNeededLines: hide,
         fields: fields
           .filter((field) =>
             [renderedSubject.normalized, renderedBody.normalized].some(
@@ -114,6 +131,9 @@ export async function validateAuthoredMergeFields(
     source.bodySource,
     db,
     values,
+    typeof asRecord(draft.details).templateId === "string"
+      ? String(asRecord(draft.details).templateId)
+      : undefined,
   );
   if (current.missingFields.length)
     throw new HttpError(

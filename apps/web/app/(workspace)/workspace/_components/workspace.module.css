@@ -392,6 +392,13 @@
   font-size: var(--weatherly-type-small);
   color: var(--weatherly-color-secondary);
 }
+.personFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-block: 12px;
+  min-width: 0;
+}
 .fieldHint {
   font-size: var(--weatherly-type-label);
   color: var(--weatherly-color-secondary);

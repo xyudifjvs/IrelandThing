@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import BusinessContactPicker, {
   type BusinessContact,
 } from "../../_components/BusinessContactPicker";
@@ -29,22 +29,35 @@ const empty: ContactFields = {
   company: "",
 };
 const roleOptions = [
-  "My agent",
-  "Client",
-  "Title rep",
-  "Lender",
-  "Co-op agent",
-  "Other",
-];
-const sameRole = (left: string, right: string) =>
-  left
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_") ===
-  right
+  ["client", "Client"],
+  ["my_agent", "My Agent"],
+  ["co_op_agent", "Co-op Agent"],
+  ["lender", "Lender"],
+  ["title_rep", "Title Rep"],
+  ["other", "Other"],
+] as const;
+
+function formRole(role: string) {
+  const key = role
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_");
+  if (["client", "buyer", "seller"].includes(key)) return "client";
+  if (["my_agent", "agent"].includes(key)) return "my_agent";
+  if (["co_op_agent", "coop_agent", "co_op"].includes(key))
+    return "co_op_agent";
+  if (["lender", "loan_officer"].includes(key)) return "lender";
+  if (["title_rep", "title_company", "title"].includes(key)) return "title_rep";
+  return key;
+}
+const sameRole = (left: string, right: string) =>
+  formRole(left) === formRole(right);
+
+function personRoleLabel(role: string) {
+  return (
+    roleOptions.find(([value]) => value === formRole(role))?.[1] ?? label(role)
+  );
+}
 
 function PersonFields({
   draft,
@@ -53,9 +66,11 @@ function PersonFields({
   draft: ContactFields;
   change: (draft: ContactFields) => void;
 }) {
-  const roles = useId();
+  const role = formRole(draft.role);
+  const knownRole = roleOptions.some(([value]) => value === role);
+  const showCompany = Boolean(role) && !["client", "my_agent"].includes(role);
   return (
-    <div className={s.twoCol}>
+    <div className={s.personFields}>
       <label className={s.field}>
         Name
         <input
@@ -68,19 +83,24 @@ function PersonFields({
       </label>
       <label className={s.field}>
         Role
-        <input
-          className={s.input}
-          list={roles}
+        <select
+          className={s.select}
           required
-          maxLength={80}
-          value={draft.role}
+          value={role}
           onChange={(event) => change({ ...draft, role: event.target.value })}
-        />
-        <datalist id={roles}>
-          {roleOptions.map((role) => (
-            <option key={role} value={role} />
+        >
+          <option value="" disabled>
+            Choose a role
+          </option>
+          {role && !knownRole && (
+            <option value={role}>{label(draft.role)}</option>
+          )}
+          {roleOptions.map(([value, text]) => (
+            <option key={value} value={value}>
+              {text}
+            </option>
           ))}
-        </datalist>
+        </select>
       </label>
       <label className={s.field}>
         Email
@@ -102,17 +122,19 @@ function PersonFields({
           onChange={(event) => change({ ...draft, phone: event.target.value })}
         />
       </label>
-      <label className={s.field}>
-        Company
-        <input
-          className={s.input}
-          maxLength={200}
-          value={draft.company ?? ""}
-          onChange={(event) =>
-            change({ ...draft, company: event.target.value })
-          }
-        />
-      </label>
+      {showCompany && (
+        <label className={s.field}>
+          {role === "co_op_agent" ? "Brokerage" : "Company"}
+          <input
+            className={s.input}
+            maxLength={200}
+            value={draft.company ?? ""}
+            onChange={(event) =>
+              change({ ...draft, company: event.target.value })
+            }
+          />
+        </label>
+      )}
     </div>
   );
 }
@@ -217,7 +239,7 @@ export function PeopleOnFilePanel({
           <div className={s.attention} key={person.id}>
             <div>
               <strong>{person.name}</strong>
-              <p>{label(person.role)}</p>
+              <p>{personRoleLabel(person.role)}</p>
               {person.email && (
                 <a href={`mailto:${person.email}`}>{person.email}</a>
               )}

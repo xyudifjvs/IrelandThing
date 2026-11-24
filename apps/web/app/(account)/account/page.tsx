@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { useLiveData } from "../../_components/useLiveData";
 import { PortalBrand } from "../../(portal)/portal/_views/PortalBrand";
+import { AgentPortalHeader } from "../../(portal)/portal/_views/AgentPortalHeader";
 import { FeeObligations } from "./FeeObligations";
 import { useFeeObligations } from "./useFeeObligations";
 import { AccountProfile } from "./AccountProfile";
@@ -35,26 +36,30 @@ export default function Page() {
   }, []);
   return (
     <div className={`weatherly-theme ${s.page}`}>
-      <header className={s.header}>
-        <div className={s.headerInner}>
-          <PortalBrand />
-          {session.data?.user && (
-            <Link
-              className={s.back}
-              href={
-                session.data.user.role === "coordinator"
-                  ? "/workspace"
-                  : "/portal"
-              }
-            >
-              <ArrowLeft size={13} aria-hidden="true" />
-              {session.data.user.role === "coordinator"
-                ? "Your workspace"
-                : "Your portal"}
-            </Link>
-          )}
-        </div>
-      </header>
+      {session.data?.user.role === "agent" ? (
+        <AgentPortalHeader />
+      ) : (
+        <header className={s.header}>
+          <div className={s.headerInner}>
+            <PortalBrand />
+            {session.data?.user && (
+              <Link
+                className={s.back}
+                href={
+                  session.data.user.role === "coordinator"
+                    ? "/workspace"
+                    : "/portal"
+                }
+              >
+                <ArrowLeft size={13} aria-hidden="true" />
+                {session.data.user.role === "coordinator"
+                  ? "Your workspace"
+                  : "Your portal"}
+              </Link>
+            )}
+          </div>
+        </header>
+      )}
       <div className={s.main}>
         {session.loading && <p role="status">Opening your account…</p>}
         {!session.loading && !session.data?.user && (

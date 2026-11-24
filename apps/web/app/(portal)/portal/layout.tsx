@@ -10,6 +10,7 @@ import { PortalBrand } from "./_views/PortalBrand";
 import { ClientHeader } from "./_views/ClientFile";
 import { PortalSessionContext } from "./_views/portal-session";
 import { AgentBrowseProvider } from "./_views/AgentBrowseState";
+import { AgentPortalHeader } from "./_views/AgentPortalHeader";
 import s from "./_components/portal.module.css";
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -62,7 +63,9 @@ function AuthenticatedPortal({ children }: { children: ReactNode }) {
   );
   return (
     <div className={`weatherly-theme ${s.page}`}>
-      {user?.role === "agent" || !allowed ? (
+      {user?.role === "agent" ? (
+        <AgentPortalHeader />
+      ) : !allowed ? (
         <header className={s.header}>
           <div className={s.headerInner}>
             <PortalBrand portalHome>

@@ -8,6 +8,7 @@ import {
 import { prisma } from "@weatherly/db";
 import { listNewIntakes } from "./intakes";
 import { listPortfolioCalendar, listPortfolioDue } from "./calendar";
+import { listAgentCalendar } from "./agent-calendar";
 import {
   listPortfolioTransactions,
   pagination,
@@ -66,6 +67,12 @@ export function createPortfolioRouter(dependencies: PortfolioDependencies) {
           dependencies,
         ),
       );
+    }),
+  );
+  router.get(
+    "/agent-calendar",
+    asyncHandler(async (req, res) => {
+      res.json(await listAgentCalendar(principal(req), req.query));
     }),
   );
   router.get(

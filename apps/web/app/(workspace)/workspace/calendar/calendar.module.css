@@ -51,7 +51,7 @@
   display: inline-block;
 }
 .today .number {
-  background: #927650;
+  background: var(--calendar-today, #927650);
   color: #fffaf0;
   border-radius: 50%;
 }
@@ -82,7 +82,19 @@
 .list {
   display: none;
 }
+.scroll {
+  min-width: 0;
+  overflow-x: auto;
+}
 @media (max-width: 700px) {
+  .mobileGrid .grid,
+  .mobileGrid .weekdays {
+    display: grid;
+    min-width: 600px;
+  }
+  .mobileGrid .list {
+    display: none;
+  }
   .grid,
   .weekdays {
     display: none;

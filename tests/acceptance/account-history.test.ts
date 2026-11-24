@@ -70,6 +70,7 @@ function loadView(path: string): Record<string, unknown> {
     if (name === "react/jsx-runtime") return jsxRuntime;
     if (name === "next/link") return { __esModule: true, default: Link };
     if (name === "next/image") return { __esModule: true, default: Image };
+    if (name === "next/navigation") return { usePathname: () => "/account" };
     if (name === "lucide-react") return icons;
     if (name === "@weatherly/ui") return weatherlyUi;
     if (name.endsWith("/_components/data")) return dataAdapter;

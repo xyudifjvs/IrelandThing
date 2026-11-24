@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Prisma, prisma } from "@weatherly/db";
 import type { Principal } from "@weatherly/platform";
 import type { ChecklistDateInput } from "@weatherly/platform/handoff-contracts";
@@ -44,6 +44,7 @@ const actors = (["coordinator", "agent", "client"] as const).map(
   },
 );
 const [owner, agent, client] = actors;
+const createdMatterIds = new Set<string>();
 beforeAll(async () => {
   await prisma.user.createMany({
     data: actors.map(({ id, role, name, email }) => ({
@@ -52,6 +53,19 @@ beforeAll(async () => {
       name,
       email,
     })),
+  });
+});
+afterAll(async () => {
+  await prisma.creationReview.deleteMany({ where: { ownerId: owner.id } });
+  await prisma.intakeSubmission.deleteMany({ where: { userId: agent.id } });
+  await prisma.matter.deleteMany({
+    where: { id: { in: [...createdMatterIds] } },
+  });
+  await prisma.auditEvent.deleteMany({
+    where: { actorId: { in: actors.map((actor) => actor.id) } },
+  });
+  await prisma.user.deleteMany({
+    where: { id: { in: actors.map((actor) => actor.id) } },
   });
 });
 const fixed = (date: string) => ({ date, instant: null });
@@ -116,6 +130,7 @@ describe("checklist date and display text", () => {
             },
           })
         : null;
+      if (pending) createdMatterIds.add(pending.id);
       const intake = pending
         ? await prisma.intakeSubmission.create({
             data: {
@@ -166,6 +181,7 @@ describe("checklist date and display text", () => {
           afterConfirm: async () => {},
         },
       );
+      createdMatterIds.add(result.matterId);
       await prisma.matterParticipant.create({
         data: { matterId: result.matterId, userId: client.id, role: "client" },
       });
@@ -340,6 +356,7 @@ describe("checklist date and display text", () => {
         },
       },
     });
+    createdMatterIds.add(old.id);
     const sql = await readFile(
       new URL(
         "../../db/prisma/migrations/20261118010000_remedies_checklist_step/migration.sql",

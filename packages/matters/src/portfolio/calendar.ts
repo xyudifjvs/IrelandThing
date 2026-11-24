@@ -17,6 +17,7 @@ import {
   type PortfolioMilestone,
 } from "./milestones";
 import type { PortfolioDependencies } from "./transactions";
+import { calendarCompletionDays } from "./calendar-completion";
 
 const day = z.string().refine(validDate);
 const dateRange = z.object({ from: day, through: day }).strict();
@@ -40,9 +41,15 @@ async function portfolioEvents(actor: Principal, history: boolean) {
     },
     { isolationLevel: "RepeatableRead" },
   );
+  const completionDays = history
+    ? await calendarCompletionDays(matters, prisma)
+    : new Map<string, string>();
   return matters
     .filter((matter) => !fileReviewPending(matter))
-    .flatMap((matter) => portfolioMilestones(matter, history).events);
+    .flatMap(
+      (matter) =>
+        portfolioMilestones(matter, history, history, completionDays).events,
+    );
 }
 
 export async function listPortfolioCalendar(actor: Principal, raw: unknown) {

@@ -51,6 +51,30 @@
   font: inherit;
   font-size: var(--weatherly-type-small);
 }
+.agentHeader {
+  background: #1b1a18;
+  color: #f6f3ee;
+}
+.agentNav {
+  gap: 22px;
+}
+.agentNav a {
+  text-decoration: none;
+}
+.agentNav a[aria-current="page"] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+.navDivider {
+  height: 22px;
+  width: 1px;
+  background: #f6f3ee55;
+}
+@media (max-width: 760px) {
+  .agentHeader .headerInner { flex-wrap: wrap; }
+  .agentHeader .agentNav { margin-left: auto; gap: 16px; }
+}
 
 .nav button {
   border: 0;

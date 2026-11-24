@@ -2,6 +2,7 @@ import { type Prisma } from "@weatherly/db";
 import { validDate } from "@weatherly/platform";
 import { approvedWorkflowTaskDates } from "../rules";
 import { projectTaskFields } from "../projections/task-fields";
+import { appointmentCalendarLabel, calendarStepKey } from "./calendar-labels";
 
 export const activePortfolioStages = ["under_contract", "closing", "listing"];
 export const completedMilestoneStates = new Set(["completed", "signed"]);
@@ -19,6 +20,7 @@ export type PortfolioMilestone = {
   at?: string;
   kind: "deadline" | "task" | "appointment" | "email";
   status: string;
+  location?: string;
 };
 
 export function object(value: unknown): Record<string, unknown> {
@@ -55,7 +57,16 @@ function activeTask(status: string) {
   );
 }
 
-export function portfolioMilestones(matter: MilestoneMatter, history = false) {
+export function portfolioMilestones(
+  matter: MilestoneMatter,
+  history = false,
+  calendarView = false,
+  completionDays: ReadonlyMap<string, string> = new Map(),
+  options: {
+    preferAppointments?: boolean;
+    hideSkippedDeadlines?: boolean;
+  } = {},
+) {
   const canonical = matter.checklistVersion !== null;
   const tasks = canonical
     ? matter.tasks.filter((task) => task.stepKey !== null)
@@ -65,7 +76,11 @@ export function portfolioMilestones(matter: MilestoneMatter, history = false) {
   const base = { matterId: matter.id, propertyAddress: matter.propertyAddress };
   let closing: string | null = null;
   for (const task of tasks) {
-    if (task.status === "not_applicable" || task.status === "proposed")
+    if (
+      task.status === "not_applicable" ||
+      task.status === "proposed" ||
+      (options.hideSkippedDeadlines && task.status === "not_needed")
+    )
       continue;
     const isClosing = canonical
       ? task.stepKey === "closing"
@@ -79,7 +94,37 @@ export function portfolioMilestones(matter: MilestoneMatter, history = false) {
     }
     if (!history && !activeTask(task.status)) continue;
     const { appointmentAt } = projectTaskFields(task);
-    if (task.dueDate && validDate(task.dueDate)) {
+    const hasAppointment =
+      !!appointmentAt && Number.isFinite(Date.parse(appointmentAt));
+    if (
+      calendarView &&
+      calendarStepKey(task) === "appraisal_ordered" &&
+      !hasAppointment
+    ) {
+      const completedOn =
+        completionDays.get(task.id) ||
+        task.actualDate ||
+        (task.actualAt ? civilDay(task.actualAt) : null);
+      if (
+        completedMilestoneStates.has(task.status) &&
+        completedOn &&
+        validDate(completedOn)
+      )
+        events.push({
+          ...base,
+          id: task.id,
+          label: "Appraisal ordered",
+          day: completedOn,
+          kind: "task",
+          status: task.status,
+        });
+      continue;
+    }
+    if (
+      task.dueDate &&
+      validDate(task.dueDate) &&
+      !(options.preferAppointments && hasAppointment)
+    ) {
       const key = workflowKey(task.details);
       if (!canonical && key) keys.add(key);
       events.push({
@@ -98,11 +143,17 @@ export function portfolioMilestones(matter: MilestoneMatter, history = false) {
         events.push({
           ...base,
           id: task.id,
-          label: task.title + " appointment",
+          label: calendarView
+            ? appointmentCalendarLabel(task)
+            : task.title + " appointment",
           day: civilDay(at),
           at: appointmentAt,
           kind: "appointment",
           status: task.status,
+          ...(calendarView &&
+          typeof object(task.details).appointmentPlace === "string"
+            ? { location: String(object(task.details).appointmentPlace) }
+            : {}),
         });
     }
   }
@@ -123,6 +174,27 @@ export function portfolioMilestones(matter: MilestoneMatter, history = false) {
           : task.title.trim().toLowerCase() ===
             deadline.label.trim().toLowerCase(),
       );
+      if (
+        options.preferAppointments &&
+        matches.some((task) => {
+          const at = projectTaskFields(task).appointmentAt;
+          return !!at && Number.isFinite(Date.parse(at));
+        })
+      )
+        continue;
+      if (
+        calendarView &&
+        matches.some((task) => calendarStepKey(task) === "appraisal_ordered")
+      )
+        continue;
+      if (
+        options.hideSkippedDeadlines &&
+        matches.length &&
+        matches.every((task) =>
+          ["not_applicable", "not_needed", "proposed"].includes(task.status),
+        )
+      )
+        continue;
       if (
         matches.length &&
         ((!history && matches.every((task) => !activeTask(task.status))) ||

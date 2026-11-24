@@ -1,3 +1,4 @@
+import { comparableEmailBody, emailHtmlText } from "./email-html";
 import { z } from "zod";
 import { prisma } from "@weatherly/db";
 import {
@@ -50,7 +51,13 @@ export async function queueSend(
     assertReviewedMatter(matter);
     await requireEmailWorkFile(tx, actor, matter.id);
     const details = asRecord(old.details);
-    if (!old.subject.trim() || !old.body.trim() || !textArray(old.to).length)
+    if (
+      !old.subject.trim() ||
+      !(old.bodyFormat === "html"
+        ? emailHtmlText(old.body).trim()
+        : old.body.trim()) ||
+      !textArray(old.to).length
+    )
       throw new HttpError(
         422,
         "INCOMPLETE_EMAIL",
@@ -85,6 +92,9 @@ export async function queueSend(
         {
           matterId: old.matterId,
           values: asRecord(details.templateValues),
+          ...(asRecord(details.templateSnapshot).bodyFormat === "html"
+            ? { bodyFormat: "html" }
+            : {}),
         },
         tx,
         true,
@@ -99,7 +109,9 @@ export async function queueSend(
       if (
         (current.missingSubjectFields.length &&
           old.subject === current.subject) ||
-        (current.missingBodyFields.length && old.body === current.body)
+        (current.missingBodyFields.length &&
+          comparableEmailBody(old.body, old.bodyFormat) ===
+            comparableEmailBody(current.body, current.bodyFormat))
       )
         throw new HttpError(
           422,
@@ -156,6 +168,7 @@ export async function queueSend(
       directoryRecipients: recipients.directoryRecipients,
       subject: old.subject,
       body: old.body,
+      bodyFormat: old.bodyFormat,
       attachments: [...selected.values()].map((v) => ({
         documentId: v.documentId,
         versionId: v.id,

@@ -6,6 +6,7 @@ export type Template = {
   serviceGroup?: string | null;
   subject: string;
   body: string;
+  bodyFormat?: "plain" | "html";
   revision: number;
   linkedStepKey?: string | null;
   recipientGroup?: string | null;
@@ -22,6 +23,7 @@ export type Draft = {
   cc: string[];
   subject: string;
   body: string;
+  bodyFormat?: "plain" | "html";
   attachmentIds: string[];
   status: string;
   revision: number;

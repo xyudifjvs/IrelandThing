@@ -1,3 +1,4 @@
+import { sanitizeEmailHtml, comparableEmailBody } from "./email-html";
 import { z } from "zod";
 import { prisma, Prisma } from "@weatherly/db";
 import {
@@ -55,6 +56,7 @@ export async function createDraft(
 ) {
   assertCoordinator(actor);
   const data = draftInput.parse(input);
+  if (data.bodyFormat === "html") data.body = sanitizeEmailHtml(data.body);
   await this.validateAttachments(actor, data.matterId, data.attachmentIds);
   if (data.replyToMessageId) {
     const message = await prisma.emailMessage.findUnique({
@@ -91,6 +93,7 @@ export async function createDraft(
           data.templateId,
           {
             matterId: data.matterId,
+            ...(data.bodyFormat === "html" ? { bodyFormat: "html" } : {}),
             values: data.templateValues || {},
           },
           tx,
@@ -108,9 +111,7 @@ export async function createDraft(
         "Template fields changed after the displayed preview. Refill the template and review it before saving or sending.",
       );
 
-    const hasFields = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(
-      data.subject + data.body,
-    );
+    const hasFields = /\{\{|\}\}/.test(data.subject + data.body);
     const filled = hasFields
       ? await renderEmailFields(
           actor,
@@ -120,6 +121,7 @@ export async function createDraft(
           tx,
           data.templateValues,
           data.templateId,
+          data.bodyFormat,
         )
       : null;
     if (
@@ -167,6 +169,7 @@ export async function createDraft(
         cc: recipients.cc,
         subject: filled?.subject ?? data.subject,
         body: filled?.body ?? data.body,
+        bodyFormat: data.bodyFormat,
         attachmentIds: data.attachmentIds,
         status: "draft",
         details: {
@@ -186,10 +189,17 @@ export async function createDraft(
           templatePreviewFingerprint: rendered?.previewFingerprint ?? null,
           templateValues: data.templateValues || {},
           templateSnapshot: rendered
-            ? { subject: rendered.subject, body: rendered.body }
+            ? {
+                subject: rendered.subject,
+                body: rendered.body,
+                bodyFormat: rendered.bodyFormat,
+              }
             : null,
           subjectOverride: rendered ? rendered.subject !== data.subject : false,
-          bodyOverride: rendered ? rendered.body !== data.body : false,
+          bodyOverride: rendered
+            ? comparableEmailBody(rendered.body, rendered.bodyFormat) !==
+              comparableEmailBody(data.body, data.bodyFormat)
+            : false,
           replyToMessageId: data.replyToMessageId || null,
         },
       },
@@ -249,7 +259,8 @@ export async function updateDraft(
         .max(998)
         .refine((v) => !/[\r\n]/.test(v))
         .optional(),
-      body: z.string().max(100000).optional(),
+      body: z.string().max(1000000).optional(),
+      bodyFormat: z.enum(["plain", "html"]).optional(),
       attachmentIds: z.array(z.string()).max(20).optional(),
     })
     .strict()
@@ -257,6 +268,11 @@ export async function updateDraft(
   const old = await prisma.emailDraft.findUnique({ where: { id } });
   if (!old) throw new HttpError(404, "DRAFT_NOT_FOUND", "Draft not found");
   await requireMatter(actor, old.matterId, true);
+  if (
+    (patch.bodyFormat ?? old.bodyFormat) === "html" &&
+    patch.body !== undefined
+  )
+    patch.body = sanitizeEmailHtml(patch.body);
   await this.validateAttachments(
     actor,
     old.matterId,
@@ -281,9 +297,7 @@ export async function updateDraft(
     }
     const subjectSource = patch.subject ?? old.subject,
       bodySource = patch.body ?? old.body;
-    const hasFields = /\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(
-      subjectSource + bodySource,
-    );
+    const hasFields = /\{\{|\}\}/.test(subjectSource + bodySource);
     const templateValues = Object.fromEntries(
       Object.entries(asRecord(details.templateValues)).filter(
         (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -300,6 +314,7 @@ export async function updateDraft(
           typeof details.templateId === "string"
             ? details.templateId
             : undefined,
+          patch.bodyFormat ?? old.bodyFormat,
         )
       : null;
     if (

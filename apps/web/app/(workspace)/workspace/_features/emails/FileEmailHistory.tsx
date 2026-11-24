@@ -1,3 +1,4 @@
+import { RichEmailPreview } from "./RichEmailEditor";
 import { date } from "../../_components/data";
 import s from "../../_components/workspace.module.css";
 import styles from "./file-email.module.css";
@@ -83,9 +84,13 @@ export function FileEmailHistory({
                     to={draft?.to ?? message.to}
                     cc={draft?.cc ?? message.cc}
                   />
-                  <p className={styles.message}>
-                    {draft?.body ?? message.text}
-                  </p>
+                  {draft?.bodyFormat === "html" ? (
+                    <RichEmailPreview html={draft.body} />
+                  ) : (
+                    <p className={styles.message}>
+                      {draft?.body ?? message.text}
+                    </p>
+                  )}
                   {inbound && reply && message.fromEmail && (
                     <button
                       type="button"
@@ -107,7 +112,11 @@ export function FileEmailHistory({
           <details key={draft.id} className={styles.history}>
             <summary>{draft.subject}</summary>
             <MessageRecipients to={draft.to} cc={draft.cc} />
-            <p className={styles.message}>{draft.body}</p>
+            {draft.bodyFormat === "html" ? (
+              <RichEmailPreview html={draft.body} />
+            ) : (
+              <p className={styles.message}>{draft.body}</p>
+            )}
           </details>
         ))}
     </div>

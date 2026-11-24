@@ -1,0 +1,110 @@
+.frame {
+  border: 1px solid var(--line, #e6dfd4);
+  border-radius: 8px;
+  background: white;
+  min-width: 0;
+  overflow: hidden;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line, #e6dfd4);
+  background: #f6f3ee;
+}
+.toolbar button,
+.toolbar select {
+  min-height: 34px;
+  border: 1px solid #d8cbb9;
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: white;
+  color: #1e1c1a;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.toolbar button[aria-pressed="true"] {
+  background: #1e1c1a;
+  color: white;
+}
+.toolbar button:focus-visible,
+.toolbar select:focus-visible {
+  outline: 2px solid #8a7356;
+  outline-offset: 2px;
+}
+.editor {
+  min-height: 200px;
+  padding: 14px;
+  color: #1e1c1a;
+  font-size: 16px;
+  font-weight: normal;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.editor p,
+.preview p {
+  margin: 0 0 0.65em;
+}
+.editor h2,
+.preview h2 {
+  font-size: 24px;
+  margin: 0.7em 0 0.4em;
+}
+.editor ul,
+.editor ol,
+.preview ul,
+.preview ol {
+  padding-left: 26px;
+  margin: 0.6em 0;
+}
+.editor li p,
+.preview li p {
+  margin: 0;
+}
+.editor a,
+.preview a {
+  color: inherit;
+  text-decoration: underline;
+}
+.editor img,
+.preview img {
+  max-width: 100%;
+  height: auto;
+}
+.editor:focus {
+  box-shadow: inset 0 0 0 2px #d8cbb9;
+}
+.imageSection {
+  padding: 10px 14px;
+  border-top: 1px solid #e6dfd4;
+  font-size: 14px;
+}
+.imageSection label {
+  display: block;
+  margin-top: 10px;
+}
+.imageSection input {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+}
+.preview {
+  color: #1e1c1a;
+  font-weight: normal;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  margin-top: 12px;
+}
+.error {
+  color: #a33313;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.toolbar select {
+  max-width: min(100%, 380px);
+  min-width: 0;
+}

@@ -1,3 +1,4 @@
+import { emailHtmlText, sanitizeEmailHtml } from "./email-html";
 import type { Principal } from "@weatherly/platform";
 import { prisma } from "@weatherly/db";
 import { requireMatter, fileReviewPending } from "@weatherly/matters";
@@ -376,7 +377,14 @@ export async function resolveMergeFields(
         );
       return oldByKey.get(definition.key) ?? field(definition, null);
     }
-    if (source.kind === "settings")
+    if (source.kind === "settings") {
+      if (source.key === "signature" && settings?.signatureFormat === "html") {
+        const html = sanitizeEmailHtml(settings.signature);
+        return {
+          ...field(definition, emailHtmlText(html), [actor.id]),
+          htmlValue: html,
+        };
+      }
       return field(
         definition,
         source.key === "name"
@@ -384,6 +392,7 @@ export async function resolveMergeFields(
           : text(settings?.[source.key]),
         [actor.id],
       );
+    }
     if (source.kind === "intake") {
       const answers = asRecord(asRecord(details.referenceIntake).fields);
       const value = answers[source.key];

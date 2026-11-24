@@ -18,7 +18,8 @@ export const draftInput = z
       .trim()
       .max(998)
       .refine((v) => !/[\r\n]/.test(v), "Subject cannot contain line breaks"),
-    body: z.string().max(100000),
+    body: z.string().max(1000000),
+    bodyFormat: z.enum(["plain", "html"]).default("plain"),
     saveForLater: z.boolean().optional(),
     remindOn: z.iso.date().nullable().optional(),
     fieldPreviewFingerprint: z

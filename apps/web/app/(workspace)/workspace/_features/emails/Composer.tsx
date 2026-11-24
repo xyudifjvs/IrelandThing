@@ -1,4 +1,6 @@
 "use client";
+import { RichEmailEditor, RichEmailPreview } from "./RichEmailEditor";
+import { editorEmailHtml } from "../../../../../../../packages/communications/src/email-body";
 
 import { useEffect, useState, useRef } from "react";
 import { Mail, Save, Send } from "lucide-react";
@@ -78,6 +80,7 @@ export function Composer({
     key: string;
     subject: string;
     body: string;
+    previewBody?: string;
     missingFields: string[];
     fingerprint?: string;
   } | null>(null);
@@ -116,7 +119,7 @@ export function Composer({
     }
     let current = true;
     setPreviewError("");
-    if (!/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/.test(subject + body)) {
+    if (!/\{\{|\}\}/.test(subject + body)) {
       setPreview({ key: previewKey, subject, body, missingFields: [] });
       return;
     }
@@ -124,12 +127,14 @@ export function Composer({
       void mutate<{
         subject: string;
         body: string;
+        previewBody?: string;
         missingFields: string[];
         fingerprint: string;
       }>("/api/v1/communications/render-fields", {
         matterId: matter,
         subject,
         body,
+        bodyFormat: "html",
         values: customValues,
         ...(binding?.id ? { templateId: binding.id } : {}),
       })
@@ -261,7 +266,7 @@ export function Composer({
       setCc("");
       enteredRecipients.current = [];
       setSubject(value.subject);
-      setBody(value.body);
+      setBody(editorEmailHtml(value.body));
       setAttachments([]);
       setDirty(true);
       setConfirmed(false);
@@ -304,7 +309,12 @@ export function Composer({
     setMatter(d.matterId);
     setNewPersonEmail("");
     setSubject(d.details?.authoredMerge?.subjectSource ?? d.subject);
-    setBody(d.details?.authoredMerge?.bodySource ?? d.body);
+    setBody(
+      editorEmailHtml(
+        d.details?.authoredMerge?.bodySource ?? d.body,
+        d.bodyFormat,
+      ),
+    );
     setTemplate(d.details?.templateId || "");
     setRecipientName(d.details?.templateValues?.recipientName || "");
     setBinding(
@@ -353,12 +363,15 @@ export function Composer({
     void mutate<{
       subject: string;
       body: string;
+      bodyFormat?: string;
+      editorBody?: string;
       templateId: string;
       templateRevision: number;
       missingFields?: string[];
       previewFingerprint: string;
     }>(`/api/v1/communications/templates/${initialTemplateId}/render`, {
       matterId: fixedMatterId,
+      bodyFormat: "html",
       values: defaultRecipientName
         ? { recipientName: defaultRecipientName }
         : {},
@@ -367,7 +380,12 @@ export function Composer({
         if (!current) return;
         defaultTemplateApplied.current = true;
         setSubject(rendered.subject);
-        setBody(rendered.body);
+        setBody(
+          editorEmailHtml(
+            rendered.editorBody ?? rendered.body,
+            rendered.bodyFormat,
+          ),
+        );
         setTo(defaultRecipientEmail);
         setRecipientName(defaultRecipientName);
         setBinding({
@@ -429,6 +447,7 @@ export function Composer({
           `/api/v1/communications/drafts/${draft.id}/reset-template`,
           {
             expectedRevision: draft.revision,
+            bodyFormat: "html",
             ...(replaceSavedWording ? {} : { templateId: template }),
             values: {
               ...customValues,
@@ -450,19 +469,24 @@ export function Composer({
       const result = await mutate<{
         subject: string;
         body: string;
+        bodyFormat?: string;
+        editorBody?: string;
         templateId: string;
         templateRevision: number;
         missingFields: string[];
         previewFingerprint: string;
       }>(`/api/v1/communications/templates/${template}/render`, {
         matterId: matter,
+        bodyFormat: "html",
         values: {
           ...customValues,
           ...(recipientName ? { recipientName } : {}),
         },
       });
       setSubject(result.subject);
-      setBody(result.body);
+      setBody(
+        editorEmailHtml(result.editorBody ?? result.body, result.bodyFormat),
+      );
       setBinding({
         id: result.templateId,
         revision: result.templateRevision,
@@ -535,6 +559,7 @@ export function Composer({
         cc: addresses(cc),
         subject,
         body,
+        bodyFormat: "html",
         attachmentIds: attachments,
         ...(!draft && replyToMessageId ? { replyToMessageId } : {}),
         ...(!draft && binding
@@ -762,15 +787,16 @@ export function Composer({
                 onChange={(e) => edit(setSubject, e.target.value)}
               />
             </label>
-            <label className={s.field} style={{ marginTop: 18 }}>
-              Message
-              <textarea
-                className={s.textarea}
-                style={{ minHeight: 200 }}
+            <div className={s.field} style={{ marginTop: 18 }}>
+              <span>Message</span>
+              <RichEmailEditor
+                label="Message"
                 value={body}
-                onChange={(e) => edit(setBody, e.target.value)}
+                format="html"
+                disabled={busy || (!!draft && draft.status !== "draft")}
+                onChange={(html) => edit(setBody, html)}
               />
-            </label>
+            </div>
             {detail.data?.documents?.length ? (
               <fieldset
                 style={{
@@ -829,15 +855,13 @@ export function Composer({
               ) : preview?.key === previewKey ? (
                 <>
                   <strong>{preview.subject || "No subject yet"}</strong>
-                  <div
-                    style={{
-                      whiteSpace: "pre-wrap",
-                      overflowWrap: "anywhere",
-                      marginTop: 12,
-                    }}
-                  >
-                    {preview.body || "No message yet"}
-                  </div>
+                  {preview.body ? (
+                    <RichEmailPreview
+                      html={preview.previewBody ?? preview.body}
+                    />
+                  ) : (
+                    <p>No message yet</p>
+                  )}
                   {!!preview.missingFields.length && (
                     <p className={s.error}>
                       Fill or remove:{" "}

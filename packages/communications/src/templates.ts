@@ -1,3 +1,5 @@
+import { sanitizeEmailHtml, comparableEmailBody } from "./email-html";
+import { plainEmailHtml } from "./email-body";
 import { mergeFields } from "./merge-fields";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -13,9 +15,8 @@ import { asRecord, assertReviewedMatter, validateMerge } from "./policy";
 import type { CommunicationsService } from "./service";
 import { ensureTemplateWork } from "./email-work";
 import { canonicalFieldKey, normalizeFieldCodes } from "./field-catalog";
-import { replaceFieldText } from "./field-renderer";
+import { renderBodyFields, replaceFieldText } from "./field-renderer";
 import { hideNotNeededLines } from "./template-line-policy";
-import { omitNotNeededLines } from "./template-line-policy";
 import { listFieldDefinitions } from "./field-sources";
 import {
   listCustomMergeFields,
@@ -60,7 +61,8 @@ export async function saveTemplate(
         .min(1)
         .max(998)
         .refine((v) => !/[\r\n]/.test(v)),
-      body: z.string().min(1).max(100000),
+      body: z.string().min(1).max(1000000),
+      bodyFormat: z.enum(["plain", "html"]).default("plain"),
       linkedStepKey: stepKeySchema.nullable().optional(),
       recipientGroup: z.string().trim().min(1).max(100).nullable().optional(),
       recipientRoles: z
@@ -83,6 +85,8 @@ export async function saveTemplate(
     );
   parsed.subject = normalizeFieldCodes(parsed.subject);
   parsed.body = normalizeFieldCodes(parsed.body);
+  if (parsed.bodyFormat === "html")
+    parsed.body = sanitizeEmailHtml(parsed.body);
   const customKeys = new Set([
     ...(await listCustomMergeFields(actor)).map(({ key }) =>
       canonicalFieldKey(key),
@@ -300,9 +304,14 @@ export async function renderInDb(
   allowUnresolved = false,
 ) {
   assertCoordinator(actor);
-  const { matterId, values = {} } = z
+  const {
+    matterId,
+    values = {},
+    bodyFormat: requestedFormat,
+  } = z
     .object({
       matterId: z.string(),
+      bodyFormat: z.literal("html").optional(),
       values: z.record(z.string(), z.string().max(2000)).optional(),
     })
     .strict()
@@ -330,6 +339,7 @@ export async function renderInDb(
       "TEMPLATE_GROUP_MISMATCH",
       "Select the template group matching this transaction’s side and designated package.",
     );
+  const bodyFormat = requestedFormat ?? template.bodyFormat;
   const fields = await mergeFields(actor, matterId, db);
   const custom = await listCustomMergeFields(actor, db);
   const customKeys = new Set([
@@ -387,13 +397,24 @@ export async function renderInDb(
     return result.output;
   };
   const subject = render(template.subject, missingSubjectFields),
-    body = render(
-      omitNotNeededLines(
-        template.body,
-        renderFields,
-        hideNotNeededLines(template),
-      ),
-      missingBodyFields,
+    bodyResult = renderBodyFields(
+      template.bodyFormat !== "html" && bodyFormat === "html"
+        ? plainEmailHtml(template.body)
+        : template.body,
+      renderFields,
+      hideNotNeededLines(template),
+      bodyFormat,
+    ),
+    body = bodyResult.output;
+  for (const key of bodyResult.missing) {
+    missing.add(key);
+    missingBodyFields.add(key);
+  }
+  if (body.length > 1000000)
+    throw new HttpError(
+      422,
+      "MERGED_EMAIL_TOO_LONG",
+      "The filled email exceeds the message length limit.",
     );
   if (/[\r\n]/.test(subject) || subject.length > 998)
     throw new HttpError(
@@ -410,6 +431,9 @@ export async function renderInDb(
   return {
     subject,
     body,
+    bodyFormat,
+    editorBody: bodyResult.editorOutput,
+    previewBody: bodyResult.previewOutput,
     previewFingerprint: createHash("sha256")
       .update(
         JSON.stringify([
@@ -457,7 +481,11 @@ export async function refreshTemplateDrafts(
       generated = await this.renderInDb(
         actor,
         details.templateId,
-        { matterId, values },
+        {
+          matterId,
+          values,
+          ...(draft.bodyFormat === "html" ? { bodyFormat: "html" } : {}),
+        },
         tx,
         true,
       );
@@ -487,18 +515,23 @@ export async function refreshTemplateDrafts(
       continue;
     }
     const subjectOverride = prior.subject !== draft.subject;
-    const bodyOverride = prior.body !== draft.body;
+    const bodyOverride =
+      typeof prior.body !== "string" ||
+      comparableEmailBody(prior.body, prior.bodyFormat) !==
+        comparableEmailBody(draft.body, draft.bodyFormat);
     const changed = await tx.emailDraft.updateMany({
       where: { id: draft.id, revision: draft.revision, status: "draft" },
       data: {
         subject: subjectOverride ? draft.subject : generated.subject,
         body: bodyOverride ? draft.body : generated.body,
+        bodyFormat: bodyOverride ? draft.bodyFormat : generated.bodyFormat,
         revision: { increment: 1 },
         details: {
           ...details,
           templateSnapshot: {
             subject: generated.subject,
             body: generated.body,
+            bodyFormat: generated.bodyFormat,
           },
           templatePreviewFingerprint: generated.previewFingerprint,
           subjectOverride,
@@ -545,11 +578,13 @@ export async function resetTemplate(
     expectedRevision,
     values = {},
     templateId,
+    bodyFormat,
   } = z
     .object({
       expectedRevision: revision,
       values: z.record(z.string(), z.string().max(2000)).optional(),
       templateId: z.string().min(1).optional(),
+      bodyFormat: z.literal("html").optional(),
     })
     .strict()
     .parse(input);
@@ -565,7 +600,13 @@ export async function resetTemplate(
     const generated = await this.renderInDb(
       actor,
       templateId ?? String(details.templateId),
-      { matterId: draft.matterId, values },
+      {
+        matterId: draft.matterId,
+        values,
+        ...(bodyFormat === "html" || draft.bodyFormat === "html"
+          ? { bodyFormat: "html" }
+          : {}),
+      },
       tx,
       true,
     );
@@ -580,6 +621,7 @@ export async function resetTemplate(
       data: {
         subject,
         body,
+        bodyFormat: preserveWording ? draft.bodyFormat : generated.bodyFormat,
         ...(workItem ? { workItemId: workItem.id } : {}),
         revision: { increment: 1 },
         details: {
@@ -587,10 +629,14 @@ export async function resetTemplate(
           templateId: generated.templateId,
           templateRevision: generated.templateRevision,
           templateNeedsRebind: false,
+          authoredMerge: preserveWording
+            ? (details.authoredMerge ?? null)
+            : null,
           templateValues: values,
           templateSnapshot: {
             subject: generated.subject,
             body: generated.body,
+            bodyFormat: generated.bodyFormat,
           },
           templatePreviewFingerprint: generated.previewFingerprint,
           subjectOverride: subject !== generated.subject,

@@ -14,6 +14,7 @@ export interface MergeField {
   value: string | null;
   status: "confirmed" | "unknown" | "ambiguous";
   sourceIds: string[];
+  htmlValue?: string;
   optionalBlank?: boolean;
   checklistNotNeeded?: boolean;
 }

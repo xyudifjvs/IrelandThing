@@ -516,6 +516,7 @@ model EmailDraft {
   cc                Json      @default("[]")
   subject           String
   body              String
+  bodyFormat        String    @default("plain")
   details           Json      @default("{}")
   attachmentIds     Json      @default("[]")
   status            String    @default("draft")
@@ -556,6 +557,7 @@ model MergeFieldSettings {
   ownerId   String   @id
   name      String   @default("")
   signature String   @default("")
+  signatureFormat String @default("plain")
   reviewLink String  @default("")
   revision  Int      @default(1)
   updatedAt DateTime @updatedAt
@@ -590,6 +592,7 @@ model CommunicationTemplate {
   phase     String
   subject   String
   body      String
+  bodyFormat String @default("plain")
   revision  Int      @default(1)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())

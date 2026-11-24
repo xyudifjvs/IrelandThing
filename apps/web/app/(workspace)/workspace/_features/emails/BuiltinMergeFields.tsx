@@ -1,4 +1,5 @@
 "use client";
+import { RichEmailEditor } from "./RichEmailEditor";
 
 import { useState } from "react";
 import { mutate, useData } from "../../_components/data";
@@ -20,6 +21,7 @@ type Configuration = {
   settings: {
     name: string;
     signature: string;
+    signatureFormat?: "plain" | "html";
     reviewLink: string;
     revision: number | null;
   };
@@ -277,6 +279,7 @@ export function BuiltinMergeFields() {
               {
                 name: String(values.get("name")),
                 signature: String(values.get("signature")),
+                signatureFormat: "html",
                 reviewLink: String(values.get("reviewLink")),
                 expectedRevision: query.data!.settings.revision,
               },
@@ -296,16 +299,17 @@ export function BuiltinMergeFields() {
                 maxLength={150}
               />
             </label>
-            <label className={s.field}>
-              Signature · {"{{tc_signature}}"}
-              <textarea
-                className={s.textarea}
+            <div className={s.field}>
+              <span>Signature · {"{{tc_signature}}"}</span>
+              <RichEmailEditor
                 name="signature"
-                rows={4}
-                maxLength={8000}
+                label="Signature"
                 defaultValue={query.data.settings.signature}
+                format={query.data.settings.signatureFormat}
+                signature
+                disabled={busy}
               />
-            </label>
+            </div>
             <label className={s.field}>
               Review link · {"{{review_link}}"}
               <input

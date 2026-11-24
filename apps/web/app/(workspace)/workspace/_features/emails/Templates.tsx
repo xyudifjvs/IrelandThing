@@ -1,4 +1,5 @@
 "use client";
+import { RichEmailEditor } from "./RichEmailEditor";
 
 import { useState } from "react";
 import { Save, Plus } from "lucide-react";
@@ -245,6 +246,7 @@ export function Templates() {
                 phase: String(f.get("phase")),
                 subject: String(f.get("subject")),
                 body: String(f.get("body")),
+                bodyFormat: "html",
                 recipientGroup:
                   String(f.get("recipientGroup") || "").trim() || null,
                 recipientRoles: String(f.get("recipientRoles") || "")
@@ -409,16 +411,17 @@ export function Templates() {
               />
               Placeholder. Add the final content before sending.
             </label>
-            <label className={s.field} style={{ marginTop: 18 }}>
-              Email body
-              <textarea
-                className={s.textarea}
-                style={{ minHeight: 180 }}
+            <div className={s.field} style={{ marginTop: 18 }}>
+              <span>Email body</span>
+              <RichEmailEditor
                 name="body"
-                required
+                label="Email body"
                 defaultValue={selected?.body}
+                format={selected?.bodyFormat}
+                disabled={busy}
               />
-            </label>
+              <input type="hidden" name="bodyFormat" value="html" />
+            </div>
             <AvailableFieldCodes />
             {error && (
               <p className={s.error} role="alert">

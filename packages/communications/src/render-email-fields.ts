@@ -4,11 +4,11 @@ import { assertCoordinator, HttpError } from "@weatherly/platform";
 import { mergeFields } from "./merge-fields";
 import { listCustomMergeFields } from "./custom-merge-fields";
 import { canonicalFieldKey } from "./field-catalog";
-import { replaceFieldText } from "./field-renderer";
+import { renderBodyFields, replaceFieldText } from "./field-renderer";
 import { asRecord } from "./policy";
 import { prisma } from "@weatherly/db";
 import type { FieldDb } from "./field-sources";
-import { hideNotNeededLines, omitNotNeededLines } from "./template-line-policy";
+import { hideNotNeededLines } from "./template-line-policy";
 
 export async function renderEmailFields(
   actor: Principal,
@@ -18,6 +18,7 @@ export async function renderEmailFields(
   db: FieldDb = prisma,
   values: Record<string, string> = {},
   templateId?: string,
+  bodyFormat: string = "plain",
 ) {
   assertCoordinator(actor);
   const [builtins, custom] = await Promise.all([
@@ -27,7 +28,7 @@ export async function renderEmailFields(
   const customKeys = new Set(
     custom.map((field) => canonicalFieldKey(field.key)),
   );
-  const fields = [
+  const fields: import("./merge-fields").MergeField[] = [
     ...builtins.filter((field) => !customKeys.has(field.key)),
     ...custom.map((field) => {
       const key = canonicalFieldKey(field.key),
@@ -52,11 +53,7 @@ export async function renderEmailFields(
     );
   const hide = template ? hideNotNeededLines(template) : false;
   const renderedSubject = replaceFieldText(subject, fields, true),
-    renderedBody = replaceFieldText(
-      omitNotNeededLines(body, fields, hide),
-      fields,
-      true,
-    );
+    renderedBody = renderBodyFields(body, fields, hide, bodyFormat);
   if (/[\r\n]/.test(renderedSubject.output))
     throw new HttpError(
       422,
@@ -65,7 +62,7 @@ export async function renderEmailFields(
     );
   if (
     renderedSubject.output.length > 998 ||
-    renderedBody.output.length > 100000
+    renderedBody.output.length > 1000000
   )
     throw new HttpError(
       422,
@@ -84,6 +81,7 @@ export async function renderEmailFields(
         subject: renderedSubject.output,
         body: renderedBody.output,
         hideNotNeededLines: hide,
+        ...(bodyFormat === "html" ? { bodyFormat } : {}),
         fields: fields
           .filter((field) =>
             [renderedSubject.normalized, renderedBody.normalized].some(
@@ -93,6 +91,7 @@ export async function renderEmailFields(
           .map((field) => [
             field.key,
             field.value,
+            ...(field.htmlValue ? [field.htmlValue] : []),
             field.status,
             field.sourceIds,
           ]),
@@ -102,6 +101,7 @@ export async function renderEmailFields(
   return {
     subject: renderedSubject.output,
     body: renderedBody.output,
+    previewBody: renderedBody.previewOutput,
     missingFields,
     unknownFields,
     fingerprint,
@@ -110,7 +110,13 @@ export async function renderEmailFields(
 
 export async function validateAuthoredMergeFields(
   actor: Principal,
-  draft: { matterId: string; subject: string; body: string; details: unknown },
+  draft: {
+    matterId: string;
+    subject: string;
+    body: string;
+    bodyFormat?: string;
+    details: unknown;
+  },
   db: FieldDb = prisma,
 ) {
   const source = asRecord(asRecord(draft.details).authoredMerge);
@@ -134,6 +140,7 @@ export async function validateAuthoredMergeFields(
     typeof asRecord(draft.details).templateId === "string"
       ? String(asRecord(draft.details).templateId)
       : undefined,
+    draft.bodyFormat,
   );
   if (current.missingFields.length)
     throw new HttpError(

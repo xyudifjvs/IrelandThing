@@ -1,3 +1,9 @@
+import {
+  escapedFieldHtml,
+  sanitizeEmailHtml,
+  omitHtmlFieldLines,
+} from "./email-html";
+import { omitNotNeededLines } from "./template-line-policy";
 import { canonicalFieldKey, normalizeFieldCodes } from "./field-catalog";
 import type { MergeField } from "./merge-fields";
 
@@ -5,6 +11,8 @@ export function replaceFieldText(
   source: string,
   fields: readonly MergeField[],
   blankMissing = false,
+  html = false,
+  highlightMissing = false,
 ) {
   const known = new Map(
     fields.map((field) => [canonicalFieldKey(field.key), field]),
@@ -19,15 +27,27 @@ export function replaceFieldText(
       if (!field) {
         unknown.add(key);
         missing.add(key);
-        return `{{${key}}}`;
+        return html && highlightMissing
+          ? `<mark>Missing ${key.replace(/_/g, " ")}</mark>`
+          : blankMissing
+            ? ""
+            : `{{${key}}}`;
       }
       if (field.status !== "confirmed" || !field.value?.trim()) {
         if (field.optionalBlank && field.status !== "ambiguous") return "";
         missing.add(key);
-        return blankMissing ? "" : `{{${key}}}`;
+        return html && highlightMissing
+          ? `<mark>Missing ${key.replace(/_/g, " ")}</mark>`
+          : blankMissing
+            ? ""
+            : `{{${key}}}`;
       }
       // Do not trim values: signatures and fixed text preserve their line breaks.
-      return field.value;
+      return html
+        ? field.htmlValue
+          ? sanitizeEmailHtml(field.htmlValue)
+          : escapedFieldHtml(field.value)
+        : field.value;
     },
   );
   if (blankMissing) {
@@ -45,4 +65,54 @@ export function replaceFieldText(
     }
   }
   return { output, missing: [...missing], unknown: [...unknown], normalized };
+}
+
+export function renderBodyFields(
+  source: string,
+  fields: readonly MergeField[],
+  hide: boolean,
+  format?: string,
+) {
+  if (format !== "html") {
+    const clean = omitNotNeededLines(source, fields, hide),
+      result = replaceFieldText(clean, fields, true);
+    return {
+      ...result,
+      editorOutput: replaceFieldText(clean, fields).output,
+      previewOutput: undefined as string | undefined,
+    };
+  }
+  let clean = sanitizeEmailHtml(source);
+  if (hide)
+    clean = omitHtmlFieldLines(
+      clean,
+      new Set(
+        fields
+          .filter((f) => f.checklistNotNeeded && f.status === "confirmed")
+          .map((f) => canonicalFieldKey(f.key)),
+      ),
+      canonicalFieldKey,
+    );
+  // A signature occupying a paragraph is itself a block of paragraphs/lists.
+  clean = clean.replace(
+    /<p>(?:<(?:strong|em|u|span)(?: style="font-size:18px")?>)*\s*(\{\{\s*[a-zA-Z0-9_]+\s*\}\})\s*(?:<\/(?:strong|em|u|span)>)*<\/p>/g,
+    (paragraph, code: string) => {
+      const key = canonicalFieldKey(code.replace(/[{}\s]/g, ""));
+      return fields.find((f) => canonicalFieldKey(f.key) === key)?.htmlValue
+        ? code
+        : paragraph;
+    },
+  );
+  const result = replaceFieldText(clean, fields, true, true);
+  return {
+    ...result,
+    output: sanitizeEmailHtml(result.output),
+    editorOutput: sanitizeEmailHtml(
+      replaceFieldText(clean, fields, false, true).output,
+    ),
+    previewOutput: sanitizeEmailHtml(
+      replaceFieldText(clean, fields, true, true, true).output,
+      true,
+    ),
+  };
 }

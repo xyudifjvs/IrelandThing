@@ -1,3 +1,5 @@
+import { sanitizeEmailHtml } from "./email-html";
+import { MAX_EMAIL_HTML } from "./email-body";
 import { z } from "zod";
 import { prisma, type Prisma } from "@weatherly/db";
 import {
@@ -236,7 +238,8 @@ export async function saveMergeSettings(actor: Principal, raw: unknown) {
   const input = z
     .object({
       name: z.string().trim().min(1).max(150),
-      signature: z.string().max(8000),
+      signature: z.string().max(MAX_EMAIL_HTML),
+      signatureFormat: z.enum(["plain", "html"]).default("plain"),
       reviewLink: z.union([
         z.literal(""),
         z.url().refine((value) => /^https?:\/\//.test(value)),
@@ -256,6 +259,8 @@ export async function saveMergeSettings(actor: Principal, raw: unknown) {
         "REVISION_CONFLICT",
         "Settings changed. Refresh and try again.",
       );
+    if (input.signatureFormat === "html")
+      input.signature = sanitizeEmailHtml(input.signature);
     const { expectedRevision: _, ...data } = input;
     const row = old
       ? await tx.mergeFieldSettings.update({

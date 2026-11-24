@@ -1,3 +1,4 @@
+import { emailMimeContent } from "./email-html";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import nodemailer from "nodemailer";
@@ -297,7 +298,11 @@ async function dispatchGmail(
     to: recipients.to,
     cc: recipients.cc,
     subject: String(snapshot.subject),
-    text: String(snapshot.body),
+    ...emailMimeContent(
+      String(snapshot.body),
+      snapshot.bodyFormat,
+      String(snapshot.subject),
+    ),
     attachments,
     messageId,
     inReplyTo: reply.inReplyTo,
@@ -438,7 +443,16 @@ async function dispatchGmail(
           to: recipients.to,
           cc: recipients.cc,
           subject: String(snapshot.subject),
-          text: String(snapshot.body),
+          text: emailMimeContent(
+            String(snapshot.body),
+            snapshot.bodyFormat,
+            String(snapshot.subject),
+          ).text,
+          html: emailMimeContent(
+            String(snapshot.body),
+            snapshot.bodyFormat,
+            String(snapshot.subject),
+          ).html,
           sentAt: new Date(),
           direction: "outbound",
           details: {

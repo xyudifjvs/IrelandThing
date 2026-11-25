@@ -317,6 +317,13 @@ export async function resolveMergeFields(
             ...result,
             optionalBlank: result.status !== "ambiguous",
             checklistNotNeeded: false,
+            dateDisplayText:
+              ["date", "wording"].includes(source.property) &&
+              getTasks(source.stepKey).some(
+                (task) =>
+                  task.status !== "not_applicable" &&
+                  text(asRecord(task.details).dateWording).trim(),
+              ),
           }
         : result;
     }

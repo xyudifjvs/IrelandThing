@@ -17,6 +17,7 @@ export interface MergeField {
   htmlValue?: string;
   optionalBlank?: boolean;
   checklistNotNeeded?: boolean;
+  dateDisplayText?: boolean;
 }
 const normalize = (s: string) =>
   s

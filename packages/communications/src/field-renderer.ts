@@ -6,6 +6,7 @@ import {
 import { omitNotNeededLines } from "./template-line-policy";
 import { canonicalFieldKey, normalizeFieldCodes } from "./field-catalog";
 import type { MergeField } from "./merge-fields";
+import { removeDateByPrefix } from "./date-field-prefix";
 
 export function replaceFieldText(
   source: string,
@@ -20,7 +21,7 @@ export function replaceFieldText(
   const missing = new Set<string>(),
     unknown = new Set<string>();
   const normalized = normalizeFieldCodes(source);
-  let output = normalized.replace(
+  let output = removeDateByPrefix(normalized, fields, html).replace(
     /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
     (_match, key: string) => {
       const field = known.get(key);

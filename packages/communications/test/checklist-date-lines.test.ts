@@ -470,3 +470,71 @@ it("sends the reviewed client body through a fake provider with needed-undated l
       .status,
   ).toBe("sent");
 });
+
+it.each(["plain", "html"] as const)(
+  "removes only the date-field By prefix in %s template subjects, bodies, composer previews and saved drafts",
+  async (bodyFormat) => {
+    const matter = await file();
+    await prisma.task.updateMany({
+      where: { matterId: matter.id, stepKey: "loan_application" },
+      data: { dueDate: "2026-08-25", details: {} },
+    });
+    const subject =
+      "Loan: By {{loan_app_deadline}} | Attorney: by {{attorney_review_deadline}} | HOA: By {{hoa_review_deadline}}";
+    const body =
+      bodyFormat === "html"
+        ? "<p>Loan: By <strong><span>{{loan_app_deadline}}</span></strong></p><p>Attorney: <strong>by </strong><span>{{attorney_review_deadline}}</span></p><p>HOA: By <em>{{hoa_review_deadline}}</em></p><p>Closing: by {{closing_date}}</p>"
+        : "Loan: By {{loan_app_deadline}}\nAttorney: by {{attorney_review_deadline}}\nHOA: By {{hoa_review_deadline}}\nClosing: by {{closing_date}}";
+    const row = await template({
+      subject,
+      body,
+      bodyFormat,
+      recipientRoles: ["lender"],
+    });
+    const preview = await service.renderTemplate(actor, row.id, {
+      matterId: matter.id,
+    });
+    expect(preview.subject).toBe(
+      "Loan: By 8/25/26 | Attorney: N/A | HOA: Received",
+    );
+    expect(preview.body).toContain("Loan: By ");
+    expect(preview.body).not.toMatch(
+      /(?:By|by) (?:N\/A|Received|On or before)/,
+    );
+    expect(preview.body).toContain("On or before 9/21");
+    const composer = await renderEmailFields(
+      actor,
+      matter.id,
+      subject,
+      body,
+      undefined,
+      {},
+      row.id,
+      bodyFormat,
+    );
+    expect(composer.subject).toBe(preview.subject);
+    expect(composer.body).toBe(preview.body);
+    const draft = await service.createDraft(actor, {
+      matterId: matter.id,
+      subject,
+      body,
+      bodyFormat,
+      to: [],
+      saveForLater: true,
+      templateId: row.id,
+      templateRevision: row.revision,
+      fieldPreviewFingerprint: composer.fingerprint,
+    });
+    expect(draft.subject).toBe(preview.subject);
+    expect(draft.body).toBe(preview.body);
+    await validateAuthoredMergeFields(actor, draft);
+    // The saved template still contains Ireland's authored By/by text.
+    expect(
+      (
+        await prisma.communicationTemplate.findUniqueOrThrow({
+          where: { id: row.id },
+        })
+      ).body,
+    ).toBe(body);
+  },
+);

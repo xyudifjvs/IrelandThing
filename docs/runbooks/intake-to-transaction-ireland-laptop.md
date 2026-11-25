@@ -1,5 +1,13 @@
 # Ireland’s Weatherly handoff
 
+## November 25, 2026: By/by before checklist-date email fields — ready locally
+
+Ireland requested removing only a directly preceding `By ` or `by ` when a checklist-date merge field resolves to Not needed/N/A or saved date display text, retaining the prefix for ordinary dates. The resolver now supplies explicit display-text metadata, so typed wording (even a typed numeric date) is distinguished from a calculated/fixed date without guessing from the value. Confirmed checklist skips retain their existing authoritative metadata. Non-date fields, missing/ambiguous values, uppercase BY, longer words ending in by, other template text and the filled value itself are left alone.
+
+The shared field renderer applies this in template/composer subjects and bodies, filled/editor previews and saved drafts. HTML handling follows visible text across inline formatting and atomic merge-field spans, including a normal HTML nonbreaking space, while preserving marks and attributes and never crossing paragraph, list-item, image or soft-break boundaries. The existing Hide not-needed lines policy is retained. Saved template wording is not rewritten; already-filled drafts retain the existing refill/source-review safeguards. No UI, checklist, recipient, provider, schema, dependency or unrelated email behavior changes are included.
+
+Validation: **599 tests across 88 files passed** in a fresh isolated UTC PostgreSQL database; root TypeScript and whitespace checks passed. Eight new cases cover By/by, ordinary/skipped/custom wording (including numeric wording), field aliases, non-date N/A, blank/ambiguous fields, rich-text split prefixes, HTML spaces and line boundaries, plus actual plain/HTML template subject/body, composer preview, saved draft and source validation. No real mail or live data was changed. This is an API/worker-only release with no new migration, environment variable or provider-setting change. Publication/live deployment awaits the required explicit confirmation; preserve both services' existing migration safeguards.
+
 ## November 23–25, 2026: rich email bodies and signature images — deployed
 
 Ireland approved the shared formatting toolbar for templates, the composer and the saved signature, and requested a local image insertion section for the signature. Optional checklist dates must remain blank in the preview. Ireland explicitly approved publication of the 28-file release and live deployment. The implementation is live; verification did not edit saved live templates, accounts or variables, upload a real signature, or send a test email.

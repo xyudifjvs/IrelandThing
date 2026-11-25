@@ -172,34 +172,62 @@ export function realDueDate(task: PortalTask) {
 }
 
 /**
- * Input is process order. Dated rows sort stably, with undated rows placed
- * before their next dated process neighbor (or at the end if none remains).
- * If those neighbors' dates conflict, preserve undated rows' relative process
- * order without disrupting chronological dated rows. Closing/Possession stay last.
+ * Input is process order. Pre-Approval/Proof of Funds stays first. The two
+ * visible HOA steps form a Provision → Review group, dated by its earliest
+ * saved deadline. Other dated groups sort stably; undated groups retain their
+ * process slots before their next dated neighbor. Closing/Possession stay last.
  */
 export function portalTimelineOrder(tasks: readonly PortalTask[]) {
+  const firstKey = "preapproval_pof";
   const tailKeys = ["closing", "possession"];
   const body = tasks.filter(
-    (task) => !tailKeys.includes(clientStepKey(task) || ""),
+    (task) => ![firstKey, ...tailKeys].includes(clientStepKey(task) || ""),
   );
-  const dated = body
-    .filter((task) => realDueDate(task))
-    .sort((a, b) => realDueDate(a)!.localeCompare(realDueDate(b)!));
-  const slots: PortalTask[][] = Array.from(
+  const hoaKeys = ["condo_hoa_docs_provided", "condo_hoa_doc_review"];
+  const hoaRows = hoaKeys.flatMap((key) =>
+    body.filter((task) => clientStepKey(task) === key),
+  );
+  const pairHoa = hoaKeys.every((key) =>
+    hoaRows.some((task) => clientStepKey(task) === key),
+  );
+  const groups: { rows: PortalTask[]; date: string | null }[] = [];
+  let addedHoa = false;
+  for (const task of body) {
+    const isHoa = pairHoa && hoaKeys.includes(clientStepKey(task) || "");
+    if (isHoa && addedHoa) continue;
+    const rows = isHoa ? hoaRows : [task];
+    if (isHoa) addedHoa = true;
+    groups.push({
+      rows,
+      date:
+        rows
+          .map(realDueDate)
+          .filter((date): date is string => date !== null)
+          .sort()[0] ?? null,
+    });
+  }
+  const dated = groups
+    .filter((group) => group.date)
+    .sort((a, b) => a.date!.localeCompare(b.date!));
+  const slots: (typeof groups)[] = Array.from(
     { length: dated.length + 1 },
     () => [],
   );
-  const positions = new Map(dated.map((task, index) => [task.id, index]));
+  const positions = new Map(dated.map((group, index) => [group, index]));
   let slot = 0;
-  for (let index = 0; index < body.length; index++) {
-    if (realDueDate(body[index])) continue;
-    const next = body.slice(index + 1).find((task) => realDueDate(task));
-    slot = Math.max(slot, next ? positions.get(next.id)! : dated.length);
-    slots[slot].push(body[index]);
+  for (let index = 0; index < groups.length; index++) {
+    if (groups[index].date) continue;
+    const next = groups.slice(index + 1).find((group) => group.date);
+    slot = Math.max(slot, next ? positions.get(next)! : dated.length);
+    slots[slot].push(groups[index]);
   }
   return [
-    ...dated.flatMap((task, index) => [...slots[index], task]),
-    ...slots[dated.length],
+    ...tasks.filter((task) => clientStepKey(task) === firstKey),
+    ...dated.flatMap((group, index) => [
+      ...slots[index].flatMap((entry) => entry.rows),
+      ...group.rows,
+    ]),
+    ...slots[dated.length].flatMap((group) => group.rows),
     ...tailKeys.flatMap((key) =>
       tasks.filter((task) => clientStepKey(task) === key),
     ),

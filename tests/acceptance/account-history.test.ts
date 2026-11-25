@@ -1544,6 +1544,49 @@ describe("agent timeline mockup behavior", () => {
   });
   const render = (tasks: NonNullable<PortalFile["tasks"]>) =>
     renderToStaticMarkup(createElement(Timeline, { tasks }));
+  it("pins Pre-Approval first and keeps visible HOA steps adjacent without grouping a skipped row", () => {
+    const tasks = [
+      step("preapproval_pof", {
+        title: "Proof of Funds",
+        dueDate: null,
+        dateLabel: "Received",
+        status: "completed",
+      }),
+      step("condo_hoa_docs_provided", {
+        title: "HOA Provision",
+        dueDate: "2026-12-07",
+      }),
+      step("inspections", { title: "Inspections", dueDate: "2026-12-04" }),
+      step("condo_hoa_doc_review", {
+        title: "HOA Review",
+        dueDate: "2026-12-01",
+      }),
+    ];
+    const html = render(tasks);
+    expect(html.indexOf("<h3>Proof of Funds</h3>")).toBeLessThan(
+      html.indexOf("<h3>HOA Provision</h3>"),
+    );
+    expect(html.indexOf("<h3>HOA Provision</h3>")).toBeLessThan(
+      html.indexOf("<h3>HOA Review</h3>"),
+    );
+    expect(html.indexOf("<h3>HOA Review</h3>")).toBeLessThan(
+      html.indexOf("<h3>Inspections</h3>"),
+    );
+    expect(html).toContain("<h3>Proof of Funds</h3><p>Received</p>");
+    const skipped = render(
+      tasks.map((task) =>
+        task.stepKey === "condo_hoa_doc_review"
+          ? { ...task, status: "not_applicable" }
+          : task,
+      ),
+    );
+    const [visible, folded] = skipped.split('<details class="notNeeded">');
+    expect(visible.indexOf("<h3>Inspections</h3>")).toBeLessThan(
+      visible.indexOf("<h3>HOA Provision</h3>"),
+    );
+    expect(visible).not.toContain("HOA Review");
+    expect(folded).toContain("HOA Review");
+  });
   it("keeps both HOA steps, warranty and Title, and folds only not-needed rows without edit controls", () => {
     const html = render([
       step("home_warranty_ordered", { title: "Home Warranty Ordered" }),

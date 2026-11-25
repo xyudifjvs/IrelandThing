@@ -240,6 +240,8 @@ button.dateBox:not(:disabled) {
 .dateDay {
   color: #fff;
   font-family: var(--weatherly-serif, Georgia), serif;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum";
   font-size: 1.65rem;
   line-height: 1.05;
 }

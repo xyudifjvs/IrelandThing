@@ -8,7 +8,8 @@ import {
   fileAddress,
   fileGroup,
   fileStatus,
-  nextDatedStep,
+  nextDatedSteps,
+  clientStepDate,
   shortDate,
   type PortalFile,
 } from "./portal-model";
@@ -22,7 +23,7 @@ const groups = [
 
 function FileCard({ file }: { file: PortalFile }) {
   const received = file.stage === "pending_review";
-  const next = nextDatedStep(file.tasks);
+  const next = nextDatedSteps(file.tasks);
   const receivedOn = shortDate(file.createdAt);
   const closedOn = shortDate(file.closedOn);
   return (
@@ -45,9 +46,12 @@ function FileCard({ file }: { file: PortalFile }) {
       ) : file.stage === "closed" ? (
         closedOn && <p>Closed {closedOn}</p>
       ) : (
-        next && (
+        next.length > 0 && (
           <p>
-            Next: {next.title} · {next.dateLabel || shortDate(next.dueDate)}
+            Next: {next.map((task) => task.title).join(", ")} ·{" "}
+            {clientStepDate(
+              next.length > 1 ? { ...next[0], dateLabel: undefined } : next[0],
+            )}
           </p>
         )
       )}

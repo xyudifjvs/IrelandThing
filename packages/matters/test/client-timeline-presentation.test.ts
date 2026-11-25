@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { legacyClientPresentation } from "../src/projections/client-timeline-layout";
 import { canonicalPortalTimeline } from "../src/projections/canonical-timeline";
 import { buildChecklistSeed } from "../src/checklist/seed";
+import { agentChecklistMoney } from "../src/projections/agent-checklist-money";
 const expected = {
   buyer: [
     "Pre-Approval",
@@ -168,4 +169,64 @@ it("keeps the original file format's separate appointment location and exact dis
   expect(
     legacyClientPresentation({ ...task, title: "Private custom note" }),
   ).toEqual({ dateLabel: "Received" });
+});
+
+it("shares EMD and warranty money lines with agents only, using the same saved sources as the email fields", () => {
+  const source = rows("buyer").map((task) => ({
+    ...task,
+    details: {
+      ...task.details,
+      amountCents: task.stepKey === "earnest_money_due" ? 100000 : 56900,
+      holder: "Valmer Land Title",
+      company: "HSP",
+      private: "NEVER SHARE",
+    },
+  }));
+  const agent = canonicalPortalTimeline(source, "agent");
+  expect(
+    agent.find((task) => task.stepKey === "earnest_money_due")?.moneyLine,
+  ).toBe("$1,000 to Valmer Land Title");
+  expect(
+    agent.find((task) => task.stepKey === "home_warranty_ordered")?.moneyLine,
+  ).toBe("$569 with HSP");
+  expect(
+    agent.find((task) => task.stepKey === "loan_application")?.moneyLine,
+  ).toBeUndefined();
+  expect(JSON.stringify(agent)).not.toContain("NEVER SHARE");
+  expect(JSON.stringify(canonicalPortalTimeline(source, "client"))).not.toMatch(
+    /moneyLine|Valmer Land Title|HSP/,
+  );
+  expect(
+    agentChecklistMoney({
+      title: "Earnest Money Due",
+      details: { earnestMoneyCents: 100000, earnestMoneyHolder: "Saved Title" },
+    }),
+  ).toEqual({ moneyLine: "$1,000 to Saved Title" });
+  expect(
+    agentChecklistMoney({
+      title: "Home Warranty Ordered",
+      details: {
+        homeWarrantyCents: 56900,
+        homeWarrantyCompany: "Saved Warranty",
+      },
+    }),
+  ).toEqual({ moneyLine: "$569 with Saved Warranty" });
+  expect(
+    agentChecklistMoney({
+      title: "Earnest Money Due",
+      details: { amountCents: null, earnestMoneyCents: 100000, holder: "" },
+    }),
+  ).toEqual({});
+  expect(
+    agentChecklistMoney({
+      title: "Earnest Money Due",
+      details: { amountCents: 0 },
+    }),
+  ).toEqual({ moneyLine: "$0" });
+  expect(
+    agentChecklistMoney({
+      title: "Home Warranty Ordered",
+      details: { company: "HSP" },
+    }),
+  ).toEqual({ moneyLine: "HSP" });
 });

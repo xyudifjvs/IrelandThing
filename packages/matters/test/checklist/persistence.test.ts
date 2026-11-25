@@ -314,13 +314,6 @@ describe("canonical checklist persistence", () => {
   it("records actual HOA delivery and completion atomically, with hook failure rolling both back", async () => {
     const matter = await createMatter();
     await seed(matter.id);
-    const provision = await task(matter.id, "condo_hoa_docs_provided");
-    await expect(
-      updateTask(actor, matter.id, provision.id, {
-        expectedRevision: provision.revision,
-        status: "completed",
-      }),
-    ).rejects.toMatchObject({ code: "HOA_DELIVERY_REQUIRED" });
     const edit = await command(
       matter.id,
       {
@@ -356,6 +349,56 @@ describe("canonical checklist persistence", () => {
     });
     expect(await task(matter.id, "condo_hoa_doc_review")).toMatchObject({
       dueDate: "2026-10-05",
+    });
+  });
+
+  it("allows every undated step to be completed without inventing a due date or actual delivery", async () => {
+    const matter = await createMatter();
+    await prisma.$transaction((tx) =>
+      seedMatterChecklist(tx, matter.id, {
+        side: "seller",
+        purchaseType: "financed",
+        acceptance: null,
+        timeZone: "America/New_York",
+        dates: [],
+      }),
+    );
+    const custom = await addTask(actor, matter.id, {
+      title: "Undated custom step",
+    });
+    const rows = await prisma.task.findMany({
+      where: { matterId: matter.id, stepKey: { not: null } },
+      orderBy: { position: "asc" },
+    });
+    expect(rows.some((row) => row.id === custom.id)).toBe(true);
+    for (const row of rows) {
+      expect(row.dueDate).toBeNull();
+      const current = await prisma.task.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      await updateTask(actor, matter.id, row.id, {
+        expectedRevision: current.revision,
+        status: "completed",
+      });
+      expect(
+        await prisma.task.findUniqueOrThrow({ where: { id: row.id } }),
+      ).toMatchObject({
+        status: "completed",
+        dueDate: null,
+        dueAt: null,
+        actualDate: null,
+        actualAt: null,
+      });
+    }
+    const delivery = await task(matter.id, "condo_hoa_docs_provided");
+    await updateTask(actor, matter.id, delivery.id, {
+      expectedRevision: delivery.revision,
+      status: "pending",
+    });
+    expect(await task(matter.id, "condo_hoa_docs_provided")).toMatchObject({
+      status: "pending",
+      dueDate: null,
+      actualDate: null,
     });
   });
 

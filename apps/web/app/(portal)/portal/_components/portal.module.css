@@ -2,6 +2,19 @@
   min-height: 100vh;
 }
 
+.nextSteps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  color: #4e3b2a;
+}
+.nextSteps strong {
+  color: #1e1c1a;
+}
+.nextSteps li + li {
+  margin-top: 8px;
+}
+
 .header {
   background: var(--weatherly-color-dark);
   color: var(--weatherly-color-on-dark);
@@ -513,6 +526,8 @@
 }
 .closingSummary strong {
   font: 600 var(--weatherly-type-card-title) var(--weatherly-font-heading);
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum";
 }
 .closingSummary progress {
   width: 100%;

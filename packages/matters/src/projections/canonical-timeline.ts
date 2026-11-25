@@ -1,6 +1,7 @@
 import type { Prisma } from "@weatherly/db";
 import { audienceAllows } from "./deadline-fields";
 import { sharedTaskFields } from "./task-fields";
+import { agentChecklistMoney } from "./agent-checklist-money";
 import {
   selectClientTimeline,
   clientDateLabel,
@@ -69,6 +70,9 @@ export function canonicalPortalTimeline(
           dueAt,
           position,
           ...(dateLabel ? { dateLabel } : {}),
+          ...(role === "agent"
+            ? agentChecklistMoney({ stepKey, title, details })
+            : {}),
           appointmentTimeZone: context.timeZone || "America/New_York",
           ...(showSchedule
             ? {

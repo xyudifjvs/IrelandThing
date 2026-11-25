@@ -18,6 +18,7 @@ export type PortalTask = {
   appointmentTimeZone?: string;
   note?: string;
   dateLabel?: string;
+  moneyLine?: string;
 };
 
 export type PortalPerson = {
@@ -149,14 +150,70 @@ export function clientTimelineTasks(
   tasks: readonly PortalTask[],
   side?: string,
 ) {
-  return selectClientTimeline(
-    tasks.filter((task) => !notNeeded(task) && task.kind !== "client_request"),
-    side,
+  return portalTimelineOrder(
+    selectClientTimeline(
+      tasks.filter(
+        (task) => !notNeeded(task) && task.kind !== "client_request",
+      ),
+      side,
+    ),
   );
 }
 
-export function nextClientStep(tasks: readonly PortalTask[]) {
-  return tasks.find((task) => !completed(task) && !notNeeded(task));
+/** Use saved civil dates only; display wording and appointments are not deadlines. */
+export function realDueDate(task: PortalTask) {
+  const date = task.dueDate;
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const instant = new Date(`${date}T12:00:00Z`);
+  return Number.isFinite(instant.valueOf()) &&
+    instant.toISOString().slice(0, 10) === date
+    ? date
+    : null;
+}
+
+/**
+ * Input is process order. Dated rows sort stably, with undated rows placed
+ * before their next dated process neighbor (or at the end if none remains).
+ * If those neighbors' dates conflict, preserve undated rows' relative process
+ * order without disrupting chronological dated rows. Closing/Possession stay last.
+ */
+export function portalTimelineOrder(tasks: readonly PortalTask[]) {
+  const tailKeys = ["closing", "possession"];
+  const body = tasks.filter(
+    (task) => !tailKeys.includes(clientStepKey(task) || ""),
+  );
+  const dated = body
+    .filter((task) => realDueDate(task))
+    .sort((a, b) => realDueDate(a)!.localeCompare(realDueDate(b)!));
+  const slots: PortalTask[][] = Array.from(
+    { length: dated.length + 1 },
+    () => [],
+  );
+  const positions = new Map(dated.map((task, index) => [task.id, index]));
+  let slot = 0;
+  for (let index = 0; index < body.length; index++) {
+    if (realDueDate(body[index])) continue;
+    const next = body.slice(index + 1).find((task) => realDueDate(task));
+    slot = Math.max(slot, next ? positions.get(next.id)! : dated.length);
+    slots[slot].push(body[index]);
+  }
+  return [
+    ...dated.flatMap((task, index) => [...slots[index], task]),
+    ...slots[dated.length],
+    ...tailKeys.flatMap((key) =>
+      tasks.filter((task) => clientStepKey(task) === key),
+    ),
+  ];
+}
+
+export function nextDatedSteps(tasks: readonly PortalTask[] = []) {
+  const open = tasks.filter(
+    (task) => realDueDate(task) && !completed(task) && !notNeeded(task),
+  );
+  const firstDate = open.map((task) => realDueDate(task)!).sort()[0];
+  return firstDate
+    ? open.filter((task) => realDueDate(task) === firstDate)
+    : [];
 }
 
 export function clientStepDetail(task: PortalTask, side?: string) {
@@ -214,12 +271,6 @@ export function closingTask(tasks?: readonly PortalTask[]) {
   );
 }
 
-export function nextDatedStep(tasks?: readonly PortalTask[]) {
-  return tasks
-    ?.filter((task) => !!task.dueDate && !completed(task) && !notNeeded(task))
-    .sort((left, right) => left.dueDate!.localeCompare(right.dueDate!))[0];
-}
-
 export function displayLabel(value?: string) {
   return (value || "")
     .replace(/[_-]+/g, " ")
@@ -274,9 +325,8 @@ export function feeStatus(fee: FeeSummary) {
 /** Agent-only presentation: full working order, without changing the client rules. */
 export function agentStepDetail(task: PortalTask) {
   const key = clientStepKey(task);
-  return ["appraisal_ordered", "appraisal", "clear_to_close"].includes(
-    key || "",
-  )
+  return !completed(task) &&
+    ["appraisal_ordered", "appraisal", "clear_to_close"].includes(key || "")
     ? "We'll update you"
     : clientStepDate(task);
 }

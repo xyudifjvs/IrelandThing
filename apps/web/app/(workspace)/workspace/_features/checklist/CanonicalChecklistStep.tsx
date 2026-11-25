@@ -148,9 +148,7 @@ export function CanonicalChecklistStep({
             checked={done}
             disabled={!mayEdit}
             onChange={(event) => {
-              if (event.target.checked && isHoaDelivery && !actual)
-                openActual();
-              else updateStatus(event.target.checked ? "completed" : "pending");
+              updateStatus(event.target.checked ? "completed" : "pending");
             }}
           />
         )}
@@ -233,9 +231,9 @@ export function CanonicalChecklistStep({
               )}
             </p>
           )}
-          {!skipped && isHoaDelivery && actual && (
+          {!skipped && isHoaDelivery && (actual || done) && (
             <p className={s.subline}>
-              Delivered · {displayDate(actual, timeZone)}
+              {actual && <>Delivered · {displayDate(actual, timeZone)}</>}
               {!readOnly && (
                 <button
                   className={s.textButton}
@@ -243,7 +241,7 @@ export function CanonicalChecklistStep({
                   disabled={!mayEdit}
                   onClick={openActual}
                 >
-                  Edit delivery date
+                  {actual ? "Edit delivery date" : "Add delivery date"}
                 </button>
               )}
             </p>

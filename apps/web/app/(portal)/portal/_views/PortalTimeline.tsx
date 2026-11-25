@@ -3,7 +3,8 @@ import {
   agentStepDetail,
   agentShowsAppointment,
   clientTimelineTasks,
-  nextClientStep,
+  nextDatedSteps,
+  portalTimelineOrder,
   clientStepDetail,
   clientScheduledStep,
   clientAppointment,
@@ -26,7 +27,7 @@ export function PortalTimeline({
 }) {
   const rows = client
     ? clientTimelineTasks(tasks, side)
-    : tasks.filter((task) => !notNeeded(task));
+    : portalTimelineOrder(tasks.filter((task) => !notNeeded(task)));
   const skippedRows = client ? [] : tasks.filter(notNeeded);
   if (!rows.length && !skippedRows.length)
     return (
@@ -34,7 +35,9 @@ export function PortalTimeline({
         Timeline details will appear here when they’re available.
       </p>
     );
-  const next = client && showNext ? nextClientStep(rows) : null;
+  const nextIds = new Set(
+    client && showNext ? nextDatedSteps(rows).map((task) => task.id) : [],
+  );
   return (
     <>
       {rows.length > 0 && (
@@ -43,8 +46,7 @@ export function PortalTimeline({
         >
           {rows.map((task) => {
             const done = completed(task);
-            const skipped = notNeeded(task);
-            const upcoming = client && task.id === next?.id;
+            const upcoming = client && nextIds.has(task.id);
             return (
               <li key={task.id} className={s.timelineRow}>
                 <span
@@ -81,11 +83,8 @@ export function PortalTimeline({
                     </>
                   ) : (
                     <>
-                      {done ? (
-                        <p>Done</p>
-                      ) : (
-                        agentStepDetail(task) && <p>{agentStepDetail(task)}</p>
-                      )}
+                      {agentStepDetail(task) && <p>{agentStepDetail(task)}</p>}
+                      {task.moneyLine && <p>{task.moneyLine}</p>}
                       {agentShowsAppointment(task) && (
                         <p
                           className={

@@ -9,6 +9,7 @@ import { projectTaskFields, agentMatterDetails } from "./task-fields";
 import { portalCoordinatorEmail } from "./coordinator-contact";
 import { canonicalPortalTimeline } from "./canonical-timeline";
 import { legacyClientPresentation } from "./client-timeline-layout";
+import { agentChecklistMoney } from "./agent-checklist-money";
 import { documentAudienceWhere } from "./document-audience";
 import { peopleAudienceWhere, portalPersonSelect } from "../people/projection";
 import {
@@ -53,6 +54,7 @@ function legacyAgentTask<
   return {
     ...rest,
     ...legacyClientPresentation(task, { side: "seller", timeZone }),
+    ...agentChecklistMoney(task),
     position,
   };
 }

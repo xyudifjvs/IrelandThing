@@ -52,6 +52,8 @@
   font-family: var(--weatherly-font-body);
   font-size: var(--weatherly-type-body);
   accent-color: var(--weatherly-color-accent);
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum";
 }
 
 .weatherly-theme :is(h1, h2, h3, h4) {

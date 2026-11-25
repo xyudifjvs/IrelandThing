@@ -11,7 +11,7 @@ import {
   taskNote,
   taskVisibility,
 } from "../validation/task-fields";
-import { hoaDeliveryStep, recalculateChecklistStatus } from "./date-commands";
+import { recalculateChecklistStatus } from "./date-commands";
 import { readChecklistSnapshot, requireEditableChecklist } from "./persistence";
 
 type Matter = Prisma.MatterGetPayload<object>;
@@ -184,17 +184,6 @@ export async function updateVersionedChecklistTask(
     await finishTaskChange(tx, actor, matter.id);
     return { deleted: true };
   }
-
-  if (
-    patch.status === "completed" &&
-    old.stepKey === hoaDeliveryStep &&
-    !old.actualDate
-  )
-    throw new HttpError(
-      422,
-      "HOA_DELIVERY_REQUIRED",
-      "Enter the actual HOA document delivery date.",
-    );
 
   const details =
     old.details &&

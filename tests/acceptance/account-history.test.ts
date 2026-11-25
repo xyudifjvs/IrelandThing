@@ -1396,7 +1396,7 @@ describe("client timeline mockup behavior", () => {
     dueDate: "2026-08-25",
     ...extra,
   });
-  it("uses the next open displayed step in portal order and excludes hidden rows from progress", () => {
+  it("uses the earliest dated open step and excludes hidden rows from progress", () => {
     const html = render("buyer", [
       step("preapproval_pof", { status: "completed", title: "Pre-Approval" }),
       step("loan_application", { dueDate: null }),
@@ -1405,7 +1405,7 @@ describe("client timeline mockup behavior", () => {
       step("attorney_review", { status: "not_applicable" }),
     ]);
     expect(html).toContain("1 of 3 steps complete");
-    expect(html).toMatch(/What’s next<\/p><h2>Loan Application<\/h2>/);
+    expect(html).toMatch(/What’s next<\/p><h2>Earnest Money Due<\/h2>/);
     expect(html.match(/Up next/g)).toHaveLength(1);
     expect(html).not.toContain("Home Warranty");
     expect(html).not.toContain("Attorney Review");
@@ -1447,7 +1447,9 @@ describe("client timeline mockup behavior", () => {
           }),
         ]);
         expect(html).toContain("We&#x27;ll update you");
-        expect(html).not.toContain("Received");
+        expect(
+          html.slice(html.indexOf('aria-label="Your timeline"')),
+        ).not.toContain("Received");
         expect(html).not.toContain("Scheduled for");
       }
     },
@@ -1485,6 +1487,38 @@ describe("client timeline mockup behavior", () => {
     expect(html).toContain("<p>Done</p>");
     expect(html).not.toContain("Up next");
     expect(html).not.toContain("What’s next");
+  });
+  it("marks every earliest-date tie and lists each once in What's next, advancing after completion", () => {
+    const tasks = [
+      step("loan_application", { dueDate: "2026-12-07" }),
+      step("inspections", { dueDate: "2026-12-01" }),
+      step("remedies", { dueDate: "2026-12-01", dateLabel: "Received" }),
+      step("title_commitment", { dueDate: "2026-12-01" }),
+      step("appraisal", { dueDate: null }),
+    ];
+    const html = render("buyer", tasks);
+    expect(html.match(/>Up next</g)).toHaveLength(3);
+    const summary = html
+      .split('aria-label="What’s next"')[1]
+      .split("</section>")[0];
+    expect(summary).toContain("<strong>Home Inspections</strong> · By 12/1/26");
+    expect(summary).toContain("<strong>Remedies</strong> · Received");
+    expect(summary).toContain("<strong>Title Commitment</strong> · By 12/1/26");
+    expect(summary.match(/<li>/g)).toHaveLength(3);
+    const advanced = render(
+      "buyer",
+      tasks.map((task) => ({
+        ...task,
+        status: task.dueDate === "2026-12-01" ? "completed" : "pending",
+      })),
+    );
+    expect(advanced.match(/>Up next</g)).toHaveLength(1);
+    expect(advanced).toMatch(
+      /What’s next<\/p><h2>Loan Application<\/h2><p>By 12\/7\/26/,
+    );
+    expect(
+      render("buyer", [step("appraisal", { dueDate: null })]),
+    ).not.toContain("Up next");
   });
 });
 
@@ -1537,7 +1571,7 @@ describe("agent timeline mockup behavior", () => {
     expect(html).not.toMatch(/<button|<input/);
   });
   it.each(["inspections", "final_walkthrough", "closing"])(
-    "uses distinct date/booking lines and Done-only completion for %s",
+    "retains the date wording after completion for %s",
     (key) => {
       const task = step(key, {
         title: "Step",
@@ -1549,7 +1583,10 @@ describe("agent timeline mockup behavior", () => {
         /<p>Within 3 days before closing<\/p><p class="bookedAppointment">Scheduled for Tue, Nov 17 at 9:30 AM · Sample Title Office<\/p>/,
       );
       const done = render([{ ...task, status: "completed" }]);
-      expect(done).toMatch(/<h3>Step<\/h3><p>Done<\/p>/);
+      expect(done).toMatch(
+        /<h3>Step<\/h3><p>Within 3 days before closing<\/p>/,
+      );
+      expect(done).not.toContain("<p>Done</p>");
       expect(done).toContain("tickDone");
       expect(done).not.toContain("timelineStatus");
       expect(done).not.toContain("Scheduled for");
@@ -1559,13 +1596,13 @@ describe("agent timeline mockup behavior", () => {
     },
   );
   it.each(["appraisal_ordered", "appraisal", "clear_to_close"])(
-    "shows update wording on open %s and Done on completion",
+    "shows update wording on open %s and its saved date wording on completion",
     (key) => {
       const task = step(key, { title: "Step", dateLabel: "Received" });
       expect(render([task])).toContain("We&#x27;ll update you");
       expect(render([task])).not.toContain("Received");
       expect(render([{ ...task, status: "completed" }])).toMatch(
-        /<h3>Step<\/h3><p>Done<\/p>/,
+        /<h3>Step<\/h3><p>Received<\/p>/,
       );
     },
   );
@@ -1575,15 +1612,50 @@ describe("agent timeline mockup behavior", () => {
       status: "completed",
     });
     const empty = render([task]);
-    expect(empty).toContain("<p>Done</p>");
+    expect(empty).toContain("<p>By 8/25/26</p>");
+    expect(empty).not.toContain("<p>Done</p>");
     expect(empty).not.toContain("Scheduled details to come");
     const booked = { ...task, appointmentAt: "2026-09-08T15:00:00Z" };
     expect(render([booked])).toMatch(
-      /<p>Done<\/p><p class="bookedAppointment">Scheduled for Tue, Sep 8 at 11:00 AM<\/p>/,
+      /<p>By 8\/25\/26<\/p><p class="bookedAppointment">Scheduled for Tue, Sep 8 at 11:00 AM<\/p>/,
     );
     expect(render([{ ...booked, status: "pending" }])).not.toContain(
       "Scheduled for",
     );
+  });
+  it("retains completed real dates, exact text and money details without adding agent next markers", () => {
+    const html = render([
+      step("earnest_money_due", {
+        title: "Earnest Money Due",
+        status: "completed",
+        moneyLine: "$1,000 to Valmer Land Title",
+      }),
+      step("home_warranty_ordered", {
+        title: "Home Warranty Ordered",
+        moneyLine: "$569 with HSP",
+      }),
+      step("condo_hoa_docs_provided", {
+        title: "Condo / HOA Document Provision",
+        status: "completed",
+        dateLabel: "Provided to the buyers 11/25",
+      }),
+    ]);
+    expect(html).toContain(
+      "<h3>Earnest Money Due</h3><p>By 8/25/26</p><p>$1,000 to Valmer Land Title</p>",
+    );
+    expect(html).toContain("<p>$569 with HSP</p>");
+    expect(html).toContain("<p>Provided to the buyers 11/25</p>");
+    expect(html).not.toContain("<p>Done</p>");
+    expect(html).not.toMatch(/Up next|<progress/);
+    expect(
+      render([
+        step("earnest_money_due", {
+          dueDate: null,
+          dateLabel: undefined,
+          status: "completed",
+        }),
+      ]),
+    ).not.toMatch(/<p>|undefined/);
   });
   it("keeps exact date text, uses the configured TC email in the permanent note and falls back safely", () => {
     const html = render([

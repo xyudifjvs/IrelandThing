@@ -9,9 +9,9 @@ import {
   fileAddress,
   fileGroup,
   fileStatus,
-  nextClientStep,
+  nextDatedSteps,
   clientTimelineTasks,
-  clientStepDetail,
+  clientStepDate,
   shortDate,
   type PortalFile,
   type PortalTask,
@@ -76,7 +76,7 @@ export function ClientFile({
   );
   const closing = closingTask(tasks);
   const finished = fileGroup(file.stage) !== "active";
-  const next = !finished ? nextClientStep(tasks) : null;
+  const next = !finished ? nextDatedSteps(tasks) : [];
   const done = tasks.filter(completed).length;
   const closingDate = finished
     ? shortDate(file.closedOn || closing?.dueDate)
@@ -104,14 +104,26 @@ export function ClientFile({
           )}
         </section>
       )}
-      {next && (
+      {next.length > 0 && (
         <section
           className={`${s.panel} ${s.nextPanel}`}
           aria-label="What’s next"
         >
           <p className={s.eyebrow}>What’s next</p>
-          <h2>{next.title}</h2>
-          <p>{clientStepDetail(next, file.side)}</p>
+          {next.length === 1 ? (
+            <>
+              <h2>{next[0].title}</h2>
+              <p>{clientStepDate(next[0])}</p>
+            </>
+          ) : (
+            <ul className={s.nextSteps}>
+              {next.map((task) => (
+                <li key={task.id}>
+                  <strong>{task.title}</strong> · {clientStepDate(task)}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
       <section className={s.panel} aria-label="Your timeline">
